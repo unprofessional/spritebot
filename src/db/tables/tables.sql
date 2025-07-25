@@ -1,0 +1,138 @@
+-- -- -- -- -- --
+-- RPG TRACKER: FLEXIBLE CHARACTER SYSTEM (REFACTORED, REORDERED + CLEANED)
+-- -- -- -- -- --
+
+-- === GAME METADATA ===
+CREATE TABLE game (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  guild_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  description TEXT,
+  is_public BOOLEAN DEFAULT FALSE,
+  created_by TEXT NOT NULL,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- === GAME-DEFINED STAT FIELD TEMPLATES ===
+CREATE TABLE stat_template (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id UUID NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  label TEXT NOT NULL,
+
+  -- Now includes 'count' and 'number' field types
+  field_type TEXT NOT NULL DEFAULT 'short'
+    CHECK (field_type IN ('short', 'paragraph', 'number', 'count')),
+
+  default_value TEXT,
+  is_required BOOLEAN DEFAULT TRUE,
+  sort_order INTEGER DEFAULT 0,
+
+  -- New: meta for grouping, scaffold types, roles (e.g. { "scaffold": "count", "role": "current", "group": "HP" })
+  meta JSONB DEFAULT '{}'
+);
+
+-- === CHARACTERS ===
+CREATE TABLE character (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_id UUID NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL, -- Discord user ID
+  name TEXT NOT NULL,
+  avatar_url TEXT,
+  bio TEXT,
+  visibility TEXT DEFAULT 'private' CHECK (visibility IN ('private', 'public', 'link-only')),
+  deleted_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- === PLAYER ACCOUNTS (GLOBAL IDENTITY) ===
+CREATE TABLE player (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  discord_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- === PLAYER SERVER CONTEXT (PER-GUILD CONFIG) ===
+CREATE TABLE player_server_link (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  player_id UUID NOT NULL REFERENCES player(id) ON DELETE CASCADE,
+  guild_id TEXT NOT NULL,
+
+  role TEXT DEFAULT 'player' CHECK (role IN ('player', 'gm')),
+  current_character_id UUID REFERENCES character(id) ON DELETE SET NULL,
+  current_game_id UUID REFERENCES game(id) ON DELETE SET NULL,
+
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+
+  UNIQUE(player_id, guild_id)
+);
+
+-- === TEMPLATE-BASED STAT FIELDS PER CHARACTER ===
+CREATE TABLE character_stat_field (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_id UUID NOT NULL REFERENCES character(id) ON DELETE CASCADE,
+  template_id UUID NOT NULL REFERENCES stat_template(id) ON DELETE CASCADE,
+
+  value TEXT NOT NULL,
+
+  -- meta can store computed info (e.g., derived stats, override flags)
+  meta JSONB DEFAULT '{}',
+
+  UNIQUE(character_id, template_id)
+);
+
+-- === PLAYER-DEFINED CUSTOM FIELDS ===
+CREATE TABLE character_custom_field (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_id UUID NOT NULL REFERENCES character(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  value TEXT NOT NULL,
+  meta JSONB DEFAULT '{}',
+  UNIQUE(character_id, name)
+);
+
+-- === INVENTORY ITEMS ===
+CREATE TABLE character_inventory (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  character_id UUID NOT NULL REFERENCES character(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  type TEXT,
+  equipped BOOLEAN DEFAULT FALSE,
+  description TEXT
+);
+
+-- === INVENTORY ITEM FIELDS ===
+CREATE TABLE character_inventory_field (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  inventory_id UUID NOT NULL REFERENCES character_inventory(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  value TEXT NOT NULL,
+  meta JSONB DEFAULT '{}',
+  UNIQUE(inventory_id, name)
+);
+
+-- === INDEXES ===
+-- Game + Guild lookup
+CREATE INDEX idx_game_guild_id ON game(guild_id);
+
+-- Character lookups
+CREATE INDEX idx_character_user_id ON character(user_id);
+CREATE INDEX idx_character_game_id ON character(game_id);
+
+-- Stat lookups
+CREATE INDEX idx_stat_character_id ON character_stat_field(character_id);
+CREATE INDEX idx_stat_template_game_id ON stat_template(game_id);
+
+-- Custom field lookup
+CREATE INDEX idx_custom_stat_character_id ON character_custom_field(character_id);
+
+-- Inventory lookups
+CREATE INDEX idx_inventory_character_id ON character_inventory(character_id);
+CREATE INDEX idx_inventory_field_inventory_id ON character_inventory_field(inventory_id);
+
+-- Player-server context lookups
+CREATE INDEX idx_player_server_link_player_id ON player_server_link(player_id);
+CREATE INDEX idx_player_server_link_guild_id ON player_server_link(guild_id);
+CREATE INDEX idx_player_server_link_player_guild ON player_server_link(player_id, guild_id);

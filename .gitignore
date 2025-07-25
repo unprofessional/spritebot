@@ -1,0 +1,33 @@
+# See https://help.github.com/ignore-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+
+# Virtual Environment
+/env
+.env
+
+# testing
+/coverage
+
+# production
+/build
+/dist
+
+# misc
+.DS_Store
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.history
+
+# VSCode folder and files
+**/.vscode/
+
+# secrets
+secrets.*.js
+/.nova
+
+# auto-generated directories
+/ffmpeg

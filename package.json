@@ -1,0 +1,47 @@
+{
+  "name": "soulbot-rpg",
+  "version": "1.0.0",
+  "description": "",
+  "main": "dist/index.js",
+  "scripts": {
+    "copy-sql": "cp -R src/db/tables dist/db/tables",
+    "lint": "eslint --ext .ts,.js src --format=stylish",
+    "clean": "rimraf dist",
+    "build": "npm run clean && tsc && npm run copy-sql",
+    "start": "cross-env NODE_ENV=production npm run build && node -r tsconfig-paths/register dist/index.js",
+    "test": "npx jest --testPathIgnorePatterns=node_modules/* --verbose=true --coverage=false"
+  },
+  "author": "unprofessional",
+  "license": "ISC",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/unprofessional/soulbot-rpg.git"
+  },
+  "bugs": {
+    "url": "https://github.com/unprofessional/soulbot-rpg/issues"
+  },
+  "homepage": "https://github.com/unprofessional/soulbot-rpg#readme",
+  "dependencies": {
+    "discord.js": "^14.21.0",
+    "dotenv": "^17.2.0",
+    "pg": "^8.16.3"
+  },
+  "devDependencies": {
+    "@types/node": "^24.1.0",
+    "@types/pg": "^8.15.4",
+    "@types/ws": "^8.18.1",
+    "@typescript-eslint/eslint-plugin": "^8.38.0",
+    "@typescript-eslint/parser": "^8.38.0",
+    "cross-env": "^7.0.3",
+    "eslint": "^9.31.0",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-import-resolver-typescript": "^4.4.4",
+    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-jsdoc": "^51.4.1",
+    "jest": "^30.0.5",
+    "prettier": "^3.6.2",
+    "rimraf": "^6.0.1",
+    "tsconfig-paths": "^4.2.0",
+    "typescript": "^5.8.3"
+  }
+}
