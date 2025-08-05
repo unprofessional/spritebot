@@ -1,3 +1,5 @@
+// src/handlers/modal_handlers/character_creation_modals.ts
+
 import type { ModalSubmitInteraction } from 'discord.js';
 
 import { getUserDefinedFields } from '../../services/character.service';
@@ -14,9 +16,6 @@ import type { CharacterDraft } from '../../types/character';
 import type { Game } from '../../types/game';
 import type { StatTemplate } from '../../types/stat_template';
 
-/**
- * Handles modal submission for a character field, updating the draft and UI.
- */
 async function processCharacterFieldModal(
   interaction: ModalSubmitInteraction,
   fieldKey: string,
@@ -72,22 +71,20 @@ async function processCharacterFieldModal(
     statTemplates,
     userFields,
     remaining,
-    updatedDraft.data, // ✅ Fix: only pass draftData (Record<string, unknown>)
+    updatedDraft.data,
   );
 
-  await interaction.reply({
+  // ✅ Update the existing ephemeral message instead of sending a new one
+  await interaction.deferUpdate();
+  await interaction.editReply({
     ...response,
     content:
       remaining.length === 0
         ? `✅ All required fields are filled! Submit when ready:\n\n${response.content}`
         : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
-    ephemeral: true,
   });
 }
 
-/**
- * Main modal handler for character field entry and updates.
- */
 export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
   const { customId } = interaction;
 
@@ -142,7 +139,6 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       }
     }
 
-    // ✅ Fix: assert .guildId is defined or provide fallback
     await getOrCreatePlayer(interaction.user.id, interaction.guildId ?? 'unknown');
     await processCharacterFieldModal(interaction, fieldKey, label, value);
   } catch (err) {

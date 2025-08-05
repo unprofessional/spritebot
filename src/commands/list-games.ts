@@ -1,10 +1,9 @@
 // src/commands/list-games.ts
 
-import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'discord.js';
+import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 
 import { getGame } from '../services/game.service';
 import { getCurrentGame } from '../services/player.service';
-import type { Game } from '../types/game';
 
 module.exports = {
   data: new SlashCommandBuilder()

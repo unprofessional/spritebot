@@ -1,3 +1,5 @@
+// src/handlers/modal_handlers/character_edit_modals.ts
+
 import type { ModalSubmitInteraction } from 'discord.js';
 
 import {
@@ -6,13 +8,9 @@ import {
   updateCharacterMeta,
   updateStatMetaField,
 } from '../../services/character.service';
-
 import { isActiveCharacter } from '../../utils/is_active_character';
 import { build as buildCharacterCard } from '../../components/view_character_card';
 
-/**
- * Handles modals related to character stat or metadata editing.
- */
 export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
   try {
     const { customId } = interaction;
@@ -41,7 +39,6 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
         await updateStatMetaField(characterId, fieldKey, 'current', isNaN(current) ? max : current);
       } else {
         const newValue = interaction.fields.getTextInputValue(fieldKey)?.trim() ?? '';
-
         if (!newValue) {
           await interaction.reply({
             content: '⚠️ Invalid stat update.',
@@ -49,7 +46,6 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
           });
           return;
         }
-
         await updateStat(characterId, fieldKey, newValue);
       }
 
@@ -57,9 +53,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
       const updated = await getCharacterWithStats(characterId);
       if (!updated) {
-        await interaction.editReply({
-          content: '⚠️ Could not load updated character data.',
-        });
+        await interaction.editReply({ content: '⚠️ Could not load updated character data.' });
         return;
       }
 
@@ -70,10 +64,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       );
       const view = buildCharacterCard(updated, isSelf);
 
-      await interaction.editReply({
-        ...view,
-        content: null,
-      });
+      await interaction.editReply({ ...view, content: null });
       return;
     }
 
@@ -104,9 +95,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
       const updated = await getCharacterWithStats(characterId);
       if (!updated) {
-        await interaction.editReply({
-          content: '⚠️ Could not load updated character.',
-        });
+        await interaction.editReply({ content: '⚠️ Could not load updated character.' });
         return;
       }
 
@@ -117,10 +106,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       );
       const view = buildCharacterCard(updated, isSelf);
 
-      await interaction.editReply({
-        ...view,
-        content: null,
-      });
+      await interaction.editReply({ ...view, content: null });
       return;
     }
 
@@ -141,12 +127,27 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
         return;
       }
 
-      // Only name is supported in updateCharacterMeta (others must be stored elsewhere)
+      // Currently only name is supported in updateCharacterMeta
       await updateCharacterMeta(characterId, { name });
 
-      await interaction.reply({
+      await interaction.deferUpdate();
+
+      const updated = await getCharacterWithStats(characterId);
+      if (!updated) {
+        await interaction.editReply({ content: '⚠️ Could not load updated character.' });
+        return;
+      }
+
+      const isSelf = await isActiveCharacter(
+        interaction.user.id,
+        interaction.guildId ?? '',
+        characterId,
+      );
+      const view = buildCharacterCard(updated, isSelf);
+
+      await interaction.editReply({
+        ...view,
         content: `📝 Character **${name}** updated successfully.`,
-        ephemeral: true,
       });
       return;
     }

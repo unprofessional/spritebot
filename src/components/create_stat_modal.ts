@@ -11,7 +11,6 @@ import {
 } from 'discord.js';
 
 import { addStatTemplates, getStatTemplates, getGame } from '../services/game.service';
-
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 
 import type { Game } from '../types/game';
@@ -83,13 +82,14 @@ async function handle(interaction: ModalSubmitInteraction): Promise<void> {
 
   const response = rebuildCreateGameResponse(game, statTemplates, label);
 
-  await interaction.reply({
+  // Update the existing setup message instead of sending a new ephemeral reply
+  await interaction.deferUpdate();
+  await interaction.editReply({
     content: response.content,
     embeds: response.embeds,
     components: response.components.map((row) =>
       row.toJSON(),
     ) as ActionRowData<MessageActionRowComponentData>[],
-    ephemeral: true,
   });
 }
 
