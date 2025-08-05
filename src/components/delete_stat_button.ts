@@ -1,3 +1,5 @@
+// src/components/delete_stat_button.ts
+
 import {
   ActionRowBuilder,
   ButtonBuilder,
