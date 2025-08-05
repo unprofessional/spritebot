@@ -1,3 +1,5 @@
+// src/components/finish_stat_setup_button.ts
+
 import {
   ButtonStyle,
   type ButtonInteraction,
