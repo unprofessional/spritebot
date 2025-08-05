@@ -1,11 +1,11 @@
 version: '3.9'
 
 services:
-  soulbot:
+  spritebot:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: soulbot
+    container_name: spritebot
     env_file:
       - .env
     restart: unless-stopped
