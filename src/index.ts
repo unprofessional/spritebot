@@ -3,7 +3,7 @@
 import { Client, GatewayIntentBits } from 'discord.js';
 import dotenv = require('dotenv');
 
-import { startBumpScheduler } from 'schedulers/bump_scheduler';
+import { startBumpScheduler } from './schedulers/bump_scheduler';
 import { initializeCommands } from './client/initial_commands';
 import { initializeDB, testPgConnection } from './db/db';
 
