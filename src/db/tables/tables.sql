@@ -136,3 +136,12 @@ CREATE INDEX idx_inventory_field_inventory_id ON character_inventory_field(inven
 CREATE INDEX idx_player_server_link_player_id ON player_server_link(player_id);
 CREATE INDEX idx_player_server_link_guild_id ON player_server_link(guild_id);
 CREATE INDEX idx_player_server_link_player_guild ON player_server_link(player_id, guild_id);
+
+-- Threads
+CREATE TABLE thread_bumps (
+  thread_id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  added_by TEXT NOT NULL,
+  note TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
