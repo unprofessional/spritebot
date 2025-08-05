@@ -37,4 +37,4 @@ COPY --from=builder /app/src/db/tables ./dist/db/tables
 EXPOSE 80 443
 
 # Run the bot
-CMD ["node", "-r", "tsconfig-paths/register", "dist/index.js"]
+CMD ["node", "dist/index.js"]

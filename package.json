@@ -8,8 +8,8 @@
     "lint": "eslint --ext .ts,.js src --format=stylish",
     "clean": "rimraf dist",
     "build": "npm run clean && tsc && npm run copy-sql",
-    "start": "node -r tsconfig-paths/register dist/index.js",
-    "start:dev": "ts-node -r tsconfig-paths/register src/index.ts",
+    "start": "node dist/index.js",
+    "start:dev": "ts-node src/index.ts",
     "test": "npx jest --testPathIgnorePatterns=node_modules/* --verbose=true --coverage=false"
   },
   "author": "unprofessional",
@@ -42,7 +42,6 @@
     "jest": "^30.0.5",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",
-    "tsconfig-paths": "^4.2.0",
     "typescript": "^5.8.3"
   }
 }
