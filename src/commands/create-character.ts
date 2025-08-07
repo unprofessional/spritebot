@@ -5,7 +5,11 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'dis
 import { getOrCreatePlayer, getCurrentGame } from '../services/player.service';
 import { getGame, getStatTemplates } from '../services/game.service';
 import { getUserDefinedFields } from '../services/character.service';
-import { initDraft, getTempCharacterData } from '../services/character_draft.service';
+import {
+  initDraft,
+  getTempCharacterData,
+  upsertTempCharacterField,
+} from '../services/character_draft.service';
 import { rebuildCreateCharacterResponse } from '../utils/rebuild_create_character_response';
 
 import type { StatTemplate } from '../types/stat_template';
@@ -78,7 +82,6 @@ module.exports = {
     }
 
     draft.game_id = gameId;
-
     console.log(`🧾 Draft initialized for user ${userId} with game_id: ${gameId}`);
 
     const coreFields: LabeledField[] = [
@@ -126,12 +129,17 @@ module.exports = {
       hydratedDraft ?? undefined,
     );
 
-    return await interaction.reply({
+    // 💡 Send response and capture the message ID
+    const sent = await interaction.reply({
       ...response,
       content: existingDraft
         ? `⚠️ Resumed your previous draft!\nContinue filling in the fields below.\n\n${response.content || ''}`
         : response.content,
       ephemeral: true,
+      fetchReply: true,
     });
+
+    // 💾 Store the ephemeral message ID for modal `.fetch()` later
+    await upsertTempCharacterField(userId, 'builder_message_id', sent.id, gameId);
   },
 };

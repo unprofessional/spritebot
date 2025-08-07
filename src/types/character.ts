@@ -8,6 +8,7 @@ export interface CharacterDraft {
   user_id: string;
   game_id: string;
   data: Record<string, any>;
+  builder_message_id?: string;
   created_at?: string;
   updated_at?: string;
 }
