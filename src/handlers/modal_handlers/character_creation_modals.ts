@@ -12,7 +12,6 @@ import { getGame, getStatTemplates } from '../../services/game.service';
 import { getOrCreatePlayer } from '../../services/player.service';
 import { rebuildCreateCharacterResponse } from '../../utils/rebuild_create_character_response';
 
-import type { CharacterDraft } from '../../types/character';
 import type { Game } from '../../types/game';
 import type { StatTemplate } from '../../types/stat_template';
 
@@ -23,11 +22,10 @@ async function processCharacterFieldModal(
   value: string | null,
   fieldType: string | null,
 ): Promise<void> {
-  const draft = (await getTempCharacterData(interaction.user.id)) as CharacterDraft | null;
-  const gameId = draft?.game_id;
-  const builderMessageId = draft?.['builder_message_id'];
+  const userId = interaction.user.id;
+  const draft = await getTempCharacterData(userId);
 
-  if (!gameId || !builderMessageId) {
+  if (!draft || !draft.game_id || !draft.data?.builder_message_id) {
     await interaction.reply({
       content: '⚠️ Your draft session is invalid or expired.',
       ephemeral: true,
@@ -35,6 +33,8 @@ async function processCharacterFieldModal(
     return;
   }
 
+  const { game_id: gameId, data } = draft;
+  const builderMessageId = data.builder_message_id;
   const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
 
   if (fieldType === 'count') {
@@ -57,25 +57,24 @@ async function processCharacterFieldModal(
       max,
     };
 
-    await upsertTempCharacterField(interaction.user.id, fieldKey, null, gameId, meta);
+    await upsertTempCharacterField(userId, fieldKey, null, gameId, meta);
   } else {
-    await upsertTempCharacterField(interaction.user.id, fieldKey, value, gameId);
+    await upsertTempCharacterField(userId, fieldKey, value, gameId);
   }
 
-  const updatedDraft = (await getTempCharacterData(interaction.user.id)) as CharacterDraft;
-  const userFields = await getUserDefinedFields(interaction.user.id);
+  const updatedDraft = await getTempCharacterData(userId);
+  const userFields = await getUserDefinedFields(userId);
   const game = (await getGame({ id: gameId })) as Game;
-  const remaining = await getRemainingRequiredFields(interaction.user.id);
+  const remaining = await getRemainingRequiredFields(userId);
 
   const response = rebuildCreateCharacterResponse(
     game,
     statTemplates,
     userFields,
     remaining,
-    updatedDraft.data,
+    updatedDraft?.data ?? {},
   );
 
-  // Fetch and edit the original message using its stored ID
   try {
     const channel = interaction.channel;
     if (!channel?.isTextBased()) throw new Error('Channel is not text-based');
@@ -89,7 +88,7 @@ async function processCharacterFieldModal(
           : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
     });
 
-    await interaction.deferUpdate(); // silently close modal
+    await interaction.deferUpdate();
   } catch (err) {
     console.error('❌ Failed to edit original message:', err);
     await interaction.reply({
@@ -100,15 +99,10 @@ async function processCharacterFieldModal(
 }
 
 export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
-  const { customId } = interaction;
+  const { customId, user, guildId } = interaction;
 
-  let prefix = '';
-  if (customId.startsWith('createDraftCharacterField:')) {
-    prefix = 'createDraftCharacterField:';
-  } else if (customId.startsWith('setCharacterField:')) {
-    prefix = 'setCharacterField:';
-  }
-
+  const prefixes = ['createDraftCharacterField:', 'setCharacterField:'];
+  const prefix = prefixes.find((p) => customId.startsWith(p));
   if (!prefix) return;
 
   const combined = customId.slice(prefix.length);
@@ -128,10 +122,10 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   }
 
   try {
-    const draft = (await getTempCharacterData(interaction.user.id)) as CharacterDraft | null;
-    const gameId = draft?.game_id;
+    const userId = user.id;
+    const draft = await getTempCharacterData(userId);
 
-    if (!gameId) {
+    if (!draft?.game_id) {
       await interaction.reply({
         content: '⚠️ Your draft session is invalid or expired.',
         ephemeral: true,
@@ -151,12 +145,12 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       }
     }
 
-    await getOrCreatePlayer(interaction.user.id, interaction.guildId ?? 'unknown');
+    await getOrCreatePlayer(userId, guildId ?? 'unknown');
     await processCharacterFieldModal(interaction, fieldKey, label, value, fieldType);
   } catch (err) {
-    console.error(`[${prefix}] Error accessing field "${fieldKey}":`, err);
+    console.error(`[${prefix}] Error processing modal for "${fieldKey}":`, err);
     await interaction.reply({
-      content: `❌ Unable to find or parse field \`${fieldKey}\`. Please restart character creation.`,
+      content: `❌ Failed to process field \`${fieldKey}\`. Please restart character creation.`,
       ephemeral: true,
     });
   }
