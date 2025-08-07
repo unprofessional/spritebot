@@ -27,8 +27,8 @@ async function processCharacterFieldModal(
 
   console.log('🧾 Retrieved draft for processCharacterFieldModal:', draft);
 
-  if (!draft || !draft.game_id || !draft.data?.builder_message_id) {
-    console.warn('⚠️ Draft missing game_id or builder_message_id');
+  if (!draft || !draft.game_id) {
+    console.warn('⚠️ Draft missing game_id');
     await interaction.reply({
       content: '⚠️ Your draft session is invalid or expired.',
       ephemeral: true,
@@ -36,12 +36,7 @@ async function processCharacterFieldModal(
     return;
   }
 
-  const { game_id: gameId, data } = draft;
-  const builderMessageId = data['builder_message_id'];
-
-  console.log('🔧 builderMessageId:', builderMessageId);
-  console.log('📺 interaction.channel.id:', interaction.channel?.id);
-
+  const { game_id: gameId } = draft;
   const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
 
   if (fieldType === 'count') {
@@ -66,7 +61,7 @@ async function processCharacterFieldModal(
     };
 
     await upsertTempCharacterField(userId, fieldKey, null, gameId, meta);
-    console.log(`📥 Saved count field: ${fieldKey} = ${current}/${max}`);
+    console.log(`📥 Saved count field: ${fieldKey} = ${meta.current}/${max}`);
   } else {
     await upsertTempCharacterField(userId, fieldKey, value, gameId);
     console.log(`📥 Saved field: ${fieldKey} = ${value}`);
@@ -85,28 +80,20 @@ async function processCharacterFieldModal(
     updatedDraft?.data ?? {},
   );
 
+  const contentPrefix =
+    remaining.length === 0
+      ? `✅ All required fields are filled! Submit when ready:\n\n`
+      : `✅ Saved **${label}**. Choose next field:\n\n`;
+
   try {
-    const channel = interaction.channel;
-    if (!channel?.isTextBased()) throw new Error('Channel is not text-based');
-
-    console.log(`🛠 Attempting to fetch message ${builderMessageId} in channel ${channel.id}`);
-
-    const msg = await channel.messages.fetch(builderMessageId);
-    console.log('✅ Successfully fetched builder message');
-
-    await msg.edit({
-      ...response,
-      content:
-        remaining.length === 0
-          ? `✅ All required fields are filled! Submit when ready:\n\n${response.content}`
-          : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
-    });
-
-    console.log('✏️ Message edit completed');
     await interaction.deferUpdate();
+    await interaction.editReply({
+      ...response,
+      content: contentPrefix + (response.content || ''),
+    });
   } catch (err) {
-    console.error('❌ Failed to edit original message:', err);
-    await interaction.reply({
+    console.error('❌ Failed to update ephemeral response:', err);
+    await interaction.followUp({
       content: '⚠️ Failed to update your character builder. Please rerun `/create-character`.',
       ephemeral: true,
     });
