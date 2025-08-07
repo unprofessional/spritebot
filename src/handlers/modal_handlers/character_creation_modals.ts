@@ -21,6 +21,7 @@ async function processCharacterFieldModal(
   fieldKey: string,
   label: string,
   value: string | null,
+  fieldType: string | null,
 ): Promise<void> {
   const draft = (await getTempCharacterData(interaction.user.id)) as CharacterDraft | null;
   const gameId = draft?.game_id;
@@ -34,9 +35,8 @@ async function processCharacterFieldModal(
   }
 
   const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
-  const matchingTemplate = statTemplates.find((t) => `game:${t.id}` === fieldKey);
 
-  if (matchingTemplate?.field_type === 'count') {
+  if (fieldType === 'count') {
     const maxRaw = interaction.fields.getTextInputValue(`${fieldKey}:max`)?.trim();
     const currentRaw = interaction.fields.getTextInputValue(`${fieldKey}:current`)?.trim();
 
@@ -105,11 +105,12 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   if (!prefix) return;
 
   const combined = customId.slice(prefix.length);
-  const [fieldKey, labelRaw] = combined.split('|');
+  const [fieldKey, labelRaw = fieldKey, fieldType = null] = combined.split('|');
   const label = labelRaw || fieldKey;
 
   console.log(`[${prefix}] fieldKey:`, fieldKey);
   console.log(`[${prefix}] label:`, label);
+  console.log(`[${prefix}] fieldType:`, fieldType);
 
   if (!fieldKey || !fieldKey.includes(':')) {
     await interaction.reply({
@@ -131,11 +132,8 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       return;
     }
 
-    const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
-    const matchingTemplate = statTemplates.find((t) => `game:${t.id}` === fieldKey);
-
     let value: string | null = null;
-    if (matchingTemplate?.field_type !== 'count') {
+    if (fieldType !== 'count') {
       value = interaction.fields.getTextInputValue(fieldKey)?.trim() ?? null;
       if (!value) {
         await interaction.reply({
@@ -147,7 +145,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
     }
 
     await getOrCreatePlayer(interaction.user.id, interaction.guildId ?? 'unknown');
-    await processCharacterFieldModal(interaction, fieldKey, label, value);
+    await processCharacterFieldModal(interaction, fieldKey, label, value, fieldType);
   } catch (err) {
     console.error(`[${prefix}] Error accessing field "${fieldKey}":`, err);
     await interaction.reply({
