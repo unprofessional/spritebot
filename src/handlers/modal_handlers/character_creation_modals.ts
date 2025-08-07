@@ -25,7 +25,10 @@ async function processCharacterFieldModal(
   const userId = interaction.user.id;
   const draft = await getTempCharacterData(userId);
 
+  console.log('🧾 Retrieved draft for processCharacterFieldModal:', draft);
+
   if (!draft || !draft.game_id || !draft.data?.builder_message_id) {
+    console.warn('⚠️ Draft missing game_id or builder_message_id');
     await interaction.reply({
       content: '⚠️ Your draft session is invalid or expired.',
       ephemeral: true,
@@ -35,6 +38,10 @@ async function processCharacterFieldModal(
 
   const { game_id: gameId, data } = draft;
   const builderMessageId = data.builder_message_id;
+
+  console.log('🔧 builderMessageId:', builderMessageId);
+  console.log('📺 interaction.channel.id:', interaction.channel?.id);
+
   const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
 
   if (fieldType === 'count') {
@@ -45,6 +52,7 @@ async function processCharacterFieldModal(
     const current = currentRaw ? parseInt(currentRaw, 10) : max;
 
     if (isNaN(max)) {
+      console.warn('⚠️ Max value not a number:', maxRaw);
       await interaction.reply({
         content: '⚠️ Max value must be a number.',
         ephemeral: true,
@@ -58,8 +66,10 @@ async function processCharacterFieldModal(
     };
 
     await upsertTempCharacterField(userId, fieldKey, null, gameId, meta);
+    console.log(`📥 Saved count field: ${fieldKey} = ${current}/${max}`);
   } else {
     await upsertTempCharacterField(userId, fieldKey, value, gameId);
+    console.log(`📥 Saved field: ${fieldKey} = ${value}`);
   }
 
   const updatedDraft = await getTempCharacterData(userId);
@@ -79,7 +89,11 @@ async function processCharacterFieldModal(
     const channel = interaction.channel;
     if (!channel?.isTextBased()) throw new Error('Channel is not text-based');
 
+    console.log(`🛠 Attempting to fetch message ${builderMessageId} in channel ${channel.id}`);
+
     const msg = await channel.messages.fetch(builderMessageId);
+    console.log('✅ Successfully fetched builder message');
+
     await msg.edit({
       ...response,
       content:
@@ -88,6 +102,7 @@ async function processCharacterFieldModal(
           : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
     });
 
+    console.log('✏️ Message edit completed');
     await interaction.deferUpdate();
   } catch (err) {
     console.error('❌ Failed to edit original message:', err);
@@ -124,6 +139,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   try {
     const userId = user.id;
     const draft = await getTempCharacterData(userId);
+    console.log(`🧾 Draft state before processing:`, draft);
 
     if (!draft?.game_id) {
       await interaction.reply({
@@ -137,6 +153,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
     if (fieldType !== 'count') {
       value = interaction.fields.getTextInputValue(fieldKey)?.trim() ?? null;
       if (!value) {
+        console.warn('⚠️ No value entered for field:', fieldKey);
         await interaction.reply({
           content: '⚠️ No value was entered.',
           ephemeral: true,
