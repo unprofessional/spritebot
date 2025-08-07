@@ -25,8 +25,9 @@ async function processCharacterFieldModal(
 ): Promise<void> {
   const draft = (await getTempCharacterData(interaction.user.id)) as CharacterDraft | null;
   const gameId = draft?.game_id;
+  const builderMessageId = draft?.['builder_message_id'];
 
-  if (!gameId) {
+  if (!gameId || !builderMessageId) {
     await interaction.reply({
       content: '⚠️ Your draft session is invalid or expired.',
       ephemeral: true,
@@ -74,22 +75,28 @@ async function processCharacterFieldModal(
     updatedDraft.data,
   );
 
-  if (!interaction.message) {
+  // Fetch and edit the original message using its stored ID
+  try {
+    const channel = interaction.channel;
+    if (!channel?.isTextBased()) throw new Error('Channel is not text-based');
+
+    const msg = await channel.messages.fetch(builderMessageId);
+    await msg.edit({
+      ...response,
+      content:
+        remaining.length === 0
+          ? `✅ All required fields are filled! Submit when ready:\n\n${response.content}`
+          : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
+    });
+
+    await interaction.deferUpdate(); // silently close modal
+  } catch (err) {
+    console.error('❌ Failed to edit original message:', err);
     await interaction.reply({
-      content: '⚠️ Unable to update view — please run `/create-character` again.',
+      content: '⚠️ Failed to update your character builder. Please rerun `/create-character`.',
       ephemeral: true,
     });
-    return;
   }
-
-  await interaction.message.edit({
-    ...response,
-    content:
-      remaining.length === 0
-        ? `✅ All required fields are filled! Submit when ready:\n\n${response.content}`
-        : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
-  });
-  await interaction.deferUpdate(); // closes modal silently
 }
 
 export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
