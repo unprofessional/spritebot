@@ -37,7 +37,7 @@ async function processCharacterFieldModal(
   }
 
   const { game_id: gameId, data } = draft;
-  const builderMessageId = data.builder_message_id;
+  const builderMessageId = data['builder_message_id'];
 
   console.log('🔧 builderMessageId:', builderMessageId);
   console.log('📺 interaction.channel.id:', interaction.channel?.id);
