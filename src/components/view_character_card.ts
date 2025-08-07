@@ -1,3 +1,5 @@
+// src/components/view_character_card.ts
+
 import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import type { CharacterWithStats } from '../types/character';
 import { formatTimeAgo } from '../utils/time_ago';
