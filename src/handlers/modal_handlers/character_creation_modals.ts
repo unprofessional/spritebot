@@ -74,15 +74,22 @@ async function processCharacterFieldModal(
     updatedDraft.data,
   );
 
-  // ✅ Update the existing ephemeral message instead of sending a new one
-  await interaction.deferUpdate();
-  await interaction.editReply({
+  if (!interaction.message) {
+    await interaction.reply({
+      content: '⚠️ Unable to update view — please run `/create-character` again.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.message.edit({
     ...response,
     content:
       remaining.length === 0
         ? `✅ All required fields are filled! Submit when ready:\n\n${response.content}`
         : `✅ Saved **${label}**. Choose next field:\n\n${response.content}`,
   });
+  await interaction.deferUpdate(); // closes modal silently
 }
 
 export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
