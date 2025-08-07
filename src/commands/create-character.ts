@@ -121,12 +121,13 @@ module.exports = {
     }
 
     const hydratedDraft = await getTempCharacterData(userId);
+    const draftData: Record<string, unknown> = hydratedDraft?.data ?? {};
     const response = rebuildCreateCharacterResponse(
       game,
       statTemplates,
       userFields,
       safeFields,
-      hydratedDraft ?? undefined,
+      draftData,
     );
 
     // 💡 Send response and capture the message ID
