@@ -22,16 +22,11 @@ CREATE TABLE stat_template (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   game_id UUID NOT NULL REFERENCES game(id) ON DELETE CASCADE,
   label TEXT NOT NULL,
-
-  -- Now includes 'count' and 'number' field types
   field_type TEXT NOT NULL DEFAULT 'short'
     CHECK (field_type IN ('short', 'paragraph', 'number', 'count')),
-
   default_value TEXT,
   is_required BOOLEAN DEFAULT TRUE,
   sort_order INTEGER DEFAULT 0,
-
-  -- Meta for grouping, scaffold types, roles (e.g. { "scaffold": "count", "role": "current", "group": "HP" })
   meta JSONB DEFAULT '{}'
 );
 
@@ -61,14 +56,11 @@ CREATE TABLE player_server_link (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   player_id UUID NOT NULL REFERENCES player(id) ON DELETE CASCADE,
   guild_id TEXT NOT NULL,
-
   role TEXT DEFAULT 'player' CHECK (role IN ('player', 'gm')),
   current_character_id UUID REFERENCES character(id) ON DELETE SET NULL,
   current_game_id UUID REFERENCES game(id) ON DELETE SET NULL,
-
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-
   UNIQUE(player_id, guild_id)
 );
 
@@ -77,12 +69,8 @@ CREATE TABLE character_stat_field (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   character_id UUID NOT NULL REFERENCES character(id) ON DELETE CASCADE,
   template_id UUID NOT NULL REFERENCES stat_template(id) ON DELETE CASCADE,
-
   value TEXT NOT NULL,
-
-  -- meta can store computed info (e.g., derived stats, override flags)
   meta JSONB DEFAULT '{}',
-
   UNIQUE(character_id, template_id)
 );
 
@@ -122,10 +110,11 @@ CREATE TABLE thread_bumps (
   guild_id TEXT NOT NULL,                             -- Discord guild/server ID
   added_by TEXT NOT NULL,                             -- Discord user ID who registered it
   note TEXT,                                          -- Optional note to include in bump messages
-  interval_minutes INTEGER NOT NULL DEFAULT 10080,    -- Interval between bumps in minutes (default: weekly)
-  last_bumped_at TIMESTAMP WITH TIME ZONE,            -- When the last bump was sent
-  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  interval_minutes INTEGER NOT NULL DEFAULT 10080,    -- Minutes between bumps (default: weekly)
+  last_bumped_at TIMESTAMPTZ,                         -- When the last bump was sent
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  next_due_at TIMESTAMPTZ                              -- maintained by trigger below
 );
 
 -- Keep updated_at in sync automatically for thread_bumps
@@ -142,9 +131,24 @@ BEFORE UPDATE ON thread_bumps
 FOR EACH ROW
 EXECUTE FUNCTION update_thread_bumps_updated_at();
 
--- Helpful index to query "due" items efficiently if needed
-CREATE INDEX idx_thread_bumps_next_due
-  ON thread_bumps ((COALESCE(last_bumped_at, created_at) + (interval_minutes || ' minutes')::interval));
+-- Maintain next_due_at on INSERT/UPDATE
+CREATE OR REPLACE FUNCTION set_thread_bumps_next_due()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.next_due_at :=
+    COALESCE(NEW.last_bumped_at, NEW.created_at)
+    + (INTERVAL '1 minute' * NEW.interval_minutes);
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER compute_thread_bumps_next_due
+BEFORE INSERT OR UPDATE OF last_bumped_at, interval_minutes ON thread_bumps
+FOR EACH ROW
+EXECUTE FUNCTION set_thread_bumps_next_due();
+
+-- Index for due-time queries (simple btree on plain column)
+CREATE INDEX idx_thread_bumps_next_due ON thread_bumps (next_due_at);
 
 -- === INDEXES ===
 -- Game + Guild lookup
