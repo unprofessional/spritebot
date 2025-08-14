@@ -9,7 +9,7 @@ const pool = new Pool({
   host: pgHost,
   database: pgDb,
   password: pgPass,
-  port: parseInt(pgPort),
+  port: parseInt(pgPort, 10),
 });
 
 export async function testPgConnection(): Promise<void> {
@@ -33,7 +33,7 @@ export async function initializeDB(): Promise<void> {
   }
 
   try {
-    // 🧱 Tracked RPG tables
+    // 🧱 Tracked RPG tables (must ALL be absent to run the full schema file)
     const trackedTables = [
       'game',
       'stat_template',
@@ -44,6 +44,7 @@ export async function initializeDB(): Promise<void> {
       'character_custom_field',
       'character_inventory',
       'character_inventory_field',
+      'thread_bumps', // <— NEW
     ];
 
     // 🔍 Check which tables exist
@@ -60,17 +61,18 @@ export async function initializeDB(): Promise<void> {
 
     if (existingTables.length > 0) {
       console.warn(
-        `⚠️ Skipping DB init — the following RPG tables already exist: ${existingTables.sort().join(', ')}`,
+        `⚠️ Skipping DB init — these tables already exist: ${existingTables.sort().join(', ')}`,
       );
       if (missingTables.length > 0) {
         console.info(
-          `🟡 Note: the following RPG tables are still missing: ${missingTables.sort().join(', ')}`,
+          `🟡 Note: still missing: ${missingTables.sort().join(', ')}. ` +
+            `Run a migration or drop existing tables before applying the full schema.`,
         );
       }
       return;
     }
 
-    // ✅ Load schema
+    // ✅ Load schema (full create script incl. pgcrypto, triggers, indexes)
     const sql = await getSql('tables', 'tables');
 
     // 🔒 Keyword safety (prod only)

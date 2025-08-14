@@ -1,30 +1,85 @@
-import { Client, ThreadChannel } from 'discord.js';
-import { ThreadBumpDAO } from '../dao/thread_bump.dao';
+// src/services/thread_bump.service.ts
+import { Client, ThreadChannel, Channel } from 'discord.js';
+import { ThreadBumpDAO, BumpThreadRow } from '../dao/thread_bump.dao';
 
 function buildBumpMessage(note?: string | null) {
   return {
     content: `🔄 **Thread auto-bumped to keep it active.**${note ? `\n💬 _${note}_` : ''}`,
-    allowedMentions: { users: [] },
+    allowedMentions: { users: [] as string[] },
   };
+}
+
+function asThread(channel: Channel | null): ThreadChannel | null {
+  if (
+    channel &&
+    'isThread' in channel &&
+    typeof channel.isThread === 'function' &&
+    channel.isThread()
+  ) {
+    return channel as ThreadChannel;
+  }
+  return null;
+}
+
+function nextDueAt(row: BumpThreadRow): Date {
+  const base = row.last_bumped_at ?? row.created_at ?? new Date();
+  const due = new Date(base);
+  due.setMinutes(due.getMinutes() + (row.interval_minutes ?? 10080));
+  return due;
 }
 
 export class ThreadBumpService {
   private dao = new ThreadBumpDAO();
 
-  async runWeeklyBumps(client: Client): Promise<void> {
-    const threads = await this.dao.findAll();
+  async bumpNow(client: Client, threadId: string): Promise<void> {
+    const chan = await client.channels.fetch(threadId);
+    const thread = asThread(chan);
+    if (!thread) throw new Error('Not a thread channel or cannot fetch thread.');
 
-    for (const row of threads) {
-      try {
-        const thread = await client.channels.fetch(row.thread_id);
+    const row = await this.dao.get(threadId);
+    const note = row?.note ?? null;
 
-        if (!thread?.isThread()) continue;
+    await thread.send(buildBumpMessage(note));
+    await this.dao.touchLastBumped(threadId, new Date());
+  }
 
-        const msg = buildBumpMessage(row.note);
-        await (thread as ThreadChannel).send(msg);
-      } catch (err) {
-        console.warn(`⚠️ Failed to bump thread ${row.thread_id}:`, err);
-      }
-    }
+  async register(
+    threadId: string,
+    guildId: string,
+    addedBy: string,
+    note?: string | null,
+    intervalMinutes?: number,
+  ): Promise<void> {
+    await this.dao.insert({
+      thread_id: threadId,
+      guild_id: guildId,
+      added_by: addedBy,
+      note: note ?? null,
+      interval_minutes: intervalMinutes,
+    });
+  }
+
+  async unregister(threadId: string): Promise<boolean> {
+    return this.dao.delete(threadId);
+  }
+
+  async setNote(threadId: string, note: string | null): Promise<boolean> {
+    return this.dao.updateNote(threadId, note);
+  }
+
+  async setInterval(threadId: string, intervalMinutes: number): Promise<boolean> {
+    return this.dao.updateInterval(threadId, intervalMinutes);
+  }
+
+  async listGuild(guildId: string) {
+    return this.dao.listByGuild(guildId);
+  }
+
+  async isRegistered(threadId: string) {
+    return this.dao.exists(threadId);
+  }
+
+  nextDueAt(row: BumpThreadRow): Date {
+    return nextDueAt(row);
   }
 }
