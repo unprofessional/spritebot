@@ -2,6 +2,9 @@
 -- RPG TRACKER: FLEXIBLE CHARACTER SYSTEM (REFACTORED, REORDERED + CLEANED)
 -- -- -- -- -- --
 
+-- Extensions
+CREATE EXTENSION IF NOT EXISTS pgcrypto; -- for gen_random_uuid()
+
 -- === GAME METADATA ===
 CREATE TABLE game (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -28,7 +31,7 @@ CREATE TABLE stat_template (
   is_required BOOLEAN DEFAULT TRUE,
   sort_order INTEGER DEFAULT 0,
 
-  -- New: meta for grouping, scaffold types, roles (e.g. { "scaffold": "count", "role": "current", "group": "HP" })
+  -- Meta for grouping, scaffold types, roles (e.g. { "scaffold": "count", "role": "current", "group": "HP" })
   meta JSONB DEFAULT '{}'
 );
 
@@ -113,6 +116,36 @@ CREATE TABLE character_inventory_field (
   UNIQUE(inventory_id, name)
 );
 
+-- === THREAD AUTO-BUMPS (PER-THREAD SCHEDULING) ===
+CREATE TABLE thread_bumps (
+  thread_id TEXT PRIMARY KEY,                         -- Discord thread channel ID
+  guild_id TEXT NOT NULL,                             -- Discord guild/server ID
+  added_by TEXT NOT NULL,                             -- Discord user ID who registered it
+  note TEXT,                                          -- Optional note to include in bump messages
+  interval_minutes INTEGER NOT NULL DEFAULT 10080,    -- Interval between bumps in minutes (default: weekly)
+  last_bumped_at TIMESTAMP WITH TIME ZONE,            -- When the last bump was sent
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Keep updated_at in sync automatically for thread_bumps
+CREATE OR REPLACE FUNCTION update_thread_bumps_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_thread_bumps_updated_at
+BEFORE UPDATE ON thread_bumps
+FOR EACH ROW
+EXECUTE FUNCTION update_thread_bumps_updated_at();
+
+-- Helpful index to query "due" items efficiently if needed
+CREATE INDEX idx_thread_bumps_next_due
+  ON thread_bumps ((COALESCE(last_bumped_at, created_at) + (interval_minutes || ' minutes')::interval));
+
 -- === INDEXES ===
 -- Game + Guild lookup
 CREATE INDEX idx_game_guild_id ON game(guild_id);
@@ -136,13 +169,3 @@ CREATE INDEX idx_inventory_field_inventory_id ON character_inventory_field(inven
 CREATE INDEX idx_player_server_link_player_id ON player_server_link(player_id);
 CREATE INDEX idx_player_server_link_guild_id ON player_server_link(guild_id);
 CREATE INDEX idx_player_server_link_player_guild ON player_server_link(player_id, guild_id);
-
--- Threads
-CREATE TABLE thread_bumps (
-  thread_id TEXT PRIMARY KEY,
-  guild_id TEXT NOT NULL,
-  added_by TEXT NOT NULL,
-  note TEXT,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
