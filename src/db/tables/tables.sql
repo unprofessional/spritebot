@@ -143,5 +143,6 @@ CREATE TABLE thread_bumps (
   guild_id TEXT NOT NULL,
   added_by TEXT NOT NULL,
   note TEXT,
-  created_at TIMESTAMP DEFAULT NOW()
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
