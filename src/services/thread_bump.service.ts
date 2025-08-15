@@ -1,11 +1,25 @@
 // src/services/thread_bump.service.ts
-import { Client, ThreadChannel, Channel } from 'discord.js';
-import { ThreadBumpDAO, BumpThreadRow } from '../dao/thread_bump.dao';
+import {
+  Client,
+  ThreadChannel,
+  Channel,
+  PermissionFlagsBits,
+  type MessageCreateOptions,
+  type MessageMentionTypes,
+} from 'discord.js';
+import { ThreadBumpDAO, type BumpThreadRow } from '../dao/thread_bump.dao';
 
-function buildBumpMessage(note?: string | null) {
+const NO_MENTIONS: ReadonlyArray<MessageMentionTypes> = [];
+
+function buildBumpMessage(note?: string | null): MessageCreateOptions {
   return {
     content: `🔄 **Thread auto-bumped to keep it active.**${note ? `\n💬 _${note}_` : ''}`,
-    allowedMentions: { users: [] as string[] },
+    allowedMentions: {
+      parse: NO_MENTIONS, // ✅ readonly MessageMentionTypes[]
+      users: [], // extra hardening (no user pings)
+      roles: [], // no role pings
+      repliedUser: false, // don't ping the author on replies
+    },
   };
 }
 
@@ -13,8 +27,8 @@ function asThread(channel: Channel | null): ThreadChannel | null {
   if (
     channel &&
     'isThread' in channel &&
-    typeof channel.isThread === 'function' &&
-    channel.isThread()
+    typeof (channel as ThreadChannel).isThread === 'function' &&
+    (channel as ThreadChannel).isThread()
   ) {
     return channel as ThreadChannel;
   }
@@ -28,18 +42,41 @@ function nextDueAt(row: BumpThreadRow): Date {
   return due;
 }
 
+async function ensureWritable(thread: ThreadChannel): Promise<void> {
+  const me = thread.guild.members.me;
+  if (!me?.permissions.has(PermissionFlagsBits.SendMessagesInThreads)) {
+    throw new Error('Bot lacks SendMessagesInThreads permission.');
+  }
+  if (thread.archived) {
+    try {
+      await thread.setArchived(false);
+    } catch (e) {
+      throw new Error(`Cannot unarchive thread (need ManageThreads?): ${String(e)}`);
+    }
+  }
+  if (thread.locked) {
+    try {
+      await thread.setLocked(false);
+    } catch {
+      /* non-fatal */
+    }
+  }
+}
+
 export class ThreadBumpService {
   private dao = new ThreadBumpDAO();
 
   async bumpNow(client: Client, threadId: string): Promise<void> {
-    const chan = await client.channels.fetch(threadId);
+    const chan = await client.channels.fetch(threadId).catch(() => null);
     const thread = asThread(chan);
     if (!thread) throw new Error('Not a thread channel or cannot fetch thread.');
+
+    await ensureWritable(thread);
 
     const row = await this.dao.get(threadId);
     const note = row?.note ?? null;
 
-    await thread.send(buildBumpMessage(note));
+    await thread.send(buildBumpMessage(note)); // ✅ MessageCreateOptions
     await this.dao.touchLastBumped(threadId, new Date());
   }
 
