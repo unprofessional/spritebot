@@ -281,7 +281,7 @@ module.exports = {
       }
 
       if (sub === 'bump-now') {
-        await service.bumpNow(interaction.client, target.id);
+        await service.bumpNow(interaction.client, target.id, { deleteAfter: false });
         await interaction.reply({ content: `🔔 Bumped <#${target.id}>.`, ephemeral: true });
         return;
       }

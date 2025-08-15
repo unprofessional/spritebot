@@ -16,10 +16,10 @@ function buildBumpMessage(note?: string | null): MessageCreateOptions {
   return {
     content: `🔄 **Thread auto-bumped to keep it active.**${note ? `\n💬 _${note}_` : ''}`,
     allowedMentions: {
-      parse: NO_MENTIONS, // ✅ readonly MessageMentionTypes[]
-      users: [], // extra hardening (no user pings)
-      roles: [], // no role pings
-      repliedUser: false, // don't ping the author on replies
+      parse: NO_MENTIONS, // no @everyone/@here/roles/users
+      users: [],
+      roles: [],
+      repliedUser: false,
     },
   };
 }
@@ -65,10 +65,25 @@ async function ensureWritable(thread: ThreadChannel): Promise<void> {
   }
 }
 
+type BumpOptions = {
+  /** delete the bump message right after sending (default: true) */
+  deleteAfter?: boolean;
+  /** optional small delay before deleting, in ms (default: 0) */
+  deleteDelayMs?: number;
+};
+
 export class ThreadBumpService {
   private dao = new ThreadBumpDAO();
 
-  async bumpNow(client: Client, threadId: string): Promise<void> {
+  /**
+   * Sends a bump message to the thread.
+   * By default, deletes the message right after sending (keeps thread clean) but still resets activity.
+   * Pass { deleteAfter: false } to keep the bump visible (e.g., for manual tests).
+   */
+  async bumpNow(client: Client, threadId: string, opts?: BumpOptions): Promise<void> {
+    const deleteAfter = opts?.deleteAfter !== false; // default true
+    const deleteDelayMs = Math.max(0, opts?.deleteDelayMs ?? 0);
+
     const chan = await client.channels.fetch(threadId).catch(() => null);
     const thread = asThread(chan);
     if (!thread) throw new Error('Not a thread channel or cannot fetch thread.');
@@ -78,8 +93,26 @@ export class ThreadBumpService {
     const row = await this.dao.get(threadId);
     const note = row?.note ?? null;
 
-    await thread.send(buildBumpMessage(note)); // ✅ MessageCreateOptions
+    // 1) Send and await ack from Discord (this updates thread activity)
+    const sent = await thread.send(buildBumpMessage(note));
+
+    // 2) Update DB regardless of deletion outcome
     await this.dao.touchLastBumped(threadId, new Date());
+
+    // 3) Optionally delete to keep thread clean
+    if (deleteAfter) {
+      try {
+        if (deleteDelayMs > 0) {
+          await new Promise((r) => setTimeout(r, deleteDelayMs));
+        }
+        await sent.delete(); // deleting after ack still preserves the activity reset
+      } catch (e) {
+        // Not fatal: the bump already reset activity and DB was updated
+        // Common causes: missing perms to delete, message already deleted by mods, etc.
+        // eslint-disable-next-line no-console
+        console.warn(`⚠️ Failed to delete bump message in ${threadId}:`, e);
+      }
+    }
   }
 
   async register(
