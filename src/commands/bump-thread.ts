@@ -1,16 +1,16 @@
 // src/commands/bump-thread.ts
 
 import {
-  SlashCommandBuilder,
-  ChatInputCommandInteraction,
   CacheType,
   ChannelType,
+  ChatInputCommandInteraction,
   PermissionFlagsBits,
+  SlashCommandBuilder,
   ThreadChannel,
 } from 'discord.js';
-
-import { ThreadBumpService } from '../services/thread_bump.service';
 import { rescheduleThread, unscheduleThread } from '../schedulers/bump_scheduler';
+import { ThreadBumpService } from '../services/thread_bump.service';
+import { computeDefaultIntervalMinutes } from '../config/bump_config';
 
 const service = new ThreadBumpService();
 
@@ -61,7 +61,7 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName('add')
-        .setDescription('Register a thread for auto-bumps (defaults to weekly).')
+        .setDescription('Register a thread for auto-bumps (defaults to archive‑aware cadence).')
         .addChannelOption((o) =>
           o
             .setName('thread')
@@ -138,7 +138,7 @@ module.exports = {
         .addIntegerOption((o) =>
           o
             .setName('minutes')
-            .setDescription('Minutes between bumps (e.g., 1440 = daily, 10080 = weekly)')
+            .setDescription('Minutes between bumps (e.g., 1440 = daily, 10050 = weekly)')
             .setMinValue(10)
             .setRequired(true),
         )
@@ -215,10 +215,20 @@ module.exports = {
       if (sub === 'add') {
         const rawNote = interaction.options.getString('note');
         const note = (rawNote ?? '').trim() === '' ? null : rawNote;
-        await service.register(target.id, guildId, interaction.user.id, note);
+
+        const defaultMinutes = computeDefaultIntervalMinutes(target);
+
+        // Store explicitly so we aren’t relying on SQL’s 10080 fallback
+        await service.register(target.id, guildId, interaction.user.id, note, defaultMinutes);
+
         await rescheduleThread(target.id);
+
         await interaction.reply({
-          content: `✅ Registered <#${target.id}> for auto-bumps.${note ? `\n📝 Note: _${note}_` : ''}\n⏱️ Interval: **${10080}m** (default weekly)`,
+          content:
+            `✅ Registered <#${target.id}> for auto-bumps.` +
+            (note ? `\n📝 Note: _${note}_` : '') +
+            `\n⏱️ Interval: **${defaultMinutes}m**` +
+            (target.autoArchiveDuration ? ` (auto-archive: ${target.autoArchiveDuration}m)` : ''),
           ephemeral: true,
         });
         return;
@@ -254,11 +264,16 @@ module.exports = {
 
       if (sub === 'set-interval') {
         const minutes = interaction.options.getInteger('minutes', true);
+        const archive = target.autoArchiveDuration ?? 10080;
+        const risky = minutes >= archive;
         const ok = await service.setInterval(target.id, minutes);
-        if (ok) await rescheduleThread(target.id); // re-arm timer with new window
+        if (ok) await rescheduleThread(target.id);
         await interaction.reply({
           content: ok
-            ? `⏱️ Interval for <#${target.id}> set to **${minutes} min**.`
+            ? `⏱️ Interval for <#${target.id}> set to **${minutes} min**.` +
+              (risky
+                ? `\n⚠️ Heads up: this is ≥ the thread’s auto-archive window (${archive}m). The bot will need **Manage Threads** to unarchive before bumping.`
+                : '')
             : `⚠️ <#${target.id}> is not registered.`,
           ephemeral: true,
         });

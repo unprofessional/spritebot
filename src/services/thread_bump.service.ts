@@ -1,12 +1,13 @@
 // src/services/thread_bump.service.ts
 import {
-  Client,
-  ThreadChannel,
   Channel,
+  Client,
   PermissionFlagsBits,
+  ThreadChannel,
   type MessageCreateOptions,
   type MessageMentionTypes,
 } from 'discord.js';
+import { bumpDefaultMinutes } from '../config/env_config';
 import { ThreadBumpDAO, type BumpThreadRow } from '../dao/thread_bump.dao';
 
 const NO_MENTIONS: ReadonlyArray<MessageMentionTypes> = [];
@@ -38,7 +39,8 @@ function asThread(channel: Channel | null): ThreadChannel | null {
 function nextDueAt(row: BumpThreadRow): Date {
   const base = row.last_bumped_at ?? row.created_at ?? new Date();
   const due = new Date(base);
-  due.setMinutes(due.getMinutes() + (row.interval_minutes ?? 10080));
+  const minutes = row.interval_minutes ?? bumpDefaultMinutes;
+  due.setMinutes(due.getMinutes() + minutes);
   return due;
 }
 
