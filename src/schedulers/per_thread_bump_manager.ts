@@ -10,7 +10,7 @@ export class PerThreadBumpManager {
   private service = new ThreadBumpService();
   private timers = new Map<string, TimerHandle>(); // thread_id -> timeout
 
-  // --- simple bump send queue to smooth bursts ---
+  // --- bump send queue to smooth bursts ---
   private inFlight = 0;
   private queue: Array<() => Promise<void>> = [];
   private readonly MAX_CONCURRENCY = 3;
@@ -20,19 +20,18 @@ export class PerThreadBumpManager {
   }
 
   async initialize(): Promise<void> {
-    // Load all registered threads and schedule each
-    const all = await this.service['dao'].findAll(); // or expose a service method if you prefer
+    const all = await this.service['dao'].findAll(); // or expose via service if you prefer
     const now = Date.now();
+
+    console.log(`[bump] init: scheduling ${all.length} thread(s)`);
 
     for (const row of all) {
       try {
         await this.scheduleForRow(row, now);
       } catch (err) {
-        console.warn(`⚠️ Failed to schedule thread ${row.thread_id}:`, err);
+        console.warn(`⚠️ [bump] init schedule failed thread=${row.thread_id}:`, err);
       }
     }
-
-    console.log(`🧭 Per-thread bump timers initialized for ${all.length} thread(s).`);
   }
 
   async onRegisteredOrUpdated(threadId: string): Promise<void> {
@@ -40,19 +39,26 @@ export class PerThreadBumpManager {
     this.clearTimer(threadId);
 
     const row = await this.service['dao'].get(threadId);
-    if (!row) return;
+    if (!row) {
+      console.log(`[bump] reschedule: row missing thread=${threadId}`);
+      return;
+    }
 
     await this.scheduleForRow(row, Date.now());
   }
 
   onUnregistered(threadId: string): void {
     this.clearTimer(threadId);
+    console.log(`[bump] unschedule thread=${threadId}`);
   }
 
   stop(): void {
-    for (const [, t] of this.timers) clearTimeout(t);
-    this.timers.clear();
-    // allow any in-flight queue items to finish naturally
+    for (const [id, t] of this.timers) {
+      clearTimeout(t);
+      this.timers.delete(id);
+    }
+    // allow in‑flight queue items to finish naturally
+    console.log('[bump] manager stopped; timers cleared');
   }
 
   // ---- internals ----
@@ -64,17 +70,24 @@ export class PerThreadBumpManager {
   }
 
   private async scheduleForRow(row: BumpThreadRow, nowMs: number) {
-    const due = this.service.nextDueAt(row).getTime();
-    const delay = Math.max(0, due - nowMs);
+    const dueMs = this.service.nextDueAt(row).getTime();
+    const delay = Math.max(0, dueMs - nowMs);
+    const dueIso = new Date(dueMs).toISOString();
+
+    console.log(
+      `[bump] schedule thread=${row.thread_id} due=${dueIso} delay=${Math.round(delay / 1000)}s`,
+    );
 
     if (delay === 0) {
-      // overdue: bump immediately once, then schedule to next interval
+      // overdue: bump immediately once, then schedule forward
+      console.log(`[bump] overdue -> immediate bump thread=${row.thread_id}`);
       try {
         await this.enqueueBump(() => this.service.bumpNow(this.client, row.thread_id));
+        console.log(`[bump] immediate bump OK thread=${row.thread_id}`);
       } catch (err) {
-        console.warn(`⚠️ Failed immediate bump for ${row.thread_id}:`, err);
+        console.warn(`⚠️ [bump] immediate bump failed thread=${row.thread_id}:`, err);
       }
-      // re-fetch to recalc next due (last_bumped_at just changed)
+      // re-fetch to recalc next due (last_bumped_at just changed if send succeeded)
       const fresh = await this.service['dao'].get(row.thread_id);
       if (!fresh) return;
       this.armOneShot(fresh);
@@ -85,19 +98,33 @@ export class PerThreadBumpManager {
 
   private armOneShot(row: BumpThreadRow, delayMs?: number) {
     const baseDelay = delayMs ?? Math.max(0, this.service.nextDueAt(row).getTime() - Date.now());
+    const jittered = withJitter(baseDelay);
+
+    console.log(
+      `[bump] arm thread=${row.thread_id} in ${Math.round(jittered / 1000)}s (base=${Math.round(baseDelay / 1000)}s)`,
+    );
 
     const handle = setTimeout(async () => {
+      console.log(`[bump] fire thread=${row.thread_id}`);
       try {
         await this.enqueueBump(() => this.service.bumpNow(this.client, row.thread_id));
+        console.log(`[bump] fired OK thread=${row.thread_id}`);
       } catch (err) {
-        console.warn(`⚠️ Bump failed for ${row.thread_id}:`, err);
+        console.warn(`⚠️ [bump] fire failed thread=${row.thread_id}:`, err);
       } finally {
-        // Always re-arm for the next window (interval_minutes)
+        // Always re‑arm for the next window
         const fresh = await this.service['dao'].get(row.thread_id);
-        if (fresh) this.armOneShot(fresh);
+        if (fresh) {
+          this.armOneShot(fresh);
+        } else {
+          // row deleted since we scheduled; ensure timer state is clean
+          this.clearTimer(row.thread_id);
+        }
       }
-    }, withJitter(baseDelay));
+    }, jittered);
 
+    // store/replace handle
+    this.clearTimer(row.thread_id);
     this.timers.set(row.thread_id, handle);
   }
 
@@ -111,10 +138,10 @@ export class PerThreadBumpManager {
           resolve();
         } catch (e) {
           reject(e);
-          throw e; // still propagate to queue error log
+          throw e; // still bubble for logging in caller
         }
       });
-      // kick the drain loop (non-blocking)
+      // kick the drain loop (non‑blocking)
       void this.drainQueue();
     });
   }
@@ -124,15 +151,14 @@ export class PerThreadBumpManager {
       const job = this.queue.shift();
       if (!job) break;
       this.inFlight++;
-      // run without blocking the loop; errors are logged below
       job()
         .catch((err) => {
-          console.warn('⚠️ Queue job failed:', err);
+          console.warn('⚠️ [bump] queue job failed:', err);
         })
         .finally(() => {
           this.inFlight--;
           // continue draining if more work remains
-          void this.drainQueue();
+          if (this.queue.length > 0) void this.drainQueue();
         });
     }
   }
