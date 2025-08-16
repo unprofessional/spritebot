@@ -1,6 +1,8 @@
 // src/types/discordClient.d.ts
 
-import type { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import 'discord.js';
+import type { Collection } from 'discord.js';
+import type { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
 
 type CommandModule = {
   data: SlashCommandBuilder;
