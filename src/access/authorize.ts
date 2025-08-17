@@ -20,18 +20,23 @@ export async function authorizeInteraction(
 ): Promise<AuthResult> {
   const { feature, guildId, userId } = opts;
 
-  // 0) Must be in a guild for a guild-scoped subscription model
+  // 🔓 0) Full dev bypass
+  if (process.env.NODE_ENV !== 'production') {
+    return { ok: true, planName: 'DevBypass' };
+  }
+
+  // 1) Must be in a guild for a guild-scoped subscription model
   if (!guildId) return { ok: false, reason: 'NO_GUILD' };
 
-  // 1) Owner/global bypass
+  // 2) Owner/global bypass
   if (OWNER_IDS.has(userId)) return { ok: true, planName: 'Owner' };
 
-  // 2) Admin role bypass (optional)
+  // 3) Admin role bypass (optional)
   if (ADMIN_BYPASS && member?.permissions?.has?.('Administrator')) {
     return { ok: true, planName: 'Admin Bypass' };
   }
 
-  // 3) Resolve entitlements (guild-level only)
+  // 4) Resolve entitlements (guild-level only)
   const ent = await getEntitlementsFor({ guildId });
 
   if (!ent) return { ok: false, reason: 'NO_SUBSCRIPTION' };
