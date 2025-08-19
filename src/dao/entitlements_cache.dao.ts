@@ -46,6 +46,8 @@ export class EntitlementsCacheDAO {
    * Time window is applied here (ends_at is null or in the future).
    */
   async findActiveByGuild(guildId: string): Promise<EntitlementRow[]> {
+    console.debug(`[EntitlementsCacheDAO] Looking up active entitlements for guild=${guildId}`);
+
     const sql = `
       SELECT entitlement_id, guild_id, sku_id, status, starts_at, ends_at, updated_at, raw
       FROM entitlements_cache
@@ -54,9 +56,14 @@ export class EntitlementsCacheDAO {
         AND (ends_at IS NULL OR ends_at > NOW())
       ORDER BY ends_at NULLS LAST, updated_at DESC
     `;
+
     const res = await pool.query(sql, [guildId]);
-    // pg returns strings for timestamptz; if you prefer Date objects, coerce here:
-    return res.rows.map((r) => ({
+
+    console.debug(
+      `[EntitlementsCacheDAO] Found ${res.rows.length} active entitlements for guild=${guildId}`,
+    );
+
+    const mapped = res.rows.map((r) => ({
       entitlement_id: r.entitlement_id,
       guild_id: r.guild_id,
       sku_id: r.sku_id,
@@ -66,6 +73,16 @@ export class EntitlementsCacheDAO {
       updated_at: new Date(r.updated_at),
       raw: (r.raw ?? {}) as Record<string, unknown>,
     }));
+
+    for (const e of mapped) {
+      console.debug(
+        `[EntitlementsCacheDAO] Entitlement id=${e.entitlement_id} sku=${e.sku_id} ` +
+          `status=${e.status} starts=${e.starts_at.toISOString()} ` +
+          `ends=${e.ends_at ? e.ends_at.toISOString() : 'null'}`,
+      );
+    }
+
+    return mapped;
   }
 
   /**
@@ -74,6 +91,11 @@ export class EntitlementsCacheDAO {
    */
   async upsertFromWebhook(input: EntitlementUpsertInput): Promise<void> {
     const { entitlementId, guildId, skuId, status, startsAt, endsAt = null, raw = {} } = input;
+
+    console.debug(
+      `[EntitlementsCacheDAO] Upserting entitlement id=${entitlementId} guild=${guildId} sku=${skuId} ` +
+        `status=${status} starts=${startsAt} ends=${endsAt ?? 'null'}`,
+    );
 
     const sql = `
       INSERT INTO entitlements_cache
@@ -100,5 +122,7 @@ export class EntitlementsCacheDAO {
       toDateOrNull(endsAt),
       JSON.stringify(raw ?? {}),
     ]);
+
+    console.debug(`[EntitlementsCacheDAO] Upsert complete for entitlement id=${entitlementId}`);
   }
 }
