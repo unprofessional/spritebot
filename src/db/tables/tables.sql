@@ -173,3 +173,56 @@ CREATE INDEX idx_inventory_field_inventory_id ON character_inventory_field(inven
 CREATE INDEX idx_player_server_link_player_id ON player_server_link(player_id);
 CREATE INDEX idx_player_server_link_guild_id ON player_server_link(guild_id);
 CREATE INDEX idx_player_server_link_player_guild ON player_server_link(player_id, guild_id);
+
+-- === DISCORD ENTITLEMENTS CACHE (GUILD-SCOPED) ===
+-- Mirrors Discord Premium App entitlements so checks are fast/reliable.
+-- Source of truth remains Discord; this is a cache updated by webhooks/reconciliation.
+
+CREATE TABLE entitlements_cache (
+  entitlement_id TEXT PRIMARY KEY,                     -- Discord entitlement id
+  guild_id       TEXT NOT NULL,                        -- Discord guild/server id
+  sku_id         TEXT NOT NULL,                        -- Discord SKU id
+  status         TEXT NOT NULL
+                  CHECK (status IN ('active', 'expired', 'canceled')),
+  starts_at      TIMESTAMPTZ NOT NULL,
+  ends_at        TIMESTAMPTZ,                          -- null = open-ended
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  raw            JSONB NOT NULL DEFAULT '{}'::jsonb    -- optional snapshot for debugging/audits
+);
+
+-- Keep updated_at fresh on changes
+CREATE OR REPLACE FUNCTION update_entitlements_cache_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = CURRENT_TIMESTAMP;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER set_entitlements_cache_updated_at
+BEFORE UPDATE ON entitlements_cache
+FOR EACH ROW
+EXECUTE FUNCTION update_entitlements_cache_updated_at();
+
+-- === Indexes tuned for common queries ===
+
+-- Fast “does this guild currently have any active plan (optionally for a SKU)?”
+-- Use a partial index limited to currently-active rows.
+CREATE INDEX idx_entitlements_active_guild_sku
+  ON entitlements_cache (guild_id, sku_id)
+  WHERE status = 'active' AND (ends_at IS NULL OR ends_at > NOW());
+
+-- If you often check “any active at all”, the sku_id join key isn’t needed:
+CREATE INDEX idx_entitlements_active_guild
+  ON entitlements_cache (guild_id)
+  WHERE status = 'active' AND (ends_at IS NULL OR ends_at > NOW());
+
+-- Helpful for debugging/support timelines per guild:
+CREATE INDEX idx_entitlements_guild_updated_at
+  ON entitlements_cache (guild_id, updated_at DESC);
+
+-- Quick lookups by SKU (e.g., analytics, migrations):
+CREATE INDEX idx_entitlements_sku ON entitlements_cache (sku_id);
+
+-- General status filter by guild (broad queries):
+CREATE INDEX idx_entitlements_guild_status ON entitlements_cache (guild_id, status);
