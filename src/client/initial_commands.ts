@@ -119,7 +119,7 @@ export async function initializeCommands(client: Client): Promise<Client> {
   const commands = await loadCommands(files);
 
   // Split: ops-only vs global (by name). Keep '/gift' ops-only.
-  const opsOnly = new Set<string>(['gift']); // add more names here if needed
+  const opsOnly = new Set<string>(['gift', 'toggle-bypass']);
   const opsCommands = commands.filter((c) => opsOnly.has(c.data.name));
   const globalCommands = commands.filter((c) => !opsOnly.has(c.data.name));
 
