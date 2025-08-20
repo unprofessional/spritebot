@@ -22,6 +22,9 @@ import { handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardSlash, guardComponent } from '../access/guards';
 
 const { DISCORD_CLIENT_ID, DISCORD_BOT_TOKEN } = process.env;
+// Allow override via env; default to the provided ops guild id
+const DEV_GUILD_ID = process.env.DEV_GUILD_ID;
+
 const isProd = process.env.NODE_ENV === 'production' || __dirname.includes('/dist/');
 const commandExtension = isProd ? '.js' : '.ts';
 const commandDir = isProd
@@ -72,12 +75,26 @@ async function loadCommands(files: string[]): Promise<CommandModule[]> {
   return loaded;
 }
 
-async function registerCommands(rest: REST, cmds: CommandModule[]) {
+async function registerGlobalCommands(rest: REST, cmds: CommandModule[]) {
   const payload: RESTPostAPIChatInputApplicationCommandsJSONBody[] = cmds.map((c) =>
     c.data.toJSON(),
   );
   await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID!), { body: payload });
-  console.log(`🛰️  Registered ${payload.length} global commands`);
+  console.log(`🛰️  Registered ${payload.length} global command(s)`);
+}
+
+async function registerOpsCommands(rest: REST, opsCmds: CommandModule[]) {
+  if (!DEV_GUILD_ID) {
+    console.warn('⚠️ DEV_GUILD_ID not set; skipping ops-only command registration.');
+    return;
+  }
+  const payload: RESTPostAPIChatInputApplicationCommandsJSONBody[] = opsCmds.map((c) =>
+    c.data.toJSON(),
+  );
+  await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, DEV_GUILD_ID), {
+    body: payload,
+  });
+  console.log(`🛰️  Registered ${payload.length} ops-only command(s) in guild ${DEV_GUILD_ID}`);
 }
 
 const safeFallback = async (interaction: BaseInteraction) => {
@@ -101,13 +118,22 @@ export async function initializeCommands(client: Client): Promise<Client> {
   // Load into memory
   const commands = await loadCommands(files);
 
+  // Split: ops-only vs global (by name). Keep '/gift' ops-only.
+  const opsOnly = new Set<string>(['gift']); // add more names here if needed
+  const opsCommands = commands.filter((c) => opsOnly.has(c.data.name));
+  const globalCommands = commands.filter((c) => !opsOnly.has(c.data.name));
+
+  console.log(`🧭 Command split → global=${globalCommands.length} ops-only=${opsCommands.length}`);
+
   // Index on client (typed via your src/types/discordClient.d.ts)
+  // We register all in memory so they can execute where available.
   client.commands = new Collection(commands.map((c) => [c.data.name, c]));
 
   // Publish to Discord
   const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN!);
   try {
-    await registerCommands(rest, commands);
+    await registerGlobalCommands(rest, globalCommands);
+    await registerOpsCommands(rest, opsCommands);
   } catch (err) {
     console.error('❌ Command registration failed:', err);
   }
