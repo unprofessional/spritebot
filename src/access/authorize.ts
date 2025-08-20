@@ -9,7 +9,7 @@ export type AuthResult =
   | { ok: false; reason: 'NO_GUILD' | 'NO_SUBSCRIPTION' | 'EXPIRED' | 'NOT_INCLUDED' | 'UNKNOWN' };
 
 const OWNER_IDS = new Set<string>([process.env.OWNER_DISCORD_ID ?? '']); // optional
-const ADMIN_BYPASS = true; // flip off in prod if you want
+const ADMIN_BYPASS = process.env.ADMIN_BYPASS === 'true'; // default off in prod
 const giftedDAO = new GiftedGuildsDAO();
 
 export async function authorizeInteraction(
@@ -26,11 +26,7 @@ export async function authorizeInteraction(
     `[authorizeInteraction] user=${userId} guild=${guildId ?? 'null'} feature=${feature}`,
   );
 
-  // 🔓 0) Full dev bypass
-  if (process.env.NODE_ENV !== 'production') {
-    console.debug(`[authorizeInteraction] Dev bypass active`);
-    return { ok: true, planName: 'DevBypass' };
-  }
+  // 🔒 Removed DevBypass
 
   // 1) Must be in a guild for a guild-scoped subscription model
   if (!guildId) {
@@ -44,7 +40,7 @@ export async function authorizeInteraction(
     return { ok: true, planName: 'Owner' };
   }
 
-  // 3) Admin role bypass (optional)
+  // 3) Admin role bypass (optional, env-gated)
   if (ADMIN_BYPASS && member?.permissions?.has?.('Administrator')) {
     console.debug(`[authorizeInteraction] ✅ Admin bypass for user=${userId}`);
     return { ok: true, planName: 'Admin Bypass' };
@@ -54,7 +50,6 @@ export async function authorizeInteraction(
   console.debug(`[authorizeInteraction] Fetching entitlements for guild=${guildId}`);
   const ent = await getEntitlementsFor({ guildId });
 
-  // Track entitlement outcome but DO NOT early-return yet; we’ll check gifted fallback next.
   let entitlementOutcome: AuthResult | null = null;
 
   if (!ent) {
@@ -91,7 +86,7 @@ export async function authorizeInteraction(
     return { ok: true, planName: 'Gifted' };
   }
 
-  // 6) Final deny — prefer the specific entitlement reason if we have one
+  // 6) Final deny
   console.debug(`[authorizeInteraction] ❌ Access denied (no paid entitlement and not gifted)`);
   return entitlementOutcome ?? { ok: false, reason: 'UNKNOWN' };
 }
