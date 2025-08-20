@@ -226,3 +226,17 @@ CREATE INDEX idx_entitlements_sku ON entitlements_cache (sku_id);
 
 -- General status filter by guild (broad queries):
 CREATE INDEX idx_entitlements_guild_status ON entitlements_cache (guild_id, status);
+
+-- 001_add_gifted_guilds.sql
+CREATE TABLE gifted_guilds (
+  guild_id        TEXT PRIMARY KEY,                 -- Discord guild/server id
+  granted_by      TEXT NOT NULL,                    -- Discord user id of granter
+  note            TEXT,                             -- optional: why/how
+  expires_at      TIMESTAMPTZ,                      -- optional: null means no expiry
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+-- Helpful for auditing and pruning
+CREATE INDEX IF NOT EXISTS idx_gifted_guilds_expires_at
+  ON gifted_guilds (expires_at) WHERE expires_at IS NOT NULL;
