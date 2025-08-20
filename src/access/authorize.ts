@@ -1,7 +1,9 @@
 // src/access/authorize.ts
 import type { GuildMember } from 'discord.js';
+import { PermissionFlagsBits } from 'discord.js';
 import { getEntitlementsFor } from '../services/entitlements.service';
 import { GiftedGuildsDAO } from '../dao/gifted_guilds.dao';
+import { getOwnerBypass } from './bypass';
 import type { FeatureKey } from './features';
 
 export type AuthResult =
@@ -10,6 +12,7 @@ export type AuthResult =
 
 const OWNER_IDS = new Set<string>([process.env.OWNER_DISCORD_ID ?? '']); // optional
 const ADMIN_BYPASS = process.env.ADMIN_BYPASS === 'true'; // default off in prod
+const OPS_GUILD_ID = process.env.DEV_GUILD_ID ?? null; // scope owner bypass to ops if desired
 const giftedDAO = new GiftedGuildsDAO();
 
 export async function authorizeInteraction(
@@ -26,7 +29,7 @@ export async function authorizeInteraction(
     `[authorizeInteraction] user=${userId} guild=${guildId ?? 'null'} feature=${feature}`,
   );
 
-  // 🔒 Removed DevBypass
+  // 🔒 Dev bypass removed
 
   // 1) Must be in a guild for a guild-scoped subscription model
   if (!guildId) {
@@ -34,14 +37,14 @@ export async function authorizeInteraction(
     return { ok: false, reason: 'NO_GUILD' };
   }
 
-  // 2) Owner/global bypass
-  if (OWNER_IDS.has(userId)) {
+  // 2) Owner/global bypass (in-memory toggle; optionally scoped to ops guild)
+  if (getOwnerBypass() && OWNER_IDS.has(userId) && (!OPS_GUILD_ID || guildId === OPS_GUILD_ID)) {
     console.debug(`[authorizeInteraction] ✅ Owner bypass for user=${userId}`);
     return { ok: true, planName: 'Owner' };
   }
 
   // 3) Admin role bypass (optional, env-gated)
-  if (ADMIN_BYPASS && member?.permissions?.has?.('Administrator')) {
+  if (ADMIN_BYPASS && member?.permissions?.has(PermissionFlagsBits.Administrator)) {
     console.debug(`[authorizeInteraction] ✅ Admin bypass for user=${userId}`);
     return { ok: true, planName: 'Admin Bypass' };
   }
