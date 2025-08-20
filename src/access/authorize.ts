@@ -1,6 +1,7 @@
 // src/access/authorize.ts
 import type { GuildMember } from 'discord.js';
 import { getEntitlementsFor } from '../services/entitlements.service';
+import { GiftedGuildsDAO } from '../dao/gifted_guilds.dao';
 import type { FeatureKey } from './features';
 
 export type AuthResult =
@@ -9,6 +10,7 @@ export type AuthResult =
 
 const OWNER_IDS = new Set<string>([process.env.OWNER_DISCORD_ID ?? '']); // optional
 const ADMIN_BYPASS = true; // flip off in prod if you want
+const giftedDAO = new GiftedGuildsDAO();
 
 export async function authorizeInteraction(
   opts: {
@@ -52,30 +54,44 @@ export async function authorizeInteraction(
   console.debug(`[authorizeInteraction] Fetching entitlements for guild=${guildId}`);
   const ent = await getEntitlementsFor({ guildId });
 
+  // Track entitlement outcome but DO NOT early-return yet; we’ll check gifted fallback next.
+  let entitlementOutcome: AuthResult | null = null;
+
   if (!ent) {
     console.debug(`[authorizeInteraction] ❌ No entitlements found for guild=${guildId}`);
-    return { ok: false, reason: 'NO_SUBSCRIPTION' };
-  }
-
-  console.debug(
-    `[authorizeInteraction] Entitlement resolved plan=${ent.planName} status=${ent.status} features=[${[
-      ...ent.features,
-    ].join(',')}]`,
-  );
-
-  if (ent.status === 'expired') {
-    console.debug(`[authorizeInteraction] ❌ Entitlement expired`);
-    return { ok: false, reason: 'EXPIRED' };
-  }
-  if (!ent.features.has(feature)) {
+    entitlementOutcome = { ok: false, reason: 'NO_SUBSCRIPTION' };
+  } else {
     console.debug(
-      `[authorizeInteraction] ❌ Feature "${feature}" not included in plan=${ent.planName}`,
+      `[authorizeInteraction] Entitlement resolved plan=${ent.planName} status=${ent.status} features=[${[
+        ...ent.features,
+      ].join(',')}]`,
     );
-    return { ok: false, reason: 'NOT_INCLUDED' };
+
+    if (ent.status === 'expired') {
+      console.debug(`[authorizeInteraction] ❌ Entitlement expired`);
+      entitlementOutcome = { ok: false, reason: 'EXPIRED' };
+    } else if (!ent.features.has(feature)) {
+      console.debug(
+        `[authorizeInteraction] ❌ Feature "${feature}" not included in plan=${ent.planName}`,
+      );
+      entitlementOutcome = { ok: false, reason: 'NOT_INCLUDED' };
+    } else {
+      console.debug(
+        `[authorizeInteraction] ✅ Access granted for feature=${feature} under plan=${ent.planName}`,
+      );
+      return { ok: true, planName: ent.planName ?? null };
+    }
   }
 
-  console.debug(
-    `[authorizeInteraction] ✅ Access granted for feature=${feature} under plan=${ent.planName}`,
-  );
-  return { ok: true, planName: ent.planName ?? null };
+  // 5) Gifted guild fallback (grants all features)
+  console.debug(`[authorizeInteraction] Checking gifted fallback for guild=${guildId}`);
+  const gifted = await giftedDAO.isGifted(guildId);
+  if (gifted) {
+    console.debug(`[authorizeInteraction] ✅ Gifted access granted for guild=${guildId}`);
+    return { ok: true, planName: 'Gifted' };
+  }
+
+  // 6) Final deny — prefer the specific entitlement reason if we have one
+  console.debug(`[authorizeInteraction] ❌ Access denied (no paid entitlement and not gifted)`);
+  return entitlementOutcome ?? { ok: false, reason: 'UNKNOWN' };
 }
