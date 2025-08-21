@@ -61,7 +61,7 @@ module.exports = {
     .addSubcommand((sub) =>
       sub
         .setName('add')
-        .setDescription('Register a thread for auto-bumps (defaults to archive‑aware cadence).')
+        .setDescription('Register a thread for auto-bumps (defaults to archive-aware cadence).')
         .addChannelOption((o) =>
           o
             .setName('thread')
@@ -176,18 +176,20 @@ module.exports = {
           });
           return;
         }
-        const lines = rows
-          .map((r) => {
-            const due = service.nextDueAt(r);
+
+        // Archive-aware next times (async)
+        const lines = await Promise.all(
+          rows.map(async (r) => {
+            const due = await service.nextDueAt(interaction.client, r);
             const ts = `<t:${Math.floor(due.getTime() / 1000)}:R>`; // relative time
             return `• <#${r.thread_id}> — every **${r.interval_minutes}m** — next ${ts}${
               r.note ? ` — _${r.note}_` : ''
             }`;
-          })
-          .join('\n');
+          }),
+        );
 
         await interaction.reply({
-          content: `📋 **Registered bump threads:**\n${lines}`,
+          content: `📋 **Registered bump threads:**\n${lines.join('\n')}`,
           ephemeral: true,
         });
         return;
@@ -235,8 +237,9 @@ module.exports = {
       }
 
       if (sub === 'remove') {
+        unscheduleThread(target.id); // cancel any pending timer immediately
         const ok = await service.unregister(target.id);
-        unscheduleThread(target.id);
+        unscheduleThread(target.id); // cancel again in case of race
         await interaction.reply({
           content: ok
             ? `🗑️ Unregistered <#${target.id}>.`
