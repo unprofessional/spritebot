@@ -4,6 +4,7 @@ import {
   CacheType,
   ChannelType,
   ChatInputCommandInteraction,
+  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
   ThreadChannel,
@@ -29,28 +30,29 @@ function hasThreadPerms(interaction: ChatInputCommandInteraction<CacheType>): bo
   );
 }
 
-function resolveTargetThread(
+function isThreadType(t: number | undefined): boolean {
+  return (
+    t === ChannelType.PublicThread ||
+    t === ChannelType.PrivateThread ||
+    t === ChannelType.AnnouncementThread
+  );
+}
+
+async function resolveTargetThread(
   interaction: ChatInputCommandInteraction<CacheType>,
-): ThreadChannel | null {
-  // Optional channel option; otherwise fallback to current channel if it's a thread
+): Promise<ThreadChannel | null> {
+  // 1) If user supplied a channel option, require it to be a thread
   const opt = interaction.options.getChannel('thread', false);
-  if (
-    opt &&
-    opt.type !== ChannelType.PublicThread &&
-    opt.type !== ChannelType.PrivateThread &&
-    opt.type !== ChannelType.AnnouncementThread
-  ) {
-    return null;
-  }
-  const channel = opt ?? interaction.channel;
-  if (
-    channel &&
-    'isThread' in channel &&
-    typeof (channel as ThreadChannel).isThread === 'function' &&
-    (channel as ThreadChannel).isThread()
-  ) {
-    return channel as ThreadChannel;
-  }
+  if (opt) return isThreadType(opt.type) ? (opt as ThreadChannel) : null;
+
+  // 2) Otherwise, use the current channel if it's a thread
+  const ch = interaction.channel as any;
+  if (ch && isThreadType(ch.type)) return ch as ThreadChannel;
+
+  // 3) Fallback: fetch authoritative channel by ID (handles partials/edge cases)
+  const fetched = await interaction.client.channels.fetch(interaction.channelId).catch(() => null);
+  if (fetched && isThreadType((fetched as any).type)) return fetched as ThreadChannel;
+
   return null;
 }
 
@@ -162,7 +164,7 @@ module.exports = {
       if (!hasThreadPerms(interaction)) {
         await interaction.reply({
           content: '❌ You need **Manage Threads** to do that.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -172,7 +174,7 @@ module.exports = {
         if (rows.length === 0) {
           await interaction.reply({
             content: 'ℹ️ No registered threads in this server.',
-            ephemeral: true,
+            flags: MessageFlags.Ephemeral,
           });
           return;
         }
@@ -190,17 +192,17 @@ module.exports = {
 
         await interaction.reply({
           content: `📋 **Registered bump threads:**\n${lines.join('\n')}`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
-      const target = resolveTargetThread(interaction);
+      const target = await resolveTargetThread(interaction);
       if (!target) {
         await interaction.reply({
           content:
             '⚠️ You must run this in a thread or specify a valid thread with `/bump-thread … thread:`.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -209,7 +211,7 @@ module.exports = {
       if (target.guild?.id !== guildId) {
         await interaction.reply({
           content: '⚠️ That thread is not in this server.',
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -231,7 +233,7 @@ module.exports = {
             (note ? `\n📝 Note: _${note}_` : '') +
             `\n⏱️ Interval: **${defaultMinutes}m**` +
             (target.autoArchiveDuration ? ` (auto-archive: ${target.autoArchiveDuration}m)` : ''),
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -244,7 +246,7 @@ module.exports = {
           content: ok
             ? `🗑️ Unregistered <#${target.id}>.`
             : `ℹ️ <#${target.id}> was not registered.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -260,7 +262,7 @@ module.exports = {
               ? `📝 Updated note for <#${target.id}>: _${note}_`
               : `🧹 Cleared note for <#${target.id}>.`
             : `⚠️ <#${target.id}> is not registered.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
@@ -278,22 +280,31 @@ module.exports = {
                 ? `\n⚠️ Heads up: this is ≥ the thread’s auto-archive window (${archive}m). The bot will need **Manage Threads** to unarchive before bumping.`
                 : '')
             : `⚠️ <#${target.id}> is not registered.`,
-          ephemeral: true,
+          flags: MessageFlags.Ephemeral,
         });
         return;
       }
 
       if (sub === 'bump-now') {
         await service.bumpNow(interaction.client, target.id, { deleteAfter: false });
-        await interaction.reply({ content: `🔔 Bumped <#${target.id}>.`, ephemeral: true });
+        await interaction.reply({
+          content: `🔔 Bumped <#${target.id}>.`,
+          flags: MessageFlags.Ephemeral,
+        });
         return;
       }
     } catch (err) {
       console.error('bump-thread command error:', err);
       if (interaction.deferred || interaction.replied) {
-        await interaction.followUp({ content: '❌ Something went wrong.', ephemeral: true });
+        await interaction.followUp({
+          content: '❌ Something went wrong.',
+          flags: MessageFlags.Ephemeral,
+        });
       } else {
-        await interaction.reply({ content: '❌ Something went wrong.', ephemeral: true });
+        await interaction.reply({
+          content: '❌ Something went wrong.',
+          flags: MessageFlags.Ephemeral,
+        });
       }
     }
   },
