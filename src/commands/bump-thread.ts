@@ -15,6 +15,44 @@ import { computeDefaultIntervalMinutes } from '../config/bump_config';
 
 const service = new ThreadBumpService();
 
+// --- tiny helpers for readable debug logs ---
+
+const TYPE_LABEL: Record<number, string> = {
+  [ChannelType.GuildText]: 'GuildText',
+  [ChannelType.DM]: 'DM',
+  [ChannelType.GuildVoice]: 'GuildVoice',
+  [ChannelType.GroupDM]: 'GroupDM',
+  [ChannelType.GuildCategory]: 'GuildCategory',
+  [ChannelType.GuildAnnouncement]: 'GuildAnnouncement',
+  [ChannelType.AnnouncementThread]: 'AnnouncementThread',
+  [ChannelType.PublicThread]: 'PublicThread',
+  [ChannelType.PrivateThread]: 'PrivateThread',
+  [ChannelType.GuildStageVoice]: 'GuildStageVoice',
+  [ChannelType.GuildDirectory]: 'GuildDirectory',
+  [ChannelType.GuildForum]: 'GuildForum',
+  // (v14+) sometimes GuildMedia exists:
+  // @ts-ignore
+  [ChannelType.GuildMedia]: 'GuildMedia',
+};
+
+function typeLabel(t: number | undefined): string {
+  if (t === undefined) return 'undefined';
+  return `${TYPE_LABEL[t] ?? 'Unknown'}(${t})`;
+}
+
+function chInfo(ch: any): string {
+  if (!ch) return 'null';
+  const bits: string[] = [];
+  bits.push(`id=${ch.id ?? 'n/a'}`);
+  bits.push(`name=${ch.name ?? 'n/a'}`);
+  bits.push(`type=${typeLabel(ch.type)}`);
+  if ('isThread' in ch) bits.push(`hasIsThread=${typeof ch.isThread === 'function'}`);
+  if ('parentId' in ch) bits.push(`parentId=${ch.parentId ?? 'n/a'}`);
+  if ('archived' in ch) bits.push(`archived=${ch.archived}`);
+  if ('locked' in ch) bits.push(`locked=${ch.locked}`);
+  return bits.join(' ');
+}
+
 function ensureGuild(interaction: ChatInputCommandInteraction<CacheType>): string {
   const gid = interaction.guild?.id;
   if (!gid) throw new Error('This command must be used in a server.');
@@ -43,16 +81,32 @@ async function resolveTargetThread(
 ): Promise<ThreadChannel | null> {
   // 1) If user supplied a channel option, require it to be a thread
   const opt = interaction.options.getChannel('thread', false);
-  if (opt) return isThreadType(opt.type) ? (opt as ThreadChannel) : null;
+  if (opt) {
+    console.log(
+      `[bump-thread] resolve: option provided -> ${chInfo(opt)} | current=${chInfo(
+        interaction.channel,
+      )}`,
+    );
+    return isThreadType(opt.type) ? (opt as ThreadChannel) : null;
+  }
 
   // 2) Otherwise, use the current channel if it's a thread
   const ch = interaction.channel as any;
+  console.log(`[bump-thread] resolve: using current channel -> ${chInfo(ch)}`);
   if (ch && isThreadType(ch.type)) return ch as ThreadChannel;
 
   // 3) Fallback: fetch authoritative channel by ID (handles partials/edge cases)
-  const fetched = await interaction.client.channels.fetch(interaction.channelId).catch(() => null);
+  const fetched = await interaction.client.channels.fetch(interaction.channelId).catch((e) => {
+    console.warn(
+      `[bump-thread] resolve: fetch by channelId failed id=${interaction.channelId} err=`,
+      e,
+    );
+    return null;
+  });
+  console.log(`[bump-thread] resolve: fetched by id -> ${chInfo(fetched)}`);
   if (fetched && isThreadType((fetched as any).type)) return fetched as ThreadChannel;
 
+  console.log('[bump-thread] resolve: no thread detected (returning null)');
   return null;
 }
 
@@ -161,7 +215,14 @@ module.exports = {
       const sub = interaction.options.getSubcommand(true);
       const guildId = ensureGuild(interaction);
 
+      console.log(
+        `[bump-thread] exec: sub=${sub} guild=${guildId} channelId=${interaction.channelId} current=${chInfo(
+          interaction.channel,
+        )}`,
+      );
+
       if (!hasThreadPerms(interaction)) {
+        console.log('[bump-thread] exec: missing ManageThreads/Admin on invoker');
         await interaction.reply({
           content: '❌ You need **Manage Threads** to do that.',
           flags: MessageFlags.Ephemeral,
@@ -171,6 +232,7 @@ module.exports = {
 
       if (sub === 'list') {
         const rows = await service.listGuild(guildId);
+        console.log(`[bump-thread] list: rows=${rows.length}`);
         if (rows.length === 0) {
           await interaction.reply({
             content: 'ℹ️ No registered threads in this server.',
@@ -198,6 +260,10 @@ module.exports = {
       }
 
       const target = await resolveTargetThread(interaction);
+      console.log(
+        `[bump-thread] exec: resolved target -> ${target ? chInfo(target) : 'null (no thread)'}`,
+      );
+
       if (!target) {
         await interaction.reply({
           content:
@@ -209,6 +275,9 @@ module.exports = {
 
       // Safety: ensure the thread belongs to this guild
       if (target.guild?.id !== guildId) {
+        console.log(
+          `[bump-thread] exec: thread guild mismatch (thread.guild.id=${target.guild?.id} vs guildId=${guildId})`,
+        );
         await interaction.reply({
           content: '⚠️ That thread is not in this server.',
           flags: MessageFlags.Ephemeral,
@@ -221,6 +290,13 @@ module.exports = {
         const note = (rawNote ?? '').trim() === '' ? null : rawNote;
 
         const defaultMinutes = computeDefaultIntervalMinutes(target);
+        console.log(
+          `[bump-thread] add: thread=${target.id} type=${typeLabel(
+            target.type,
+          )} autoArchive=${target.autoArchiveDuration ?? 'n/a'} defaultMinutes=${defaultMinutes} note=${
+            note ?? 'null'
+          }`,
+        );
 
         // Store explicitly so we aren’t relying on SQL’s 10080 fallback
         await service.register(target.id, guildId, interaction.user.id, note, defaultMinutes);
@@ -239,6 +315,7 @@ module.exports = {
       }
 
       if (sub === 'remove') {
+        console.log(`[bump-thread] remove: thread=${target.id}`);
         unscheduleThread(target.id); // cancel any pending timer immediately
         const ok = await service.unregister(target.id);
         unscheduleThread(target.id); // cancel again in case of race
@@ -254,6 +331,7 @@ module.exports = {
       if (sub === 'set-note') {
         const rawNote = interaction.options.getString('note');
         const note = (rawNote ?? '').trim() === '' ? null : rawNote;
+        console.log(`[bump-thread] set-note: thread=${target.id} note=${note ?? 'null'}`);
         const ok = await service.setNote(target.id, note);
         if (ok) await rescheduleThread(target.id); // reschedule is harmless here
         await interaction.reply({
@@ -271,6 +349,9 @@ module.exports = {
         const minutes = interaction.options.getInteger('minutes', true);
         const archive = target.autoArchiveDuration ?? 10080;
         const risky = minutes >= archive;
+        console.log(
+          `[bump-thread] set-interval: thread=${target.id} minutes=${minutes} archive=${archive} risky=${risky}`,
+        );
         const ok = await service.setInterval(target.id, minutes);
         if (ok) await rescheduleThread(target.id);
         await interaction.reply({
@@ -286,6 +367,7 @@ module.exports = {
       }
 
       if (sub === 'bump-now') {
+        console.log(`[bump-thread] bump-now: thread=${target.id}`);
         await service.bumpNow(interaction.client, target.id, { deleteAfter: false });
         await interaction.reply({
           content: `🔔 Bumped <#${target.id}>.`,
