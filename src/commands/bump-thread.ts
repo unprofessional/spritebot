@@ -235,8 +235,9 @@ module.exports = {
       }
 
       if (sub === 'remove') {
+        unscheduleThread(target.id); // cancel any pending timer immediately
         const ok = await service.unregister(target.id);
-        unscheduleThread(target.id);
+        unscheduleThread(target.id); // cancel again in case of race
         await interaction.reply({
           content: ok
             ? `🗑️ Unregistered <#${target.id}>.`

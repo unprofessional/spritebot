@@ -1,7 +1,16 @@
 // src/schedulers/per_thread_bump_manager.ts
 import { Client } from 'discord.js';
-import { ThreadBumpService } from '../services/thread_bump.service';
 import type { BumpThreadRow } from '../dao/thread_bump.dao';
+import { ThreadBumpService, isTerminalThreadError } from '../services/thread_bump.service';
+
+const MIN_DELAY_MS = 30_000; // 30s floor
+const MAX_RETRY_DELAY_MS = 15 * 60_000;
+
+function retryDelayMs(attempt: number): number {
+  const base = Math.min(MAX_RETRY_DELAY_MS, 1000 * 2 ** attempt);
+  const jitter = Math.floor(Math.random() * 1000);
+  return Math.max(MIN_DELAY_MS, base + jitter);
+}
 
 type TimerHandle = NodeJS.Timeout;
 
@@ -14,6 +23,8 @@ export class PerThreadBumpManager {
   private inFlight = 0;
   private queue: Array<() => Promise<void>> = [];
   private readonly MAX_CONCURRENCY = 3;
+
+  private attempts = new Map<string, number>(); // thread_id -> failures
 
   constructor(client: Client) {
     this.client = client;
@@ -71,34 +82,19 @@ export class PerThreadBumpManager {
 
   private async scheduleForRow(row: BumpThreadRow, nowMs: number) {
     const dueMs = this.service.nextDueAt(row).getTime();
-    const delay = Math.max(0, dueMs - nowMs);
+    const baseDelay = Math.max(0, dueMs - nowMs);
+    const delay = baseDelay === 0 ? MIN_DELAY_MS : baseDelay; // clamp (avoid 0s loops)
     const dueIso = new Date(dueMs).toISOString();
 
     console.log(
       `[bump] schedule thread=${row.thread_id} due=${dueIso} delay=${Math.round(delay / 1000)}s`,
     );
-
-    if (delay === 0) {
-      // overdue: bump immediately once, then schedule forward
-      console.log(`[bump] overdue -> immediate bump thread=${row.thread_id}`);
-      try {
-        await this.enqueueBump(() => this.service.bumpNow(this.client, row.thread_id));
-        console.log(`[bump] immediate bump OK thread=${row.thread_id}`);
-      } catch (err) {
-        console.warn(`⚠️ [bump] immediate bump failed thread=${row.thread_id}:`, err);
-      }
-      // re-fetch to recalc next due (last_bumped_at just changed if send succeeded)
-      const fresh = await this.service['dao'].get(row.thread_id);
-      if (!fresh) return;
-      this.armOneShot(fresh);
-    } else {
-      this.armOneShot(row, delay);
-    }
+    this.armOneShot(row, delay);
   }
 
   private armOneShot(row: BumpThreadRow, delayMs?: number) {
     const baseDelay = delayMs ?? Math.max(0, this.service.nextDueAt(row).getTime() - Date.now());
-    const jittered = withJitter(baseDelay);
+    const jittered = withJitter(Math.max(MIN_DELAY_MS, baseDelay)); // enforce floor + jitter
 
     console.log(
       `[bump] arm thread=${row.thread_id} in ${Math.round(jittered / 1000)}s (base=${Math.round(baseDelay / 1000)}s)`,
@@ -109,21 +105,36 @@ export class PerThreadBumpManager {
       try {
         await this.enqueueBump(() => this.service.bumpNow(this.client, row.thread_id));
         console.log(`[bump] fired OK thread=${row.thread_id}`);
-      } catch (err) {
-        console.warn(`⚠️ [bump] fire failed thread=${row.thread_id}:`, err);
-      } finally {
-        // Always re‑arm for the next window
+        // success → reset attempts and re-arm to next due
+        this.attempts.delete(row.thread_id);
         const fresh = await this.service['dao'].get(row.thread_id);
         if (fresh) {
           this.armOneShot(fresh);
         } else {
-          // row deleted since we scheduled; ensure timer state is clean
           this.clearTimer(row.thread_id);
         }
+      } catch (err) {
+        console.warn(`⚠️ [bump] fire failed thread=${row.thread_id}:`, err);
+
+        if (isTerminalThreadError(err)) {
+          // Hard stop: delete row and cancel timer
+          await this.service['dao'].delete(row.thread_id).catch(() => {});
+          this.clearTimer(row.thread_id);
+          console.log(`[bump] disabled thread=${row.thread_id} due to terminal error`);
+          return;
+        }
+
+        // Non-terminal: backoff retry
+        const nextAttempt = (this.attempts.get(row.thread_id) ?? 0) + 1;
+        this.attempts.set(row.thread_id, nextAttempt);
+        const backoff = retryDelayMs(nextAttempt);
+        console.log(
+          `[bump] retry thread=${row.thread_id} in ${Math.round(backoff / 1000)}s (attempt=${nextAttempt})`,
+        );
+        this.armOneShot(row, backoff);
       }
     }, jittered);
 
-    // store/replace handle
     this.clearTimer(row.thread_id);
     this.timers.set(row.thread_id, handle);
   }

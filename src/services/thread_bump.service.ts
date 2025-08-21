@@ -155,3 +155,12 @@ export class ThreadBumpService {
     return nextDueAt(row);
   }
 }
+
+function isTerminalThreadError(err: unknown): boolean {
+  const msg = (err as any)?.message ?? '';
+  // Typical cases when a thread is gone / inaccessible
+  return /Unknown Channel|Missing Access|Not a thread channel|cannot fetch thread|Cannot unarchive thread/i.test(
+    msg,
+  );
+}
+export { isTerminalThreadError };

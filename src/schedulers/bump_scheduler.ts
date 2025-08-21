@@ -1,6 +1,6 @@
 // src/schedulers/bump_scheduler.ts
 import { Client } from 'discord.js';
-import { ThreadBumpService } from '../services/thread_bump.service';
+import { ThreadBumpService, isTerminalThreadError } from '../services/thread_bump.service';
 import { PerThreadBumpManager } from './per_thread_bump_manager';
 
 let manager: PerThreadBumpManager | null = null;
@@ -13,21 +13,40 @@ export function startBumpScheduler(client: Client): void {
 
   // DB backstop: check due items every 30s
   const service = new ThreadBumpService();
+
+  const pollerCooldown = new Map<string, number>(); // thread_id -> resumeEpochMs
+  const POLLER_COOLDOWN_MS = 5 * 60_000; // 5 minutes
+
   pollHandle = setInterval(async () => {
     try {
-      const rows = await service['dao'].findAll(); // or add a dao method: listDue(NOW())
+      const rows = await service['dao'].findAll();
       const now = Date.now();
-      const due = rows.filter((r) => service.nextDueAt(r).getTime() <= now);
+
+      const due = rows.filter((r) => {
+        // cooldown gate
+        const until = pollerCooldown.get(r.thread_id) ?? 0;
+        if (until > now) return false;
+        return service.nextDueAt(r).getTime() <= now;
+      });
+
       if (due.length) {
         console.log(`[bump-poller] found ${due.length} overdue`);
       }
+
       for (const r of due) {
         try {
           await service.bumpNow(client, r.thread_id);
-          // re-arm that thread’s timer to the next window
           await manager?.onRegisteredOrUpdated(r.thread_id);
+          pollerCooldown.delete(r.thread_id);
         } catch (e) {
           console.warn(`⚠️ poller bump failed ${r.thread_id}:`, e);
+          if (isTerminalThreadError(e)) {
+            await service['dao'].delete(r.thread_id).catch(() => {});
+            manager?.onUnregistered(r.thread_id);
+            pollerCooldown.delete(r.thread_id);
+          } else {
+            pollerCooldown.set(r.thread_id, Date.now() + POLLER_COOLDOWN_MS);
+          }
         }
       }
     } catch (e) {
