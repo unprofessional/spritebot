@@ -22,12 +22,21 @@ export function startBumpScheduler(client: Client): void {
       const rows = await service['dao'].findAll();
       const now = Date.now();
 
-      const due = rows.filter((r) => {
-        // cooldown gate
+      // ARCHIVE-AWARE: compute due using async nextDueAt(client, row)
+      const due: typeof rows = [];
+      for (const r of rows) {
         const until = pollerCooldown.get(r.thread_id) ?? 0;
-        if (until > now) return false;
-        return service.nextDueAt(r).getTime() <= now;
-      });
+        if (until > now) continue;
+
+        try {
+          const nextDue = await service.nextDueAt(client, r);
+          if (nextDue.getTime() <= now) {
+            due.push(r);
+          }
+        } catch {
+          // If next due can't be computed this cycle, skip and try again next tick
+        }
+      }
 
       if (due.length) {
         console.log(`[bump-poller] found ${due.length} overdue`);
@@ -36,7 +45,7 @@ export function startBumpScheduler(client: Client): void {
       for (const r of due) {
         try {
           await service.bumpNow(client, r.thread_id);
-          await manager?.onRegisteredOrUpdated(r.thread_id);
+          await manager?.onRegisteredOrUpdated(r.thread_id); // re-arm archive-aware timer
           pollerCooldown.delete(r.thread_id);
         } catch (e) {
           console.warn(`⚠️ poller bump failed ${r.thread_id}:`, e);

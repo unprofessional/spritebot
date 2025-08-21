@@ -60,6 +60,7 @@ export class PerThreadBumpManager {
 
   onUnregistered(threadId: string): void {
     this.clearTimer(threadId);
+    this.attempts.delete(threadId);
     console.log(`[bump] unschedule thread=${threadId}`);
   }
 
@@ -68,7 +69,7 @@ export class PerThreadBumpManager {
       clearTimeout(t);
       this.timers.delete(id);
     }
-    // allow in‑flight queue items to finish naturally
+    // allow in-flight queue items to finish naturally
     console.log('[bump] manager stopped; timers cleared');
   }
 
@@ -81,10 +82,11 @@ export class PerThreadBumpManager {
   }
 
   private async scheduleForRow(row: BumpThreadRow, nowMs: number) {
-    const dueMs = this.service.nextDueAt(row).getTime();
-    const baseDelay = Math.max(0, dueMs - nowMs);
-    const delay = baseDelay === 0 ? MIN_DELAY_MS : baseDelay; // clamp (avoid 0s loops)
-    const dueIso = new Date(dueMs).toISOString();
+    // ARCHIVE-AWARE: use the async nextDueAt(client, row)
+    const dueAt = await this.service.nextDueAt(this.client, row);
+    const baseDelay = Math.max(0, dueAt.getTime() - nowMs);
+    const delay = Math.max(MIN_DELAY_MS, baseDelay); // clamp (avoid 0s loops)
+    const dueIso = dueAt.toISOString();
 
     console.log(
       `[bump] schedule thread=${row.thread_id} due=${dueIso} delay=${Math.round(delay / 1000)}s`,
@@ -92,8 +94,9 @@ export class PerThreadBumpManager {
     this.armOneShot(row, delay);
   }
 
-  private armOneShot(row: BumpThreadRow, delayMs?: number) {
-    const baseDelay = delayMs ?? Math.max(0, this.service.nextDueAt(row).getTime() - Date.now());
+  // delayMs is required; callers precompute archive-aware delay
+  private armOneShot(row: BumpThreadRow, delayMs: number) {
+    const baseDelay = Math.max(0, delayMs);
     const jittered = withJitter(Math.max(MIN_DELAY_MS, baseDelay)); // enforce floor + jitter
 
     console.log(
@@ -105,11 +108,13 @@ export class PerThreadBumpManager {
       try {
         await this.enqueueBump(() => this.service.bumpNow(this.client, row.thread_id));
         console.log(`[bump] fired OK thread=${row.thread_id}`);
-        // success → reset attempts and re-arm to next due
+        // success → reset attempts and re-arm to next archive-aware due
         this.attempts.delete(row.thread_id);
         const fresh = await this.service['dao'].get(row.thread_id);
         if (fresh) {
-          this.armOneShot(fresh);
+          const nextDue = await this.service.nextDueAt(this.client, fresh);
+          const nextDelay = Math.max(MIN_DELAY_MS, nextDue.getTime() - Date.now());
+          this.armOneShot(fresh, nextDelay);
         } else {
           this.clearTimer(row.thread_id);
         }
@@ -152,7 +157,7 @@ export class PerThreadBumpManager {
           throw e; // still bubble for logging in caller
         }
       });
-      // kick the drain loop (non‑blocking)
+      // kick the drain loop (non-blocking)
       void this.drainQueue();
     });
   }

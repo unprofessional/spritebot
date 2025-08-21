@@ -7,10 +7,19 @@ import {
   type MessageCreateOptions,
   type MessageMentionTypes,
 } from 'discord.js';
-import { bumpDefaultMinutes } from '../config/env_config';
+import { bumpDefaultMinutes, bumpBufferMinutes } from '../config/env_config';
 import { ThreadBumpDAO, type BumpThreadRow } from '../dao/thread_bump.dao';
 
 const NO_MENTIONS: ReadonlyArray<MessageMentionTypes> = [];
+
+// === utils ===
+const DISCORD_EPOCH = 1420070400000n; // 2015-01-01T00:00:00.000Z
+
+function snowflakeToDate(id: string): Date {
+  // Discord snowflake timestamp: (id >> 22) + DISCORD_EPOCH
+  const ts = Number((BigInt(id) >> 22n) + DISCORD_EPOCH);
+  return new Date(ts);
+}
 
 function buildBumpMessage(note?: string | null): MessageCreateOptions {
   return {
@@ -36,12 +45,47 @@ function asThread(channel: Channel | null): ThreadChannel | null {
   return null;
 }
 
-function nextDueAt(row: BumpThreadRow): Date {
+/**
+ * Interval-only next due (legacy / sync path).
+ * Kept for backward compatibility where callers haven't been updated to archive-aware scheduling.
+ */
+function nextDueAtIntervalOnly(row: BumpThreadRow): Date {
   const base = row.last_bumped_at ?? row.created_at ?? new Date();
   const due = new Date(base);
   const minutes = row.interval_minutes ?? bumpDefaultMinutes;
   due.setMinutes(due.getMinutes() + minutes);
   return due;
+}
+
+/**
+ * Lightweight meta for archive-aware scheduling.
+ */
+async function getThreadMeta(
+  client: Client,
+  threadId: string,
+): Promise<{ autoArchiveMinutes: number | null; lastActivityAt: Date | null }> {
+  const chan = await client.channels.fetch(threadId).catch(() => null);
+  const thread = asThread(chan);
+  if (!thread) return { autoArchiveMinutes: null, lastActivityAt: null };
+
+  // last activity from lastMessageId (fast, no extra HTTP); fallback to fetching 1 message
+  let lastActivityAt: Date | null = null;
+  if (thread.lastMessageId) {
+    lastActivityAt = snowflakeToDate(thread.lastMessageId);
+  } else {
+    try {
+      const msgs = await thread.messages.fetch({ limit: 1 });
+      const m = msgs.first();
+      if (m?.createdTimestamp) lastActivityAt = new Date(m.createdTimestamp);
+    } catch {
+      // ignore – we'll fall back to DB timestamps
+    }
+  }
+
+  const autoArchiveMinutes =
+    typeof thread.autoArchiveDuration === 'number' ? thread.autoArchiveDuration : null;
+
+  return { autoArchiveMinutes, lastActivityAt };
 }
 
 async function ensureWritable(thread: ThreadChannel): Promise<void> {
@@ -151,8 +195,43 @@ export class ThreadBumpService {
     return this.dao.exists(threadId);
   }
 
-  nextDueAt(row: BumpThreadRow): Date {
-    return nextDueAt(row);
+  /**
+   * Archive-aware next-due:
+   * - Always compute the interval due.
+   * - If we can derive (last activity + autoArchive - GUARD), take the EARLIER of the two.
+   * This guarantees we bump *before* archive across all lifespans (60/1440/4320/10080).
+   */
+  async nextDueAt(client: Client, row: BumpThreadRow): Promise<Date> {
+    // 1) Interval due (always valid)
+    const intervalDue = nextDueAtIntervalOnly(row);
+
+    // 2) Archive-aware due (only if we have both last activity & autoArchive)
+    try {
+      const { autoArchiveMinutes, lastActivityAt } = await getThreadMeta(client, row.thread_id);
+      if (autoArchiveMinutes && lastActivityAt) {
+        // schedule GUARD minutes before archive
+        const guard = Math.max(1, bumpBufferMinutes | 0); // ensure integer & >= 1
+        const effective = Math.max(1, autoArchiveMinutes - guard);
+
+        const archiveDue = new Date(lastActivityAt);
+        archiveDue.setMinutes(archiveDue.getMinutes() + effective);
+
+        // Earliest wins: fire before either boundary is hit
+        return archiveDue < intervalDue ? archiveDue : intervalDue;
+      }
+    } catch {
+      // ignore meta errors; fall back to intervalDue
+    }
+
+    return intervalDue;
+  }
+
+  /**
+   * Legacy sync helper (interval-only) to keep older callers compiling.
+   * Prefer the archive-aware async `nextDueAt(client, row)` everywhere else.
+   */
+  nextDueAtSync(row: BumpThreadRow): Date {
+    return nextDueAtIntervalOnly(row);
   }
 }
 
