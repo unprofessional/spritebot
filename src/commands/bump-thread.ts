@@ -31,7 +31,6 @@ const TYPE_LABEL: Record<number, string> = {
   [ChannelType.GuildDirectory]: 'GuildDirectory',
   [ChannelType.GuildForum]: 'GuildForum',
   // (v14+) sometimes GuildMedia exists:
-  // @ts-ignore
   [ChannelType.GuildMedia]: 'GuildMedia',
 };
 

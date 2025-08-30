@@ -31,6 +31,13 @@ export function startBumpScheduler(client: Client): void {
         try {
           const nextDue = await service.nextDueAt(client, r);
           if (nextDue.getTime() <= now) {
+            // 🔎 DEBUG: why is this considered overdue?
+            if (process.env.DEBUG_BUMP === '1') {
+              console.debug(
+                `[bump-debug] overdue thread=${r.thread_id} now=${new Date(now).toISOString()} ` +
+                  `nextDue=${nextDue.toISOString()} last_bumped_at=${r.last_bumped_at?.toISOString() ?? 'null'} `,
+              );
+            }
             due.push(r);
           }
         } catch {
