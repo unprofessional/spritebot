@@ -142,6 +142,9 @@ export class ThreadBumpService {
 
     // 2) Update DB regardless of deletion outcome
     await this.dao.touchLastBumped(threadId, new Date());
+    // keep it visible for a brief moment so Discord’s lastMessageId advances during propagation
+    await new Promise((r) => setTimeout(r, 3000));
+    await sent.delete();
 
     // 3) Optionally delete to keep thread clean
     if (deleteAfter) {
@@ -202,25 +205,33 @@ export class ThreadBumpService {
    * This guarantees we bump *before* archive across all lifespans (60/1440/4320/10080).
    */
   async nextDueAt(client: Client, row: BumpThreadRow): Promise<Date> {
-    // 1) Interval due (always valid)
+    // 1) Always compute the interval due (fallback & upper bound)
     const intervalDue = nextDueAtIntervalOnly(row);
 
-    // 2) Archive-aware due (only if we have both last activity & autoArchive)
     try {
       const { autoArchiveMinutes, lastActivityAt } = await getThreadMeta(client, row.thread_id);
-      if (autoArchiveMinutes && lastActivityAt) {
+
+      // 👇 NEW: prefer the freshest known activity – DB bump time wins if newer.
+      // If last_bumped_at is newer than Discord’s visible last message (which can
+      // roll back after we delete the bump), we must honor last_bumped_at.
+      const freshestActivity =
+        row.last_bumped_at && (!lastActivityAt || row.last_bumped_at > lastActivityAt)
+          ? row.last_bumped_at
+          : lastActivityAt;
+
+      if (autoArchiveMinutes && freshestActivity) {
         // schedule GUARD minutes before archive
-        const guard = Math.max(1, bumpBufferMinutes | 0); // ensure integer & >= 1
+        const guard = Math.max(1, bumpBufferMinutes | 0);
         const effective = Math.max(1, autoArchiveMinutes - guard);
 
-        const archiveDue = new Date(lastActivityAt);
+        const archiveDue = new Date(freshestActivity);
         archiveDue.setMinutes(archiveDue.getMinutes() + effective);
 
-        // Earliest wins: fire before either boundary is hit
+        // Earliest wins: we want to fire before either boundary
         return archiveDue < intervalDue ? archiveDue : intervalDue;
       }
     } catch {
-      // ignore meta errors; fall back to intervalDue
+      // ignore meta errors; fall through to intervalDue
     }
 
     return intervalDue;
