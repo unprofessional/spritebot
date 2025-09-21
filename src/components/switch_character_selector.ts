@@ -1,6 +1,11 @@
+// src/components/switch_character_selector.ts
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
 
-import { getCharactersByGame, getCharacterWithStats } from '../services/character.service';
+import {
+  getCharactersByUser,
+  getCharacterWithStats,
+  getCharacterById,
+} from '../services/character.service';
 import {
   getCurrentGame,
   getCurrentCharacter,
@@ -36,17 +41,30 @@ export async function build(
     };
   }
 
+  // ✅ Only fetch THIS USER'S characters for the CURRENT game
+  const myCharacters = await getCharactersByUser(userId, guildId);
+  if (!myCharacters.length) {
+    return {
+      content: '⚠️ You have no characters in your current game.',
+      ephemeral: true,
+    };
+  }
+
+  // Optional: double-check you still have access to the game
+  const { valid } = await validateGameAccess({ gameId: currentGameId, userId });
+  if (!valid) {
+    return {
+      content: '🚫 You no longer have access to the current game.',
+      ephemeral: true,
+    };
+  }
+
   const currentCharacterId = await getCurrentCharacter(userId, guildId);
-  const allCharacters = await getCharactersByGame(currentGameId);
   const eligibleOptions: CharacterOption[] = [];
 
-  for (const character of allCharacters) {
-    const { valid } = await validateGameAccess({
-      gameId: character.game_id,
-      userId,
-    });
-
-    if (!valid) continue;
+  for (const character of myCharacters) {
+    // `myCharacters` already filtered to current game; still good to be defensive:
+    if (character.game_id !== currentGameId) continue;
 
     const fullCharacter = await getCharacterWithStats(character.id);
     if (!fullCharacter) continue;
@@ -77,7 +95,6 @@ export async function build(
       : 'unknown time';
 
     const baseLabel = `${fullCharacter.name} — ${createdAt} — ${visibilityBadge}`;
-
     const label = isActive ? `⭐ ${baseLabel} (ACTIVE)` : baseLabel;
 
     eligibleOptions.push({
@@ -90,7 +107,7 @@ export async function build(
 
   if (!eligibleOptions.length) {
     return {
-      content: '⚠️ You have no characters in published or accessible games.',
+      content: '⚠️ You have no characters in your current game.',
       ephemeral: true,
     };
   }
@@ -133,6 +150,36 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     if (!guildId) {
       await interaction.reply({
         content: '⚠️ This action must be used in a server.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // ✅ HARD GATE: ensure the selected character belongs to this user and is in their current game
+    const [currentGameId, picked] = await Promise.all([
+      getCurrentGame(user.id, guildId),
+      getCharacterById(selected),
+    ]);
+
+    if (!currentGameId || !picked) {
+      await interaction.reply({
+        content: '❌ Invalid selection.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (picked.user_id !== user.id) {
+      await interaction.reply({
+        content: '🚫 You can only switch to your own characters.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    if (picked.game_id !== currentGameId) {
+      await interaction.reply({
+        content: '🚫 That character is not in your current game.',
         ephemeral: true,
       });
       return;
