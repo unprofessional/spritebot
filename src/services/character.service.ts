@@ -204,3 +204,13 @@ export async function updateStatMetaField(
 
   return statDAO.create(characterId, templateId, target.value ?? '', updatedMeta);
 }
+
+// raw access for validations (user_id, game_id, etc.)
+export async function getCharacterById(characterId: string) {
+  return characterDAO.findById(characterId);
+}
+
+export async function belongsToUser(characterId: string, userId: string): Promise<boolean> {
+  const c = await characterDAO.findById(characterId);
+  return !!c && c.user_id === userId;
+}
