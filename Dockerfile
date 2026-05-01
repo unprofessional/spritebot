@@ -1,5 +1,5 @@
 # ---------- Builder ----------
-FROM node:20-alpine AS builder
+FROM node:22.22.0-alpine AS builder
 
 # Install build tools for any native dependencies (optional)
 RUN apk add --no-cache python3 make g++
@@ -19,7 +19,7 @@ COPY . .
 RUN npm run build
 
 # ---------- Runtime ----------
-FROM node:20-alpine AS runtime
+FROM node:22.22.0-alpine AS runtime
 
 WORKDIR /app
 

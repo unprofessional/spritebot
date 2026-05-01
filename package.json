@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "",
   "main": "dist/index.js",
+  "engines": {
+    "node": "22.22.0"
+  },
   "scripts": {
     "copy-sql": "cp -R src/db/tables dist/db/tables",
     "lint": "eslint --ext .ts,.js src --format=stylish",
