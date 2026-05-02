@@ -13,7 +13,10 @@
     "build": "npm run clean && tsc && npm run copy-sql",
     "start": "node dist/index.js",
     "start:dev": "ts-node src/index.ts",
-    "test": "npx jest --testPathIgnorePatterns=node_modules/* --verbose=true --coverage=false"
+    "test": "jest --coverage=false",
+    "test:unit": "jest tests/unit --coverage=false",
+    "test:integration": "jest tests/integration --coverage=false",
+    "test:e2e": "jest tests/e2e --runInBand --coverage=false"
   },
   "author": "unprofessional",
   "license": "ISC",
@@ -31,6 +34,8 @@
     "pg": "^8.16.3"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "^0.3.16",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.1.0",
     "@types/pg": "^8.15.4",
     "@types/ws": "^8.18.1",
@@ -45,6 +50,8 @@
     "jest": "^30.0.5",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",
+    "ts-jest": "^29.4.9",
+    "ts-node": "^10.9.2",
     "typescript": "^5.8.3"
   }
 }

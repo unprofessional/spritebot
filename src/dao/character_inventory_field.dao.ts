@@ -1,15 +1,6 @@
 // src/dao/character_inventory_field.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 type Meta = Record<string, unknown>;
 type FieldInput = string | { value?: string; meta?: Meta };
@@ -28,7 +19,7 @@ export class CharacterInventoryFieldDAO {
       DO UPDATE SET value = EXCLUDED.value, meta = EXCLUDED.meta
       RETURNING *
     `;
-    const result = await pool.query(sql, [inventoryId, name.trim(), value, JSON.stringify(meta)]);
+    const result = await query(sql, [inventoryId, name.trim(), value, JSON.stringify(meta)]);
     const row = result.rows[0];
     return {
       name: row.name,
@@ -56,7 +47,7 @@ export class CharacterInventoryFieldDAO {
   async findByInventory(
     inventoryId: string,
   ): Promise<{ name: string; value: string; meta: Meta }[]> {
-    const result = await pool.query(
+    const result = await query(
       `SELECT name, value, meta FROM character_inventory_field WHERE inventory_id = $1 ORDER BY name`,
       [inventoryId],
     );
@@ -69,12 +60,12 @@ export class CharacterInventoryFieldDAO {
   }
 
   async deleteByInventory(inventoryId: string): Promise<void> {
-    await pool.query(`DELETE FROM character_inventory_field WHERE inventory_id = $1`, [
+    await query(`DELETE FROM character_inventory_field WHERE inventory_id = $1`, [
       inventoryId,
     ]);
   }
 
   async deleteById(fieldId: string): Promise<void> {
-    await pool.query(`DELETE FROM character_inventory_field WHERE id = $1`, [fieldId]);
+    await query(`DELETE FROM character_inventory_field WHERE id = $1`, [fieldId]);
   }
 }

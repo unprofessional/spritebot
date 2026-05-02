@@ -1,20 +1,11 @@
 // src/db/db.ts
 
-import { Pool } from 'pg';
-import { pgDb, pgHost, pgPass, pgPort, pgUser } from '../config/env_config';
+import { initDb, query } from './client';
 import { getSql } from './sql-loader';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: parseInt(pgPort, 10),
-});
 
 export async function testPgConnection(): Promise<void> {
   try {
-    const res = await pool.query('SELECT NOW()');
+    const res = await query('SELECT NOW()');
     console.log('PG Database connected:', res.rows[0].now);
   } catch (err) {
     console.error('❌ Error connecting to the PG database:', err);
@@ -22,6 +13,8 @@ export async function testPgConnection(): Promise<void> {
 }
 
 export async function initializeDB(): Promise<void> {
+  await initDb();
+
   const isProd = process.env.NODE_ENV === 'production';
   const allowProdInit = process.env.ALLOW_DB_INIT === 'true';
 
@@ -54,7 +47,7 @@ export async function initializeDB(): Promise<void> {
       WHERE table_schema = 'public'
         AND table_name = ANY($1::text[]);
     `;
-    const result = await pool.query<{ table_name: string }>(checkQuery, [trackedTables]);
+    const result = await query<{ table_name: string }>(checkQuery, [trackedTables]);
 
     const existingTables = result.rows.map((r) => r.table_name);
     const missingTables = trackedTables.filter((name) => !existingTables.includes(name));
@@ -84,7 +77,7 @@ export async function initializeDB(): Promise<void> {
       );
     }
 
-    const execResult = await pool.query(sql);
+    const execResult = await query(sql);
 
     if (execResult?.rows?.length > 0) {
       throw new Error('❌ Unexpected data returned from schema init query. Aborting.');

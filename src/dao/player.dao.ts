@@ -1,19 +1,10 @@
 // src/dao/player.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 export class PlayerDAO {
   async findByDiscordId(discordId: string): Promise<Record<string, any> | null> {
-    const result = await pool.query(`SELECT * FROM player WHERE discord_id = $1`, [
+    const result = await query(`SELECT * FROM player WHERE discord_id = $1`, [
       discordId.trim(),
     ]);
     return result.rows[0] || null;
@@ -26,7 +17,7 @@ export class PlayerDAO {
       ON CONFLICT (discord_id) DO NOTHING
       RETURNING *
     `;
-    const result = await pool.query(sql, [discordId.trim()]);
+    const result = await query(sql, [discordId.trim()]);
     return result.rows[0] || (await this.findByDiscordId(discordId));
   }
 
@@ -50,7 +41,7 @@ export class PlayerDAO {
         updated_at = CURRENT_TIMESTAMP
       RETURNING *
     `;
-    const result = await pool.query(sql, [player.id, guildId, role]);
+    const result = await query(sql, [player.id, guildId, role]);
     return result.rows[0];
   }
 
@@ -58,7 +49,7 @@ export class PlayerDAO {
     const player = await this.findByDiscordId(discordId);
     if (!player) return null;
 
-    const result = await pool.query(
+    const result = await query(
       `SELECT * FROM player_server_link WHERE player_id = $1 AND guild_id = $2`,
       [player.id, guildId],
     );
@@ -73,7 +64,7 @@ export class PlayerDAO {
     const link = await this.getServerLink(discordId, guildId);
     if (!link) throw new Error(`No player-server link found for ${discordId} in guild ${guildId}`);
 
-    const result = await pool.query(
+    const result = await query(
       `UPDATE player_server_link
        SET current_game_id = $1, updated_at = CURRENT_TIMESTAMP
        WHERE player_id = $2 AND guild_id = $3
@@ -96,7 +87,7 @@ export class PlayerDAO {
     const link = await this.getServerLink(discordId, guildId);
     if (!link) throw new Error(`No player-server link found for ${discordId} in guild ${guildId}`);
 
-    const result = await pool.query(
+    const result = await query(
       `UPDATE player_server_link
        SET current_character_id = $1, updated_at = CURRENT_TIMESTAMP
        WHERE player_id = $2 AND guild_id = $3
@@ -114,7 +105,7 @@ export class PlayerDAO {
   async delete(discordId: string): Promise<void> {
     const player = await this.findByDiscordId(discordId);
     if (!player) return;
-    await pool.query(`DELETE FROM player_server_link WHERE player_id = $1`, [player.id]);
-    await pool.query(`DELETE FROM player WHERE id = $1`, [player.id]);
+    await query(`DELETE FROM player_server_link WHERE player_id = $1`, [player.id]);
+    await query(`DELETE FROM player WHERE id = $1`, [player.id]);
   }
 }
