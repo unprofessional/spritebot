@@ -1,16 +1,7 @@
 // src/dao/stat_template.dao.ts
 
-import { Pool } from 'pg';
-import { pgDb, pgHost, pgPass, pgPort, pgUser } from '../config/env_config';
+import { query } from '../db/client';
 import type { CreateStatTemplateParams } from '../types/stat_template';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
 
 export class StatTemplateDAO {
   async create({
@@ -29,7 +20,7 @@ export class StatTemplateDAO {
     VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *
   `;
-    const result = await pool.query(sql, [
+    const result = await query(sql, [
       game_id,
       label,
       field_type,
@@ -56,7 +47,7 @@ export class StatTemplateDAO {
       WHERE id = $1
       LIMIT 1
     `;
-    const result = await pool.query(sql, [statId]);
+    const result = await query(sql, [statId]);
     return result.rows[0] || null;
   }
 
@@ -66,7 +57,7 @@ export class StatTemplateDAO {
       WHERE game_id = $1
       ORDER BY sort_order ASC, label ASC
     `;
-    const result = await pool.query(sql, [gameId]);
+    const result = await query(sql, [gameId]);
     return result.rows;
   }
 
@@ -93,15 +84,15 @@ export class StatTemplateDAO {
     `;
 
     values.push(templateId);
-    const result = await pool.query(sql, values);
+    const result = await query(sql, values);
     return result.rows[0];
   }
 
   async deleteByGame(gameId: string): Promise<void> {
-    await pool.query(`DELETE FROM stat_template WHERE game_id = $1`, [gameId]);
+    await query(`DELETE FROM stat_template WHERE game_id = $1`, [gameId]);
   }
 
   async deleteById(templateId: string): Promise<void> {
-    await pool.query(`DELETE FROM stat_template WHERE id = $1`, [templateId]);
+    await query(`DELETE FROM stat_template WHERE id = $1`, [templateId]);
   }
 }

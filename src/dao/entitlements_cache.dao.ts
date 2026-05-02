@@ -1,16 +1,6 @@
 // src/dao/entitlements_cache.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-// Reuse your existing Pool pattern for consistency
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 // DB row shape
 export interface EntitlementRow {
@@ -57,7 +47,7 @@ export class EntitlementsCacheDAO {
       ORDER BY ends_at NULLS LAST, updated_at DESC
     `;
 
-    const res = await pool.query(sql, [guildId]);
+    const res = await query(sql, [guildId]);
 
     console.debug(
       `[EntitlementsCacheDAO] Found ${res.rows.length} active entitlements for guild=${guildId}`,
@@ -113,7 +103,7 @@ export class EntitlementsCacheDAO {
         updated_at = CURRENT_TIMESTAMP
     `;
 
-    await pool.query(sql, [
+    await query(sql, [
       entitlementId,
       guildId,
       skuId,
