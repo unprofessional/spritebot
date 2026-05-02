@@ -1,6 +1,6 @@
-# Soulbot RPG
+# Spritebot
 
-`Soulbot RPG` is a Discord bot for running lightweight RPG campaigns inside a server. It combines campaign setup, character management, inventory tracking, and Discord-native interaction flows with a PostgreSQL backend.
+`Spritebot` is a Discord bot for running lightweight RPG campaigns inside a server. It combines campaign setup, character management, inventory tracking, and Discord-native interaction flows with a PostgreSQL backend.
 
 The project also includes two platform-style features beyond the RPG core:
 
@@ -38,7 +38,7 @@ The repo currently defines these slash commands:
 - `/gift` - Ops-only gifted access management
 - `/toggle-bypass` - Ops-only entitlement bypass toggle
 
-Some commands are available to everyone, while others are gated by feature access. The mapping currently lives in [src/access/features.ts](/Users/power/dev/devcru/soulbot-rpg/src/access/features.ts).
+Some commands are available to everyone, while others are gated by feature access. The mapping currently lives in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts).
 
 ## Core Concepts
 
@@ -105,7 +105,7 @@ The main request flow is usually:
 
 ## Database Model
 
-The schema is currently defined in [src/db/tables/tables.sql](/Users/power/dev/devcru/soulbot-rpg/src/db/tables/tables.sql).
+The schema is currently defined in [src/db/tables/tables.sql](/Users/power/dev/devcru/spritebot/src/db/tables/tables.sql).
 
 Primary tables include:
 
@@ -166,7 +166,7 @@ PG_HOST=localhost
 PG_PORT=5432
 PG_USER=postgres
 PG_PASS=your_password
-PG_DB=soulbot
+PG_DB=spritebot
 
 # Thread bump tuning
 BUMP_DEFAULT_MINUTES=10050
@@ -210,7 +210,7 @@ npm start
 
 ## Docker
 
-The repo includes a multistage [Dockerfile](/Users/power/dev/devcru/soulbot-rpg/Dockerfile) and a simple [docker-compose.yml](/Users/power/dev/devcru/soulbot-rpg/docker-compose.yml).
+The repo includes a multistage [Dockerfile](/Users/power/dev/devcru/spritebot/Dockerfile) and a simple [docker-compose.yml](/Users/power/dev/devcru/spritebot/docker-compose.yml).
 
 To build and run:
 
@@ -230,9 +230,9 @@ Feature gating is organized around stable feature keys:
 - `rpg:game-admin`
 - `automation:thread-bump`
 
-Command-to-feature mapping is defined in [src/access/features.ts](/Users/power/dev/devcru/soulbot-rpg/src/access/features.ts), and entitlement resolution happens in [src/services/entitlements.service.ts](/Users/power/dev/devcru/soulbot-rpg/src/services/entitlements.service.ts).
+Command-to-feature mapping is defined in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts), and entitlement resolution happens in [src/services/entitlements.service.ts](/Users/power/dev/devcru/spritebot/src/services/entitlements.service.ts).
 
-The SKU-to-feature mapping file is present in [src/services/plans.ts](/Users/power/dev/devcru/soulbot-rpg/src/services/plans.ts), but it is currently a stub and still needs real Discord SKU IDs configured.
+The SKU-to-feature mapping file is present in [src/services/plans.ts](/Users/power/dev/devcru/spritebot/src/services/plans.ts), but it is currently a stub and still needs real Discord SKU IDs configured.
 
 ## Notable Implementation Details
 
@@ -254,17 +254,17 @@ Based on the current codebase:
 
 ## Useful Files to Read First
 
-- [src/index.ts](/Users/power/dev/devcru/soulbot-rpg/src/index.ts)
-- [src/client/initial_commands.ts](/Users/power/dev/devcru/soulbot-rpg/src/client/initial_commands.ts)
-- [src/db/tables/tables.sql](/Users/power/dev/devcru/soulbot-rpg/src/db/tables/tables.sql)
-- [src/services/game.service.ts](/Users/power/dev/devcru/soulbot-rpg/src/services/game.service.ts)
-- [src/services/character.service.ts](/Users/power/dev/devcru/soulbot-rpg/src/services/character.service.ts)
-- [src/services/thread_bump.service.ts](/Users/power/dev/devcru/soulbot-rpg/src/services/thread_bump.service.ts)
-- [src/access/guards.ts](/Users/power/dev/devcru/soulbot-rpg/src/access/guards.ts)
+- [src/index.ts](/Users/power/dev/devcru/spritebot/src/index.ts)
+- [src/client/initial_commands.ts](/Users/power/dev/devcru/spritebot/src/client/initial_commands.ts)
+- [src/db/tables/tables.sql](/Users/power/dev/devcru/spritebot/src/db/tables/tables.sql)
+- [src/services/game.service.ts](/Users/power/dev/devcru/spritebot/src/services/game.service.ts)
+- [src/services/character.service.ts](/Users/power/dev/devcru/spritebot/src/services/character.service.ts)
+- [src/services/thread_bump.service.ts](/Users/power/dev/devcru/spritebot/src/services/thread_bump.service.ts)
+- [src/access/guards.ts](/Users/power/dev/devcru/spritebot/src/access/guards.ts)
 
 ## Scripts
 
-Defined in [package.json](/Users/power/dev/devcru/soulbot-rpg/package.json):
+Defined in [package.json](/Users/power/dev/devcru/spritebot/package.json):
 
 - `npm run start:dev` - run with `ts-node`
 - `npm run build` - compile TypeScript and copy SQL assets
