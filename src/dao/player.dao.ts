@@ -4,9 +4,7 @@ import { query } from '../db/client';
 
 export class PlayerDAO {
   async findByDiscordId(discordId: string): Promise<Record<string, any> | null> {
-    const result = await query(`SELECT * FROM player WHERE discord_id = $1`, [
-      discordId.trim(),
-    ]);
+    const result = await query(`SELECT * FROM player WHERE discord_id = $1`, [discordId.trim()]);
     return result.rows[0] || null;
   }
 

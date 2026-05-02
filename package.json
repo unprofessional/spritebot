@@ -8,7 +8,7 @@
   },
   "scripts": {
     "copy-sql": "cp -R src/db/tables dist/db/tables",
-    "lint": "eslint --ext .ts,.js src --format=stylish",
+    "lint": "npm run lint:prettier && npm run lint:eslint",
     "clean": "rimraf dist",
     "build": "npm run clean && tsc && npm run copy-sql",
     "start": "node dist/index.js",
@@ -16,7 +16,11 @@
     "test": "jest --coverage=false",
     "test:unit": "jest tests/unit --coverage=false",
     "test:integration": "jest tests/integration --coverage=false",
-    "test:e2e": "jest tests/e2e --runInBand --coverage=false"
+    "test:e2e": "jest tests/e2e --runInBand --coverage=false",
+    "lint:eslint": "eslint --ext .ts,.js src --format=stylish",
+    "lint:prettier": "prettier --check .",
+    "precommit": "npm run lint && npm test -- --runInBand",
+    "prepare": "husky"
   },
   "author": "unprofessional",
   "license": "ISC",
@@ -47,6 +51,7 @@
     "eslint-import-resolver-typescript": "^4.4.4",
     "eslint-plugin-import": "^2.32.0",
     "eslint-plugin-jsdoc": "^51.4.1",
+    "husky": "^9.1.7",
     "jest": "^30.0.5",
     "prettier": "^3.6.2",
     "rimraf": "^6.0.1",

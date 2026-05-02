@@ -60,9 +60,7 @@ export class CharacterInventoryFieldDAO {
   }
 
   async deleteByInventory(inventoryId: string): Promise<void> {
-    await query(`DELETE FROM character_inventory_field WHERE inventory_id = $1`, [
-      inventoryId,
-    ]);
+    await query(`DELETE FROM character_inventory_field WHERE inventory_id = $1`, [inventoryId]);
   }
 
   async deleteById(fieldId: string): Promise<void> {

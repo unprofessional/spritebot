@@ -14,9 +14,7 @@ export interface BumpThreadRow {
 
 export class ThreadBumpDAO {
   async findAll(): Promise<BumpThreadRow[]> {
-    const res = await query<BumpThreadRow>(
-      'SELECT * FROM thread_bumps ORDER BY created_at DESC',
-    );
+    const res = await query<BumpThreadRow>('SELECT * FROM thread_bumps ORDER BY created_at DESC');
     return res.rows;
   }
 

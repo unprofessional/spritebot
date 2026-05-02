@@ -3,7 +3,10 @@ import { pgDb, pgHost, pgPass, pgPort, pgUser } from '../config/env_config';
 import { getSql } from './sql-loader';
 
 type PgLite = {
-  query<T>(text: string, params?: unknown[]): Promise<{
+  query<T>(
+    text: string,
+    params?: unknown[],
+  ): Promise<{
     rows: T[];
     affectedRows?: number;
   }>;
