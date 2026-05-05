@@ -1,15 +1,6 @@
 // src/dao/character_stat_field.dao.ts
 
-import { Pool } from 'pg';
-import { pgDb, pgHost, pgPass, pgPort, pgUser } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 export interface StatFieldEntry {
   value: string;
@@ -30,7 +21,7 @@ export class CharacterStatFieldDAO {
       DO UPDATE SET value = EXCLUDED.value, meta = EXCLUDED.meta
       RETURNING *
     `;
-    const result = await pool.query(sql, [characterId, templateId, value, JSON.stringify(meta)]);
+    const result = await query(sql, [characterId, templateId, value, JSON.stringify(meta)]);
     const row = result.rows[0];
 
     return {
@@ -67,7 +58,7 @@ export class CharacterStatFieldDAO {
   async findByCharacter(
     characterId: string,
   ): Promise<{ template_id: string; value: string; meta: Record<string, any> }[]> {
-    const result = await pool.query(
+    const result = await query(
       `SELECT template_id, value, meta FROM character_stat_field WHERE character_id = $1 ORDER BY template_id`,
       [characterId],
     );
@@ -80,6 +71,6 @@ export class CharacterStatFieldDAO {
   }
 
   async deleteByCharacter(characterId: string): Promise<void> {
-    await pool.query(`DELETE FROM character_stat_field WHERE character_id = $1`, [characterId]);
+    await query(`DELETE FROM character_stat_field WHERE character_id = $1`, [characterId]);
   }
 }

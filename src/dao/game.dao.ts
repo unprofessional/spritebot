@@ -1,15 +1,6 @@
 // src/dao/game.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 interface CreateGameParams {
   name: string;
@@ -36,7 +27,7 @@ export class GameDAO {
       RETURNING *
     `;
     const params = [name, description, created_by.trim(), guild_id?.trim() ?? null];
-    const result = await pool.query(sql, params);
+    const result = await query(sql, params);
     return result.rows[0];
   }
 
@@ -52,17 +43,17 @@ export class GameDAO {
       WHERE id = $3
       RETURNING *
     `;
-    const result = await pool.query(sql, [name.trim(), description?.trim() || null, gameId]);
+    const result = await query(sql, [name.trim(), description?.trim() || null, gameId]);
     return result.rows[0] || null;
   }
 
   async findById(gameId: string): Promise<Record<string, any> | null> {
-    const result = await pool.query(`SELECT * FROM game WHERE id = $1`, [gameId]);
+    const result = await query(`SELECT * FROM game WHERE id = $1`, [gameId]);
     return result.rows[0] || null;
   }
 
   async findByUser(userId: string): Promise<Record<string, any>[]> {
-    const result = await pool.query(
+    const result = await query(
       `SELECT * FROM game WHERE created_by = $1 ORDER BY created_at DESC`,
       [userId],
     );
@@ -71,28 +62,28 @@ export class GameDAO {
 
   async findByGuild(guildId: string | null): Promise<Record<string, any>[]> {
     if (!guildId) return [];
-    const result = await pool.query(`SELECT * FROM game WHERE guild_id = $1`, [guildId.trim()]);
+    const result = await query(`SELECT * FROM game WHERE guild_id = $1`, [guildId.trim()]);
     return result.rows;
   }
 
   async findAll(): Promise<Record<string, any>[]> {
-    const result = await pool.query(`SELECT * FROM game ORDER BY created_at DESC`);
+    const result = await query(`SELECT * FROM game ORDER BY created_at DESC`);
     return result.rows;
   }
 
   async delete(gameId: string): Promise<void> {
-    await pool.query(`DELETE FROM game WHERE id = $1`, [gameId]);
+    await query(`DELETE FROM game WHERE id = $1`, [gameId]);
   }
 
   async publish(gameId: string): Promise<Record<string, any> | null> {
-    const result = await pool.query(`UPDATE game SET is_public = TRUE WHERE id = $1 RETURNING *`, [
+    const result = await query(`UPDATE game SET is_public = TRUE WHERE id = $1 RETURNING *`, [
       gameId,
     ]);
     return result.rows[0] || null;
   }
 
   async togglePublish(gameId: string): Promise<Record<string, any> | null> {
-    const result = await pool.query(
+    const result = await query(
       `
       UPDATE game
       SET is_public = NOT is_public,

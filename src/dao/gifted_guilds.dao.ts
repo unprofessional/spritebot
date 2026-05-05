@@ -1,15 +1,6 @@
 // src/dao/gifted_guilds.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 // Raw row as returned by PG (strings/timestamps/nulls)
 type PgGiftRow = {
@@ -75,7 +66,7 @@ export class GiftedGuildsDAO {
       RETURNING guild_id, granted_by, note, expires_at, created_at, updated_at
     `;
 
-    const res = await pool.query<PgGiftRow>(sql, [guildId, grantedBy, note, expires]);
+    const res = await query<PgGiftRow>(sql, [guildId, grantedBy, note, expires]);
     const row = mapRow(res.rows[0]);
 
     console.debug(
@@ -88,7 +79,7 @@ export class GiftedGuildsDAO {
 
   async revokeGift(guildId: string): Promise<boolean> {
     console.debug(`[GiftedGuildsDAO] Revoking gift guild=${guildId}`);
-    const res = await pool.query(`DELETE FROM gifted_guilds WHERE guild_id = $1`, [guildId]);
+    const res = await query(`DELETE FROM gifted_guilds WHERE guild_id = $1`, [guildId]);
     const count = res.rowCount ?? 0; // fix: rowCount possibly undefined
     console.debug(
       `[GiftedGuildsDAO] Revoke ${count ? 'succeeded' : 'no-op (not found)'} guild=${guildId}`,
@@ -105,7 +96,7 @@ export class GiftedGuildsDAO {
       WHERE guild_id = $1
       LIMIT 1
     `;
-    const res = await pool.query<{ ok: boolean }>(sql, [guildId]);
+    const res = await query<{ ok: boolean }>(sql, [guildId]);
     const ok = !!res.rows[0]?.ok;
 
     console.debug(`[GiftedGuildsDAO] Gifted status guild=${guildId} ok=${ok}`);
@@ -124,7 +115,7 @@ export class GiftedGuildsDAO {
       ORDER BY created_at DESC
       LIMIT $1 OFFSET $2
     `;
-    const res = await pool.query<PgGiftRow>(sql, [limit, offset]);
+    const res = await query<PgGiftRow>(sql, [limit, offset]);
     const rows = res.rows.map(mapRow);
 
     console.debug(`[GiftedGuildsDAO] Listed ${rows.length} gifts`);
@@ -139,7 +130,7 @@ export class GiftedGuildsDAO {
       WHERE guild_id = $1
       LIMIT 1
     `;
-    const res = await pool.query<PgGiftRow>(sql, [guildId]);
+    const res = await query<PgGiftRow>(sql, [guildId]);
     return res.rows[0] ? mapRow(res.rows[0]) : null;
   }
 }

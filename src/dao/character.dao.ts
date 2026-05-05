@@ -1,15 +1,6 @@
 // src/dao/character.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 interface CharacterMeta {
   name: string;
@@ -38,27 +29,27 @@ export class CharacterDAO {
       RETURNING *
     `;
     const params = [user_id.trim(), game_id, name, avatar_url, bio, visibility];
-    const result = await pool.query(sql, params);
+    const result = await query(sql, params);
     return result.rows[0];
   }
 
   async findById(characterId: string): Promise<Record<string, any> | null> {
-    const result = await pool.query(`SELECT * FROM character WHERE id = $1`, [characterId]);
+    const result = await query(`SELECT * FROM character WHERE id = $1`, [characterId]);
     return result.rows[0] || null;
   }
 
   async findByUser(userId: string): Promise<Record<string, any>[]> {
-    const result = await pool.query(`SELECT * FROM character WHERE user_id = $1`, [userId.trim()]);
+    const result = await query(`SELECT * FROM character WHERE user_id = $1`, [userId.trim()]);
     return result.rows;
   }
 
   async findByGame(gameId: string): Promise<Record<string, any>[]> {
-    const result = await pool.query(`SELECT * FROM character WHERE game_id = $1`, [gameId]);
+    const result = await query(`SELECT * FROM character WHERE game_id = $1`, [gameId]);
     return result.rows;
   }
 
   async findAll(): Promise<Record<string, any>[]> {
-    const result = await pool.query(`SELECT * FROM character ORDER BY created_at DESC`);
+    const result = await query(`SELECT * FROM character ORDER BY created_at DESC`);
     return result.rows;
   }
 
@@ -75,11 +66,11 @@ export class CharacterDAO {
       WHERE id = $5
       RETURNING *
     `;
-    const result = await pool.query(sql, [name, avatar_url, bio, visibility, characterId]);
+    const result = await query(sql, [name, avatar_url, bio, visibility, characterId]);
     return result.rows[0];
   }
 
   async delete(characterId: string): Promise<void> {
-    await pool.query(`DELETE FROM character WHERE id = $1`, [characterId]);
+    await query(`DELETE FROM character WHERE id = $1`, [characterId]);
   }
 }
