@@ -1,6 +1,6 @@
 // src/config/env_config.ts
 import dotenv from 'dotenv';
-dotenv.config();
+dotenv.config({ quiet: process.env.NODE_ENV === 'test' });
 
 export const token = process.env.DISCORD_BOT_TOKEN ?? '';
 export const runMode = process.env.RUN_MODE ?? 'development';

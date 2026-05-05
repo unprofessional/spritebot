@@ -1,16 +1,17 @@
 {
   "compilerOptions": {
-    "target": "ES2022",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "baseUrl": "./src",
+    "target": "es2022",
+    "module": "node16",
+    "moduleResolution": "node16",
     "paths": {
-      "@client/*": ["client/*"],
-      "@services/*": ["services/*"]
+      "@client/*": ["./src/client/*"],
+      "@services/*": ["./src/services/*"],
+      "types/*": ["./src/types/*"]
     },
     "rootDir": "./src",
     "outDir": "./dist",
     "strict": true,
+    "isolatedModules": true,
     "esModuleInterop": true,
     "skipLibCheck": true
   },

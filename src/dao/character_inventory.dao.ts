@@ -1,15 +1,6 @@
 // src/dao/character_inventory.dao.ts
 
-import { Pool } from 'pg';
-import { pgHost, pgPort, pgUser, pgPass, pgDb } from '../config/env_config';
-
-const pool = new Pool({
-  user: pgUser,
-  host: pgHost,
-  database: pgDb,
-  password: pgPass,
-  port: Number(pgPort),
-});
+import { query } from '../db/client';
 
 interface InventoryItemInput {
   characterId: string;
@@ -32,12 +23,12 @@ export class CharacterInventoryDAO {
       VALUES ($1, $2, $3, $4, $5)
       RETURNING *
     `;
-    const result = await pool.query(sql, [characterId, name, type, description, equipped]);
+    const result = await query(sql, [characterId, name, type, description, equipped]);
     return result.rows[0];
   }
 
   async findByCharacter(characterId: string): Promise<Record<string, any>[]> {
-    const result = await pool.query(
+    const result = await query(
       `SELECT * FROM character_inventory WHERE character_id = $1 ORDER BY name`,
       [characterId],
     );
@@ -45,15 +36,15 @@ export class CharacterInventoryDAO {
   }
 
   async deleteByCharacter(characterId: string): Promise<void> {
-    await pool.query(`DELETE FROM character_inventory WHERE character_id = $1`, [characterId]);
+    await query(`DELETE FROM character_inventory WHERE character_id = $1`, [characterId]);
   }
 
   async deleteById(itemId: string): Promise<void> {
-    await pool.query(`DELETE FROM character_inventory WHERE id = $1`, [itemId]);
+    await query(`DELETE FROM character_inventory WHERE id = $1`, [itemId]);
   }
 
   async toggleEquipped(itemId: string, equipped: boolean): Promise<Record<string, any>> {
-    const result = await pool.query(
+    const result = await query(
       `UPDATE character_inventory
        SET equipped = $1
        WHERE id = $2
