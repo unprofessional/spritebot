@@ -107,10 +107,9 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   );
   const view = buildCharacterCard(updated, isSelf);
 
-  // 🛠 Workaround: ModalSubmitInteraction lacks `.update()` — use `.editReply()` instead
-  await interaction.reply({
+  await interaction.deferUpdate();
+  await interaction.editReply({
     ...view,
     content: `✅ Updated **${stat.label}**: ${current} ${operator} ${value} → ${next}`,
-    ephemeral: true,
   });
 }
