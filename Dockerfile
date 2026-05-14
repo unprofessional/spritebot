@@ -26,8 +26,9 @@ WORKDIR /app
 # Copy only the package.json and lockfile
 COPY package*.json ./
 
-# Install only production dependencies
-RUN npm ci --omit=dev --verbose
+# Install only production dependencies. Lifecycle scripts are skipped because
+# the root prepare script invokes Husky, which is intentionally dev-only.
+RUN npm ci --omit=dev --ignore-scripts --verbose
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
