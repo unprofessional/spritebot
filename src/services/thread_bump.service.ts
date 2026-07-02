@@ -156,7 +156,6 @@ export class ThreadBumpService {
       } catch (e) {
         // Not fatal: the bump already reset activity and DB was updated
         // Common causes: missing perms to delete, message already deleted by mods, etc.
-        // eslint-disable-next-line no-console
         console.warn(`⚠️ Failed to delete bump message in ${threadId}:`, e);
       }
     }
@@ -247,7 +246,12 @@ export class ThreadBumpService {
 }
 
 function isTerminalThreadError(err: unknown): boolean {
-  const msg = (err as any)?.message ?? '';
+  const msg =
+    err instanceof Error
+      ? err.message
+      : typeof err === 'object' && err !== null && 'message' in err
+        ? String((err as { message?: unknown }).message ?? '')
+        : '';
   // Typical cases when a thread is gone / inaccessible
   return /Unknown Channel|Missing Access|Not a thread channel|cannot fetch thread|Cannot unarchive thread/i.test(
     msg,

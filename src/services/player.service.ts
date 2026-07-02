@@ -1,6 +1,6 @@
 // src/services/player.service.ts
 
-import { PlayerDAO } from '../dao/player.dao';
+import { PlayerDAO, type PlayerServerLinkRow } from '../dao/player.dao';
 
 const playerDAO = new PlayerDAO();
 
@@ -11,7 +11,7 @@ export async function getOrCreatePlayer(
   discordId: string,
   guildId: string,
   role: 'player' | 'gm' = 'player',
-): Promise<Record<string, any>> {
+): Promise<PlayerServerLinkRow> {
   if (!guildId) throw new Error('guildId is required');
   await playerDAO.createGlobalPlayer(discordId);
   return await playerDAO.ensureServerLink(discordId, guildId, role);
@@ -24,7 +24,7 @@ export async function setCurrentCharacter(
   discordId: string,
   guildId: string,
   characterId: string,
-): Promise<Record<string, any>> {
+): Promise<PlayerServerLinkRow> {
   return await playerDAO.setCurrentCharacter(discordId, guildId, characterId);
 }
 
@@ -45,7 +45,7 @@ export async function setCurrentGame(
   discordId: string,
   guildId: string,
   gameId: string,
-): Promise<Record<string, any>> {
+): Promise<PlayerServerLinkRow> {
   console.log('[setCurrentGame] Attempting to set:', { discordId, guildId, gameId });
   const updated = await playerDAO.setCurrentGame(discordId, guildId, gameId);
   console.log('[setCurrentGame] Updated record:', updated);

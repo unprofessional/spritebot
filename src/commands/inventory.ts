@@ -1,12 +1,6 @@
 // src/commands/inventory.ts
 
-import {
-  ActionRowBuilder,
-  CacheType,
-  ChatInputCommandInteraction,
-  MessageActionRowComponentBuilder,
-  SlashCommandBuilder,
-} from 'discord.js';
+import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 
 import { build as buildInventoryCard } from '../components/view_inventory_card';
 import { getCharacterWithInventory } from '../services/inventory.service';
@@ -40,14 +34,14 @@ module.exports = {
 
       const character = await getCharacterWithInventory(characterId);
 
-      if (!character || typeof (character as any).game_id !== 'string') {
+      if (!character || typeof character.game_id !== 'string') {
         return await interaction.reply({
           content: '⚠️ Could not load character or inventory.',
           ephemeral: true,
         });
       }
 
-      const gameId = (character as any).game_id as string;
+      const gameId = character.game_id;
 
       const { valid, warning } = await validateGameAccess({
         gameId,

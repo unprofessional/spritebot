@@ -12,6 +12,14 @@ const drafts = new Map<string, { draft: CharacterDraft; updatedAt: number }>();
 const STALE_TIMEOUT = 1000 * 60 * 30;
 const MAX_DRAFTS = 1000;
 
+function asDraftString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 function getDraftKey(userId: string): string {
   return `draft:${userId}`;
 }
@@ -48,9 +56,9 @@ export async function getTempCharacterData(userId: string): Promise<CharacterDra
 export async function upsertTempCharacterField(
   userId: string,
   fieldKey: string,
-  value: any,
+  value: unknown,
   gameId: string | null = null,
-  meta: any = null,
+  meta: Record<string, unknown> | null = null,
 ): Promise<void> {
   const key = getDraftKey(userId);
   if (!drafts.has(key)) {
@@ -102,8 +110,8 @@ export async function getRemainingRequiredFields(
   ];
 
   for (const core of requiredCore) {
-    const val = draft.data[core.name];
-    if (!val || !val.trim?.()) {
+    const val = asDraftString(draft.data[core.name]);
+    if (!val) {
       missing.push(core);
     }
   }
@@ -114,12 +122,12 @@ export async function getRemainingRequiredFields(
     const baseKey = `game:${template.id}`;
     if (template.field_type === 'count') {
       const meta = draft.data[`meta:${baseKey}`];
-      if (!meta || !meta.max) {
+      if (!isRecord(meta) || meta.max == null) {
         missing.push({ name: baseKey, label: `[GAME] ${template.label}` });
       }
     } else {
-      const val = draft.data[baseKey];
-      if (!val || !val.trim?.()) {
+      const val = asDraftString(draft.data[baseKey]);
+      if (!val) {
         missing.push({ name: baseKey, label: `[GAME] ${template.label}` });
       }
     }
@@ -138,12 +146,14 @@ export async function finalizeCharacterCreation(userId: string, draft: Character
   console.log(`🚀 Finalizing character for user ${userId} in game ${game_id}`);
   console.log('🧾 Full draft:', JSON.stringify(draft, null, 2));
 
-  const name = draft.data['core:name']?.trim();
-  const avatar_url = draft.data['core:avatar_url']?.trim() || null;
-  const rp_display_name = draft.data['core:rp_display_name']?.trim() || null;
-  const rp_display_avatar_url = draft.data['core:rp_display_avatar_url']?.trim() || null;
-  const bio = draft.data['core:bio']?.trim() || null;
-  const visibility = draft.data['core:visibility'] || 'private';
+  const name = asDraftString(draft.data['core:name']);
+  const avatar_url = asDraftString(draft.data['core:avatar_url']) || null;
+  const rp_display_name = asDraftString(draft.data['core:rp_display_name']) || null;
+  const rp_display_avatar_url = asDraftString(draft.data['core:rp_display_avatar_url']) || null;
+  const bio = asDraftString(draft.data['core:bio']) || null;
+  const visibilityValue = draft.data['core:visibility'];
+  const visibility =
+    visibilityValue === 'public' || visibilityValue === 'link-only' ? visibilityValue : 'private';
 
   const character = await characterDAO.create({
     user_id: userId,
@@ -157,15 +167,15 @@ export async function finalizeCharacterCreation(userId: string, draft: Character
   });
 
   const statTemplates = await getStatTemplates(game_id);
-  const statMap: Record<string, any> = {};
+  const statMap: Record<string, { value: string; meta?: Record<string, unknown> }> = {};
 
   for (const template of statTemplates) {
     const baseKey = `game:${template.id}`;
     if (template.field_type === 'count') {
       const meta = draft.data[`meta:${baseKey}`];
-      if (meta?.max != null) {
+      if (isRecord(meta) && meta.max != null) {
         statMap[template.id] = {
-          value: null,
+          value: '',
           meta: {
             current: meta.current ?? meta.max,
             max: meta.max,
@@ -174,8 +184,7 @@ export async function finalizeCharacterCreation(userId: string, draft: Character
       }
     } else if (draft.data[baseKey]) {
       statMap[template.id] = {
-        value: draft.data[baseKey],
-        meta: null,
+        value: asDraftString(draft.data[baseKey]),
       };
     }
   }
@@ -197,4 +206,5 @@ export function purgeStaleDrafts(): void {
   }
 }
 
-setInterval(purgeStaleDrafts, 1000 * 60 * 5);
+const purgeInterval = setInterval(purgeStaleDrafts, 1000 * 60 * 5);
+purgeInterval.unref?.();

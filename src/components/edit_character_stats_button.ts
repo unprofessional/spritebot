@@ -10,9 +10,13 @@ import {
 } from 'discord.js';
 
 import { getCharacterWithStats } from '../services/character.service';
+import type { CharacterStatWithLabel } from '../types/character';
 import { isActiveCharacter } from '../utils/is_active_character';
+import { build as buildCharacterCard } from './view_character_card';
 
 const id = 'editCharacterStat';
+
+type EditableStat = CharacterStatWithLabel & { name?: string };
 
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
@@ -23,7 +27,7 @@ function build(characterId: string): ButtonBuilder {
 
 async function handle(interaction: ButtonInteraction): Promise<void> {
   const [, characterId] = interaction.customId.split(':');
-  const character = (await getCharacterWithStats(characterId as string)) as any;
+  const character = await getCharacterWithStats(characterId);
 
   if (!character) {
     await interaction.update({
@@ -33,8 +37,6 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     });
     return;
   }
-
-  const { build: buildCharacterCard } = require('./view_character_card');
 
   const truncate = (str: string, max = 100) =>
     str?.length > max ? str.slice(0, max - 1) + '…' : str;
@@ -58,18 +60,18 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     { value: 'core:visibility', label: 'Visibility', type: 'short', current: character.visibility },
   ];
 
-  const editableStats = (character.stats || []).filter((stat: any) => {
+  const editableStats = (character.stats || []).filter((stat: EditableStat) => {
     const name = (stat.name || '').toLowerCase();
     return !['name', 'avatar_url', 'bio', 'visibility'].includes(name);
   });
 
   const statOptions = editableStats
     .filter(
-      (stat: any) =>
+      (stat: EditableStat) =>
         (typeof stat.template_id === 'string' && stat.template_id.trim()) ||
         (typeof stat.name === 'string' && stat.name.trim()),
     )
-    .map((stat: any) => {
+    .map((stat: EditableStat) => {
       const identifier = stat.template_id || stat.name;
       return {
         label: String(stat.label || identifier || 'Unnamed'),
@@ -102,7 +104,14 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   const dropdown = new StringSelectMenuBuilder()
     .setCustomId(`editCharacterStatDropdown:${characterId}`)
     .setPlaceholder('🛠️ Manually update a stat or core field')
-    .addOptions(options as StringSelectMenuOptionBuilder[]);
+    .addOptions(
+      options.map((option) =>
+        new StringSelectMenuOptionBuilder()
+          .setLabel(option.label)
+          .setValue(option.value)
+          .setDescription(option.description),
+      ),
+    );
 
   const cancelButton = new ButtonBuilder()
     .setCustomId(`goBackToCharacter:${characterId}`)

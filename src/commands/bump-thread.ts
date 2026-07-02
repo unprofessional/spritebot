@@ -39,16 +39,26 @@ function typeLabel(t: number | undefined): string {
   return `${TYPE_LABEL[t] ?? 'Unknown'}(${t})`;
 }
 
-function chInfo(ch: any): string {
+function getChannelProp(ch: Record<string, unknown>, key: string): unknown {
+  return ch[key];
+}
+
+function chInfo(ch: unknown): string {
   if (!ch) return 'null';
+  if (typeof ch !== 'object') return String(ch);
+
+  const channel = ch as Record<string, unknown>;
   const bits: string[] = [];
-  bits.push(`id=${ch.id ?? 'n/a'}`);
-  bits.push(`name=${ch.name ?? 'n/a'}`);
-  bits.push(`type=${typeLabel(ch.type)}`);
-  if ('isThread' in ch) bits.push(`hasIsThread=${typeof ch.isThread === 'function'}`);
-  if ('parentId' in ch) bits.push(`parentId=${ch.parentId ?? 'n/a'}`);
-  if ('archived' in ch) bits.push(`archived=${ch.archived}`);
-  if ('locked' in ch) bits.push(`locked=${ch.locked}`);
+  const type = getChannelProp(channel, 'type');
+  bits.push(`id=${getChannelProp(channel, 'id') ?? 'n/a'}`);
+  bits.push(`name=${getChannelProp(channel, 'name') ?? 'n/a'}`);
+  bits.push(`type=${typeLabel(typeof type === 'number' ? type : undefined)}`);
+  if ('isThread' in channel) {
+    bits.push(`hasIsThread=${typeof getChannelProp(channel, 'isThread') === 'function'}`);
+  }
+  if ('parentId' in channel) bits.push(`parentId=${getChannelProp(channel, 'parentId') ?? 'n/a'}`);
+  if ('archived' in channel) bits.push(`archived=${getChannelProp(channel, 'archived')}`);
+  if ('locked' in channel) bits.push(`locked=${getChannelProp(channel, 'locked')}`);
   return bits.join(' ');
 }
 
@@ -90,7 +100,7 @@ async function resolveTargetThread(
   }
 
   // 2) Otherwise, use the current channel if it's a thread
-  const ch = interaction.channel as any;
+  const ch = interaction.channel;
   console.log(`[bump-thread] resolve: using current channel -> ${chInfo(ch)}`);
   if (ch && isThreadType(ch.type)) return ch as ThreadChannel;
 
@@ -103,7 +113,7 @@ async function resolveTargetThread(
     return null;
   });
   console.log(`[bump-thread] resolve: fetched by id -> ${chInfo(fetched)}`);
-  if (fetched && isThreadType((fetched as any).type)) return fetched as ThreadChannel;
+  if (fetched && isThreadType(fetched.type)) return fetched as ThreadChannel;
 
   console.log('[bump-thread] resolve: no thread detected (returning null)');
   return null;

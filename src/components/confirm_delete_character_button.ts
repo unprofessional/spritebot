@@ -18,7 +18,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   const [, characterId] = customId.split(':');
 
   try {
-    const character = (await getCharacterWithStats(characterId)) as any;
+    const character = await getCharacterWithStats(characterId);
     if (!character || character.user_id !== user.id) {
       await interaction.reply({
         content: '❌ You do not have permission to delete this character.',
