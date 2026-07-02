@@ -140,6 +140,8 @@ export async function finalizeCharacterCreation(userId: string, draft: Character
 
   const name = draft.data['core:name']?.trim();
   const avatar_url = draft.data['core:avatar_url']?.trim() || null;
+  const rp_display_name = draft.data['core:rp_display_name']?.trim() || null;
+  const rp_display_avatar_url = draft.data['core:rp_display_avatar_url']?.trim() || null;
   const bio = draft.data['core:bio']?.trim() || null;
   const visibility = draft.data['core:visibility'] || 'private';
 
@@ -148,6 +150,8 @@ export async function finalizeCharacterCreation(userId: string, draft: Character
     game_id,
     name,
     avatar_url,
+    rp_display_name,
+    rp_display_avatar_url,
     bio,
     visibility,
   });
