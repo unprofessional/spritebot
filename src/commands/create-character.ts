@@ -84,6 +84,8 @@ module.exports = {
       { name: 'core:name', label: '[CORE] Name' },
       { name: 'core:bio', label: '[CORE] Bio' },
       { name: 'core:avatar_url', label: '[CORE] Avatar URL' },
+      { name: 'core:rp_display_name', label: '[CORE] RP Display Name' },
+      { name: 'core:rp_display_avatar_url', label: '[CORE] RP Display Avatar URL' },
     ];
 
     const gameFields: LabeledField[] = statTemplates.map((f) => ({

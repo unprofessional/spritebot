@@ -60,6 +60,24 @@ function buildCreateCharacterMessage(
     }
   }
 
+  const rpFields = ['core:rp_display_name', 'core:rp_display_avatar_url'];
+  lines.push('');
+  lines.push(`**RP Proxy Fields:** optional`);
+
+  for (const key of rpFields) {
+    const value = draftData[key];
+    const label = key
+      .split(':')[1]
+      .replace(/^rp_/, 'RP ')
+      .replace(/_/g, ' ')
+      .replace(/\b\w/g, (c) => c.toUpperCase());
+    if (value && value.toString().trim()) {
+      lines.push(`- [CORE] ${label} 🟢 ${summarize(value.toString())}`);
+    } else {
+      lines.push(`- [CORE] ${label}`);
+    }
+  }
+
   lines.push('');
 
   if (statTemplates.length) {
@@ -165,6 +183,8 @@ function rebuildCreateCharacterResponse(
   const allFields: CustomField[] = [
     { name: 'core:name', label: '[CORE] Name' },
     { name: 'core:avatar_url', label: '[CORE] Avatar URL' },
+    { name: 'core:rp_display_name', label: '[CORE] RP Display Name' },
+    { name: 'core:rp_display_avatar_url', label: '[CORE] RP Display Avatar URL' },
     { name: 'core:bio', label: '[CORE] Bio' },
     ...statTemplates.map((t) => ({
       name: `game:${t.id}`,

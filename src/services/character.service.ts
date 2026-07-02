@@ -26,6 +26,8 @@ export async function createCharacter({
   gameId,
   name,
   avatar_url = null,
+  rp_display_name = null,
+  rp_display_avatar_url = null,
   bio = null,
   visibility = 'private',
   stats = {},
@@ -36,6 +38,8 @@ export async function createCharacter({
   gameId: string;
   name: string;
   avatar_url?: string | null;
+  rp_display_name?: string | null;
+  rp_display_avatar_url?: string | null;
   bio?: string | null;
   visibility?: 'public' | 'private';
   stats?: Record<string, string | StatFieldEntry>;
@@ -46,6 +50,8 @@ export async function createCharacter({
     game_id: gameId,
     name,
     avatar_url,
+    rp_display_name,
+    rp_display_avatar_url,
     bio,
     visibility,
   });
@@ -139,6 +145,8 @@ export async function updateCharacterMeta(
   fields: Partial<{
     name: string;
     avatar_url: string | null;
+    rp_display_name: string | null;
+    rp_display_avatar_url: string | null;
     bio: string | null;
     visibility: 'public' | 'private';
   }>,
@@ -149,6 +157,8 @@ export async function updateCharacterMeta(
   const merged = {
     name: existing.name,
     avatar_url: existing.avatar_url,
+    rp_display_name: existing.rp_display_name,
+    rp_display_avatar_url: existing.rp_display_avatar_url,
     bio: existing.bio,
     visibility: existing.visibility,
     ...fields,
