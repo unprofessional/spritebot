@@ -17,6 +17,7 @@ At a high level, the bot supports:
 - Creating and editing characters through Discord components and modals
 - Viewing character sheets and public characters
 - Managing character inventory
+- Letting players proxy in-character posts through webhooks with `/ic` and `/ooc`
 - Auto-bumping registered Discord threads on a schedule
 - Restricting certain commands behind subscription/entitlement checks
 
@@ -33,6 +34,10 @@ The repo currently defines these slash commands:
 - `/view-character` - View your active character
 - `/list-characters` - List public characters in the active game
 - `/switch-character` - Switch your active character
+- `/ic` - Set your messages in the current channel to in-character proxy mode
+- `/ooc` - Set your messages in the current channel to out-of-character mode
+- `/ic-edit` - Edit one of your tracked proxied in-character messages
+- `/ic-delete` - Delete one of your tracked proxied in-character messages
 - `/inventory` - View and manage inventory for your active character
 - `/bump-thread` - Register and manage auto-bumped threads
 - `/gift` - Ops-only gifted access management
@@ -72,6 +77,23 @@ They also include game-defined stat fields and optional custom fields.
 ### Inventory
 
 Each character can have inventory entries, along with per-item custom fields stored separately in the database.
+
+### Roleplay Proxy
+
+Players can use `/ic` and `/ooc` to toggle whether their own messages in the current channel should be proxied through a Discord webhook as their active character.
+
+This state is scoped per player and per channel. One player can be IC in a channel while another remains OOC.
+
+When proxying, the bot uses the character's optional RP display fields first:
+
+- RP Display Name
+- RP Display Avatar URL
+
+If those fields are blank, it falls back to the character's normal name and avatar URL.
+
+Spritebot tracks the ownership of every proxied webhook message. Players can pass a proxied message ID or Discord message link to `/ic-edit` or `/ic-delete`, and the bot will only update/delete the message if it was originally proxied by that same Discord user.
+
+For split RP posts, each chunk is a separate proxied Discord message and can be edited or deleted by its own message ID/link.
 
 ### Thread Bumps
 
@@ -118,6 +140,8 @@ Primary tables include:
 - `character_custom_field`
 - `character_inventory`
 - `character_inventory_field`
+- `rp_channel_mode`
+- `rp_proxy_message`
 - `thread_bumps`
 - `entitlements_cache`
 - `gifted_guilds`
@@ -187,7 +211,69 @@ Notes:
 - `OWNER_DISCORD_ID` is used by `/gift` and `/toggle-bypass`
 - production DB auto-init is disabled unless `ALLOW_DB_INIT=true`
 
-### 3. Run the bot in development
+### 3. Discord application setup
+
+Invite the bot with these OAuth2 scopes:
+
+- `bot`
+- `applications.commands`
+
+Enable these gateway intents in code and in the Discord Developer Portal:
+
+- `Guilds`
+- `Guild Messages`
+- `Message Content`
+
+`Message Content` is required for the RP proxy feature because the bot must read a player's message before reposting it through the character webhook.
+
+### 4. Discord server permissions
+
+At minimum, Spritebot needs these permissions in any channel where slash-command UI should work:
+
+- View Channel
+- Use Application Commands
+- Send Messages
+- Embed Links
+- Read Message History
+
+For character sheets, game setup, inventory, buttons, selects, and modals, no elevated server permissions are expected beyond normal interaction access.
+
+RP proxy channels need additional permissions:
+
+- Manage Webhooks
+- Manage Messages
+- Attach Files
+
+Why:
+
+- Manage Webhooks lets Spritebot fetch or create the channel webhook used to post as a character.
+- Manage Messages lets Spritebot delete the original user message after the webhook post succeeds.
+- Attach Files lets Spritebot forward non-`message.txt` attachments with the first proxied message.
+
+Thread bump channels need thread-specific permissions:
+
+- Send Messages in Threads
+- Manage Threads
+- Read Message History
+
+Why:
+
+- Send Messages in Threads lets Spritebot post bump messages.
+- Manage Threads lets Spritebot unarchive locked/archived threads before bumping.
+- Read Message History lets the archive-aware scheduler inspect recent thread activity.
+
+Ops-only commands:
+
+- `/gift` and `/toggle-bypass` are registered only in `DEV_GUILD_ID`.
+- They are Discord administrator commands and also check `OWNER_DISCORD_ID`.
+
+Recommended setup:
+
+- Grant the baseline permissions server-wide or at the category level where Spritebot is used.
+- Grant RP proxy permissions only in channels/categories where players should use `/ic`.
+- Grant thread permissions only in categories containing threads that Spritebot should auto-bump.
+
+### 5. Run the bot in development
 
 ```bash
 npm run start:dev
@@ -201,7 +287,7 @@ On startup, the app will:
 - log in the bot client
 - start the thread bump scheduler
 
-### 4. Build for production
+### 6. Build for production
 
 ```bash
 npm run build

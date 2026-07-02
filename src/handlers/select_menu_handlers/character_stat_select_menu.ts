@@ -54,7 +54,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     const inputStyle = coreField === 'bio' ? TextInputStyle.Paragraph : TextInputStyle.Short;
 
     const modal = new ModalBuilder()
-      .setCustomId(`editCharacterField:${characterId}:${selectedKey}|${label}`)
+      .setCustomId(`editCharacterField:${characterId}:${selectedKey}`)
       .setTitle(truncate(`Edit ${label}`))
       .addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(
