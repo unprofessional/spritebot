@@ -197,4 +197,5 @@ export function purgeStaleDrafts(): void {
   }
 }
 
-setInterval(purgeStaleDrafts, 1000 * 60 * 5);
+const purgeInterval = setInterval(purgeStaleDrafts, 1000 * 60 * 5);
+purgeInterval.unref?.();
