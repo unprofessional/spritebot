@@ -121,7 +121,7 @@ function parseCharacterStats(stats: CharacterWithStats['stats']) {
       current: null,
       max: null,
       type: field_type,
-      sort_index: stat.sort_index ?? (stat as any).template_sort_index ?? 999,
+      sort_index: stat.sort_index ?? 999,
     };
 
     if (field_type === 'count') {

@@ -76,16 +76,31 @@ export async function getCharacterWithStats(
   const custom = await customDAO.findByCharacter(characterId);
   const templates = await getStatTemplates(character.game_id);
 
-  const templateMap = Object.fromEntries(templates.map((t) => [t.id, t]));
+  const statMap = new Map(stats.map((stat) => [stat.template_id, stat]));
+  const templateIds = new Set(templates.map((template) => template.id));
 
-  const enrichedStats: HydratedStatField[] = stats.map((stat) => {
-    const template = templateMap[stat.template_id];
+  const enrichedStats: HydratedStatField[] = templates.map((template) => {
+    const stat = statMap.get(template.id);
     return {
-      ...stat,
-      label: template?.label || stat.template_id,
-      field_type: template?.field_type || 'short',
+      template_id: template.id,
+      value: stat?.value ?? template.default_value ?? '',
+      meta: stat?.meta ?? {},
+      label: template.label || template.id,
+      field_type: template.field_type || 'short',
+      sort_index: template.sort_order ?? 999,
     };
   });
+
+  for (const stat of stats) {
+    if (templateIds.has(stat.template_id)) continue;
+
+    enrichedStats.push({
+      ...stat,
+      label: stat.template_id,
+      field_type: 'short',
+      sort_index: 999,
+    });
+  }
 
   const hydrated: CharacterWithStats = {
     ...(character as CharacterWithStats), // 👈 This cast satisfies TS
@@ -195,7 +210,9 @@ export async function updateStatMetaField(
   const existingStats = await statDAO.findByCharacter(characterId);
   const target = existingStats.find((s) => s.template_id === templateId);
 
-  if (!target) throw new Error(`Stat ${templateId} not found on character ${characterId}`);
+  if (!target) {
+    return statDAO.create(characterId, templateId, '', { [metaKey]: newValue });
+  }
 
   const updatedMeta = {
     ...(target.meta || {}),
