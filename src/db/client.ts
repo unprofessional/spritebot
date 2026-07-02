@@ -170,6 +170,7 @@ export async function resetDb(): Promise<void> {
     'character',
     'stat_template',
     'game',
+    'rp_channel_mode',
     'thread_bumps',
     'entitlements_cache',
     'gifted_guilds',

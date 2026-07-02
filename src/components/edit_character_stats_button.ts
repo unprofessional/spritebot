@@ -42,6 +42,18 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   const coreFields = [
     { value: 'core:name', label: 'Name', type: 'short', current: character.name },
     { value: 'core:avatar_url', label: 'Avatar URL', type: 'short', current: character.avatar_url },
+    {
+      value: 'core:rp_display_name',
+      label: 'RP Display Name',
+      type: 'short',
+      current: character.rp_display_name,
+    },
+    {
+      value: 'core:rp_display_avatar_url',
+      label: 'RP Display Avatar URL',
+      type: 'short',
+      current: character.rp_display_avatar_url,
+    },
     { value: 'core:bio', label: 'Bio', type: 'paragraph', current: character.bio },
     { value: 'core:visibility', label: 'Visibility', type: 'short', current: character.visibility },
   ];

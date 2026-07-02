@@ -112,4 +112,34 @@ describe('character.service', () => {
       }),
     ]);
   });
+
+  test('persists roleplay display fields on character metadata', async () => {
+    const game = await createGame();
+
+    const character = await characterDAO.create({
+      user_id: 'player-1',
+      game_id: game.id,
+      name: 'Garnet Til Alexandros',
+      bio: null,
+      avatar_url: 'https://example.com/full-profile.png',
+      rp_display_name: 'Dagger',
+      rp_display_avatar_url: 'https://example.com/rp-avatar.png',
+    });
+
+    expect(character).toEqual(
+      expect.objectContaining({
+        rp_display_name: 'Dagger',
+        rp_display_avatar_url: 'https://example.com/rp-avatar.png',
+      }),
+    );
+
+    const hydrated = await getCharacterWithStats(character.id);
+
+    expect(hydrated).toEqual(
+      expect.objectContaining({
+        rp_display_name: 'Dagger',
+        rp_display_avatar_url: 'https://example.com/rp-avatar.png',
+      }),
+    );
+  });
 });

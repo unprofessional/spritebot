@@ -18,6 +18,8 @@ export interface Character {
   user_id: string;
   name: string;
   avatar_url?: string | null;
+  rp_display_name?: string | null;
+  rp_display_avatar_url?: string | null;
   bio?: string | null;
   visibility?: 'public' | 'private';
   created_at?: string;

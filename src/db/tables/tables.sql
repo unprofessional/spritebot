@@ -37,11 +37,23 @@ CREATE TABLE character (
   user_id TEXT NOT NULL, -- Discord user ID
   name TEXT NOT NULL,
   avatar_url TEXT,
+  rp_display_name TEXT,
+  rp_display_avatar_url TEXT,
   bio TEXT,
   visibility TEXT DEFAULT 'private' CHECK (visibility IN ('private', 'public', 'link-only')),
   deleted_at TIMESTAMP,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- === ROLEPLAY PROXY CHANNEL MODE ===
+CREATE TABLE rp_channel_mode (
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  is_ic BOOLEAN NOT NULL DEFAULT FALSE,
+  updated_by TEXT NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (guild_id, channel_id)
 );
 
 -- === PLAYER ACCOUNTS (GLOBAL IDENTITY) ===
@@ -157,6 +169,7 @@ CREATE INDEX idx_game_guild_id ON game(guild_id);
 -- Character lookups
 CREATE INDEX idx_character_user_id ON character(user_id);
 CREATE INDEX idx_character_game_id ON character(game_id);
+CREATE INDEX idx_rp_channel_mode_guild_id ON rp_channel_mode(guild_id);
 
 -- Stat lookups
 CREATE INDEX idx_stat_character_id ON character_stat_field(character_id);
