@@ -10,7 +10,7 @@ import type {
 import { CharacterDAO } from '../dao/character.dao';
 import { PlayerDAO } from '../dao/player.dao';
 import { RP_PROXY_TOTAL_CHARACTER_LIMIT, splitRpMessage } from '../utils/rp_message_limits';
-import { isChannelInCharacter } from './rp_channel_mode.service';
+import { isUserInCharacterForChannel } from './rp_channel_mode.service';
 
 const RP_PROXY_WEBHOOK_NAME = 'Spritebot RP Proxy';
 const MESSAGE_TEXT_ATTACHMENT_NAME = 'message.txt';
@@ -95,14 +95,18 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
     return { status: 'ignored', reason: 'channel_cannot_webhook' };
   }
 
-  const isIc = await isChannelInCharacter(message.guildId, message.channelId);
-  if (!isIc) return { status: 'ignored', reason: 'ooc_channel' };
+  const isIc = await isUserInCharacterForChannel(
+    message.guildId,
+    message.channelId,
+    message.author.id,
+  );
+  if (!isIc) return { status: 'ignored', reason: 'user_ooc_in_channel' };
 
   const activeCharacterId = await playerDAO.getCurrentCharacter(message.author.id, message.guildId);
   if (!activeCharacterId) {
     await message.reply({
       content:
-        'This channel is in-character, but you do not have an active character selected. Use `/switch-character` first.',
+        'You are in-character in this channel, but you do not have an active character selected. Use `/switch-character` first.',
       allowedMentions: { parse: [] },
     });
     return { status: 'failed', reason: 'no_active_character' };
@@ -112,7 +116,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
   if (!character) {
     await message.reply({
       content:
-        'This channel is in-character, but I could not find your active character. Use `/switch-character` to select one again.',
+        'You are in-character in this channel, but I could not find your active character. Use `/switch-character` to select one again.',
       allowedMentions: { parse: [] },
     });
     return { status: 'failed', reason: 'character_not_found' };
