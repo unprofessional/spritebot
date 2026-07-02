@@ -1,14 +1,8 @@
-import type {
-  APIEmbed,
-  Attachment,
-  Collection,
-  Message,
-  TextBasedChannel,
-  Webhook,
-} from 'discord.js';
+import type { APIEmbed, Attachment, Client, Collection, Message, Webhook } from 'discord.js';
 
 import { CharacterDAO } from '../dao/character.dao';
 import { PlayerDAO } from '../dao/player.dao';
+import { RpProxyMessageDAO } from '../dao/rp_proxy_message.dao';
 import { RP_PROXY_TOTAL_CHARACTER_LIMIT, splitRpMessage } from '../utils/rp_message_limits';
 import { isUserInCharacterForChannel } from './rp_channel_mode.service';
 
@@ -17,6 +11,7 @@ const MESSAGE_TEXT_ATTACHMENT_NAME = 'message.txt';
 
 const characterDAO = new CharacterDAO();
 const playerDAO = new PlayerDAO();
+const proxyMessageDAO = new RpProxyMessageDAO();
 
 interface ProxyCharacter {
   name?: string | null;
@@ -36,8 +31,15 @@ type WebhookCapableChannel = TextBasedChannel & {
   createWebhook(options: { name: string; reason?: string }): Promise<Webhook>;
 };
 
-function isWebhookCapableChannel(channel: TextBasedChannel): channel is WebhookCapableChannel {
-  return 'fetchWebhooks' in channel && 'createWebhook' in channel;
+type TextBasedChannel = Message['channel'];
+
+function isWebhookCapableChannel(channel: unknown): channel is WebhookCapableChannel {
+  return (
+    !!channel &&
+    typeof channel === 'object' &&
+    'fetchWebhooks' in channel &&
+    'createWebhook' in channel
+  );
 }
 
 function getProxyDisplay(character: ProxyCharacter): { username: string; avatarURL?: string } {
@@ -86,6 +88,101 @@ async function getOrCreateProxyWebhook(channel: WebhookCapableChannel): Promise<
     name: RP_PROXY_WEBHOOK_NAME,
     reason: 'Spritebot roleplay proxy messages',
   });
+}
+
+async function getExistingProxyWebhook(
+  channel: WebhookCapableChannel,
+  webhookId: string,
+): Promise<Webhook | null> {
+  const webhooks = await channel.fetchWebhooks();
+  return webhooks.get(webhookId) ?? null;
+}
+
+async function fetchWebhookCapableChannel(
+  client: Client,
+  channelId: string,
+): Promise<WebhookCapableChannel | null> {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  return isWebhookCapableChannel(channel) ? channel : null;
+}
+
+export type RpProxyMutationResult =
+  | { status: 'updated' }
+  | { status: 'deleted' }
+  | { status: 'not_found' }
+  | { status: 'forbidden' }
+  | { status: 'invalid_content'; reason: string }
+  | { status: 'failed'; reason: string };
+
+export async function editRoleplayProxyMessage({
+  client,
+  guildId,
+  channelId,
+  userId,
+  messageId,
+  content,
+}: {
+  client: Client;
+  guildId: string;
+  channelId: string;
+  userId: string;
+  messageId: string;
+  content: string;
+}): Promise<RpProxyMutationResult> {
+  const trimmed = content.trim();
+  if (!trimmed) return { status: 'invalid_content', reason: 'empty' };
+  if (trimmed.length > 2000) return { status: 'invalid_content', reason: 'too_long' };
+
+  const record = await proxyMessageDAO.findByMessageId(messageId);
+  if (!record || record.guild_id !== guildId || record.channel_id !== channelId) {
+    return { status: 'not_found' };
+  }
+  if (record.user_id !== userId) return { status: 'forbidden' };
+
+  const channel = await fetchWebhookCapableChannel(client, record.channel_id);
+  if (!channel) return { status: 'failed', reason: 'channel_cannot_webhook' };
+
+  const webhook = await getExistingProxyWebhook(channel, record.webhook_id);
+  if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
+
+  await webhook.editMessage(record.proxy_message_id, {
+    content: trimmed,
+    allowedMentions: { parse: [] },
+  });
+  await proxyMessageDAO.touch(record.proxy_message_id);
+
+  return { status: 'updated' };
+}
+
+export async function deleteRoleplayProxyMessage({
+  client,
+  guildId,
+  channelId,
+  userId,
+  messageId,
+}: {
+  client: Client;
+  guildId: string;
+  channelId: string;
+  userId: string;
+  messageId: string;
+}): Promise<RpProxyMutationResult> {
+  const record = await proxyMessageDAO.findByMessageId(messageId);
+  if (!record || record.guild_id !== guildId || record.channel_id !== channelId) {
+    return { status: 'not_found' };
+  }
+  if (record.user_id !== userId) return { status: 'forbidden' };
+
+  const channel = await fetchWebhookCapableChannel(client, record.channel_id);
+  if (!channel) return { status: 'failed', reason: 'channel_cannot_webhook' };
+
+  const webhook = await getExistingProxyWebhook(channel, record.webhook_id);
+  if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
+
+  await webhook.deleteMessage(record.proxy_message_id);
+  await proxyMessageDAO.delete(record.proxy_message_id);
+
+  return { status: 'deleted' };
 }
 
 export async function handleRoleplayProxyMessage(message: Message): Promise<RpProxyResult> {
@@ -143,13 +240,22 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
   const sends = chunks.length ? chunks : [''];
 
   for (let index = 0; index < sends.length; index++) {
-    await webhook.send({
+    const sent = await webhook.send({
       content: sends[index],
       username: display.username,
       avatarURL: display.avatarURL,
       files: index === 0 ? files : [],
       embeds: index === 0 ? embeds : [],
       allowedMentions: { parse: [] },
+    });
+    await proxyMessageDAO.create({
+      proxyMessageId: sent.id,
+      guildId: message.guildId,
+      channelId: message.channelId,
+      userId: message.author.id,
+      characterId: activeCharacterId,
+      webhookId: webhook.id,
+      chunkIndex: index,
     });
   }
 

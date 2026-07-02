@@ -56,6 +56,19 @@ CREATE TABLE rp_channel_mode (
   PRIMARY KEY (guild_id, channel_id, user_id)
 );
 
+-- === ROLEPLAY PROXY MESSAGE OWNERSHIP ===
+CREATE TABLE rp_proxy_message (
+  proxy_message_id TEXT PRIMARY KEY,
+  guild_id TEXT NOT NULL,
+  channel_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  character_id UUID REFERENCES character(id) ON DELETE SET NULL,
+  webhook_id TEXT NOT NULL,
+  chunk_index INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
 -- === PLAYER ACCOUNTS (GLOBAL IDENTITY) ===
 CREATE TABLE player (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -170,6 +183,8 @@ CREATE INDEX idx_game_guild_id ON game(guild_id);
 CREATE INDEX idx_character_user_id ON character(user_id);
 CREATE INDEX idx_character_game_id ON character(game_id);
 CREATE INDEX idx_rp_channel_mode_guild_channel ON rp_channel_mode(guild_id, channel_id);
+CREATE INDEX idx_rp_proxy_message_user_id ON rp_proxy_message(user_id);
+CREATE INDEX idx_rp_proxy_message_channel_id ON rp_proxy_message(channel_id);
 
 -- Stat lookups
 CREATE INDEX idx_stat_character_id ON character_stat_field(character_id);
