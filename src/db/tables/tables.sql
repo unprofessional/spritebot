@@ -235,15 +235,15 @@ EXECUTE FUNCTION update_entitlements_cache_updated_at();
 -- === Indexes tuned for common queries ===
 
 -- Fast “does this guild currently have any active plan (optionally for a SKU)?”
--- Use a partial index limited to currently-active rows.
+-- Expiry is time-relative, so keep the partial predicate immutable and filter ends_at at query time.
 CREATE INDEX idx_entitlements_active_guild_sku
   ON entitlements_cache (guild_id, sku_id)
-  WHERE status = 'active' AND (ends_at IS NULL OR ends_at > NOW());
+  WHERE status = 'active';
 
 -- If you often check “any active at all”, the sku_id join key isn’t needed:
 CREATE INDEX idx_entitlements_active_guild
   ON entitlements_cache (guild_id)
-  WHERE status = 'active' AND (ends_at IS NULL OR ends_at > NOW());
+  WHERE status = 'active';
 
 -- Helpful for debugging/support timelines per guild:
 CREATE INDEX idx_entitlements_guild_updated_at
