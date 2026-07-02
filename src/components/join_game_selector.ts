@@ -2,7 +2,7 @@
 
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
 
-import { getGame } from '../services/game.service';
+import { getGamesByGuild } from '../services/game.service';
 import { getOrCreatePlayer, setCurrentGame } from '../services/player.service';
 import type { Game } from '../types/game'; // Adjust the import path/type name as needed
 
@@ -20,8 +20,7 @@ export async function build(
 > {
   await getOrCreatePlayer(userId, guildId);
 
-  const rawGames = await getGame({ guildId });
-  const games: Game[] = Array.isArray(rawGames) ? (rawGames as Game[]) : [];
+  const games = await getGamesByGuild(guildId);
 
   const eligibleGames = games.filter((game) => game.is_public && game.created_by !== userId);
 
