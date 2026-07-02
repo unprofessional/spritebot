@@ -49,7 +49,7 @@ module.exports = {
       const days = interaction.options.getInteger('days') ?? null;
       const expiresAt = days ? new Date(Date.now() + days * 24 * 3600 * 1000) : null;
 
-      const row = await giftedDAO.upsertGift({
+      await giftedDAO.upsertGift({
         guildId,
         grantedBy: interaction.user.id,
         note,

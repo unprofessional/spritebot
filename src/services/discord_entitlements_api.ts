@@ -12,7 +12,7 @@
 
 const API_BASE = 'https://discord.com/api/v10';
 
-export type DiscordEntitlement = {
+export type DiscordEntitlement = Record<string, unknown> & {
   id: string;
   sku_id: string;
   user_id?: string | null;
@@ -22,6 +22,10 @@ export type DiscordEntitlement = {
   ends_at?: string | null; // ISO
   // ... other fields are ignored
 };
+
+function readOptionalString(value: unknown): string | null {
+  return value ? String(value) : null;
+}
 
 export async function fetchGuildEntitlementsLazy(opts: {
   applicationId: string;
@@ -67,15 +71,19 @@ export async function fetchGuildEntitlementsLazy(opts: {
 
   console.debug(`[EntitlementsAPI] Received ${data.length} entitlements for guild=${guildId}`);
 
-  const mapped = data.map((e: any) => ({
-    id: String(e.id),
-    sku_id: String(e.sku_id),
-    user_id: e.user_id ? String(e.user_id) : null,
-    guild_id: e.guild_id ? String(e.guild_id) : null,
-    application_id: String(e.application_id),
-    starts_at: e.starts_at ?? null,
-    ends_at: e.ends_at ?? null,
-  }));
+  const mapped = data.map((raw): DiscordEntitlement => {
+    const e = raw as Record<string, unknown>;
+    return {
+      ...e,
+      id: String(e.id),
+      sku_id: String(e.sku_id),
+      user_id: readOptionalString(e.user_id),
+      guild_id: readOptionalString(e.guild_id),
+      application_id: String(e.application_id),
+      starts_at: readOptionalString(e.starts_at),
+      ends_at: readOptionalString(e.ends_at),
+    };
+  });
 
   for (const ent of mapped) {
     console.debug(

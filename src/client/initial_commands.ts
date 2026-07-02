@@ -1,6 +1,7 @@
 // src/client/initial_commands.ts
 
 import fs from 'node:fs';
+import { createRequire } from 'node:module';
 import path from 'node:path';
 import {
   BaseInteraction,
@@ -29,7 +30,8 @@ const isProd = process.env.NODE_ENV === 'production' || __dirname.includes('/dis
 const commandExtension = isProd ? '.js' : '.ts';
 const commandDir = isProd
   ? path.resolve(__dirname, '../commands') // dist/commands
-  : path.resolve(__dirname, '../../commands'); // src/commands
+  : path.resolve(__dirname, '../commands'); // src/commands
+const requireCommand = createRequire(__filename);
 
 // --- Types ---
 type CommandModule = {
@@ -54,13 +56,13 @@ const isCommandModule = (x: unknown): x is CommandModule =>
   typeof x === 'object' &&
   'data' in x &&
   'execute' in x &&
-  typeof (x as any).execute === 'function';
+  typeof (x as { execute?: unknown }).execute === 'function';
 
 async function loadCommands(files: string[]): Promise<CommandModule[]> {
   const loaded: CommandModule[] = [];
   for (const file of files) {
     try {
-      const mod = (await import(file)) as { default?: unknown } & Record<string, unknown>;
+      const mod = requireCommand(file) as { default?: unknown } & Record<string, unknown>;
       const candidate = (mod.default ?? mod) as unknown;
       if (isCommandModule(candidate)) {
         loaded.push(candidate);

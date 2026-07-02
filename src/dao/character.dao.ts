@@ -1,6 +1,7 @@
 // src/dao/character.dao.ts
 
 import { query } from '../db/client';
+import type { Character } from '../types/character';
 
 interface CharacterMeta {
   name: string;
@@ -8,7 +9,7 @@ interface CharacterMeta {
   rp_display_name?: string | null;
   rp_display_avatar_url?: string | null;
   bio?: string | null;
-  visibility?: 'public' | 'private';
+  visibility?: 'public' | 'private' | 'link-only';
 }
 
 interface CreateCharacterParams extends CharacterMeta {
@@ -26,7 +27,7 @@ export class CharacterDAO {
     rp_display_avatar_url = null,
     bio = null,
     visibility = 'private',
-  }: CreateCharacterParams): Promise<Record<string, any>> {
+  }: CreateCharacterParams): Promise<Character> {
     const sql = `
       INSERT INTO character (
         user_id,
@@ -51,27 +52,29 @@ export class CharacterDAO {
       bio,
       visibility,
     ];
-    const result = await query(sql, params);
+    const result = await query<Character>(sql, params);
     return result.rows[0];
   }
 
-  async findById(characterId: string): Promise<Record<string, any> | null> {
-    const result = await query(`SELECT * FROM character WHERE id = $1`, [characterId]);
+  async findById(characterId: string): Promise<Character | null> {
+    const result = await query<Character>(`SELECT * FROM character WHERE id = $1`, [characterId]);
     return result.rows[0] || null;
   }
 
-  async findByUser(userId: string): Promise<Record<string, any>[]> {
-    const result = await query(`SELECT * FROM character WHERE user_id = $1`, [userId.trim()]);
+  async findByUser(userId: string): Promise<Character[]> {
+    const result = await query<Character>(`SELECT * FROM character WHERE user_id = $1`, [
+      userId.trim(),
+    ]);
     return result.rows;
   }
 
-  async findByGame(gameId: string): Promise<Record<string, any>[]> {
-    const result = await query(`SELECT * FROM character WHERE game_id = $1`, [gameId]);
+  async findByGame(gameId: string): Promise<Character[]> {
+    const result = await query<Character>(`SELECT * FROM character WHERE game_id = $1`, [gameId]);
     return result.rows;
   }
 
-  async findAll(): Promise<Record<string, any>[]> {
-    const result = await query(`SELECT * FROM character ORDER BY created_at DESC`);
+  async findAll(): Promise<Character[]> {
+    const result = await query<Character>(`SELECT * FROM character ORDER BY created_at DESC`);
     return result.rows;
   }
 
@@ -85,7 +88,7 @@ export class CharacterDAO {
       bio = null,
       visibility = 'private',
     }: CharacterMeta,
-  ): Promise<Record<string, any>> {
+  ): Promise<Character> {
     const sql = `
       UPDATE character
       SET name = $1,
@@ -97,7 +100,7 @@ export class CharacterDAO {
       WHERE id = $7
       RETURNING *
     `;
-    const result = await query(sql, [
+    const result = await query<Character>(sql, [
       name,
       avatar_url,
       rp_display_name,

@@ -1,7 +1,9 @@
 // src/dao/stat_template.dao.ts
 
 import { query } from '../db/client';
-import type { CreateStatTemplateParams } from '../types/stat_template';
+import type { CreateStatTemplateParams, StatTemplate } from '../types/stat_template';
+
+type StatTemplateUpdate = Partial<Omit<CreateStatTemplateParams, 'game_id'>>;
 
 export class StatTemplateDAO {
   async create({
@@ -12,7 +14,7 @@ export class StatTemplateDAO {
     is_required = true,
     sort_order = 0,
     meta = {},
-  }: CreateStatTemplateParams): Promise<Record<string, any>> {
+  }: CreateStatTemplateParams): Promise<StatTemplate> {
     const sql = `
     INSERT INTO stat_template (
       game_id, label, field_type, default_value, is_required, sort_order, meta
@@ -20,7 +22,7 @@ export class StatTemplateDAO {
     VALUES ($1, $2, $3, $4, $5, $6, $7)
     RETURNING *
   `;
-    const result = await query(sql, [
+    const result = await query<StatTemplate>(sql, [
       game_id,
       label,
       field_type,
@@ -32,8 +34,11 @@ export class StatTemplateDAO {
     return result.rows[0];
   }
 
-  async bulkCreate(gameId: string, templateList: Omit<CreateStatTemplateParams, 'game_id'>[] = []) {
-    const created = [];
+  async bulkCreate(
+    gameId: string,
+    templateList: Omit<CreateStatTemplateParams, 'game_id'>[] = [],
+  ): Promise<StatTemplate[]> {
+    const created: StatTemplate[] = [];
     for (const tmpl of templateList) {
       const createdTemplate = await this.create({ ...tmpl, game_id: gameId });
       created.push(createdTemplate);
@@ -41,32 +46,29 @@ export class StatTemplateDAO {
     return created;
   }
 
-  async findById(statId: string): Promise<Record<string, any> | null> {
+  async findById(statId: string): Promise<StatTemplate | null> {
     const sql = `
       SELECT * FROM stat_template
       WHERE id = $1
       LIMIT 1
     `;
-    const result = await query(sql, [statId]);
+    const result = await query<StatTemplate>(sql, [statId]);
     return result.rows[0] || null;
   }
 
-  async findByGame(gameId: string): Promise<Record<string, any>[]> {
+  async findByGame(gameId: string): Promise<StatTemplate[]> {
     const sql = `
       SELECT * FROM stat_template
       WHERE game_id = $1
       ORDER BY sort_order ASC, label ASC
     `;
-    const result = await query(sql, [gameId]);
+    const result = await query<StatTemplate>(sql, [gameId]);
     return result.rows;
   }
 
-  async updateById(
-    templateId: string,
-    updates: Record<string, any>,
-  ): Promise<Record<string, any> | null> {
+  async updateById(templateId: string, updates: StatTemplateUpdate): Promise<StatTemplate | null> {
     const fields: string[] = [];
-    const values: any[] = [];
+    const values: unknown[] = [];
     let idx = 1;
 
     for (const [key, val] of Object.entries(updates)) {
@@ -84,7 +86,7 @@ export class StatTemplateDAO {
     `;
 
     values.push(templateId);
-    const result = await query(sql, values);
+    const result = await query<StatTemplate>(sql, values);
     return result.rows[0];
   }
 
