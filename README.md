@@ -45,6 +45,8 @@ The repo currently defines these slash commands:
 
 Some commands are available to everyone, while others are gated by feature access. The mapping currently lives in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts).
 
+For a player- and GM-facing usage guide, see [INSTRUCTIONS.md](/Users/power/dev/devcru/spritebot/INSTRUCTIONS.md).
+
 ## Core Concepts
 
 ### Games
