@@ -7,6 +7,10 @@ import { startBumpScheduler } from './schedulers/bump_scheduler';
 import { initializeCommands } from './client/initial_commands';
 import { initializeRoleplayProxy } from './client/rp_proxy_events';
 import { initializeDB, testPgConnection } from './db/db';
+import {
+  installShutdownNotifications,
+  sendLifecycleNotification,
+} from './services/lifecycle_notification.service';
 
 dotenv.config();
 
@@ -22,14 +26,17 @@ async function main(): Promise<void> {
   try {
     await initializeCommands(client);
     initializeRoleplayProxy(client);
+    installShutdownNotifications(client);
     await testPgConnection();
     await initializeDB();
-    await client.login(process.env.DISCORD_BOT_TOKEN);
 
     client.once('ready', () => {
       console.log(`✅ Logged in as ${client.user?.tag}`);
       startBumpScheduler(client);
+      void sendLifecycleNotification(client, 'online');
     });
+
+    await client.login(process.env.DISCORD_BOT_TOKEN);
   } catch (err) {
     console.error('❌ Bot startup failed:', err);
     process.exit(1);
