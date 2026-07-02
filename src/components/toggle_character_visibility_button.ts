@@ -4,6 +4,7 @@ import { ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
 
 import { getCharacterWithStats, updateCharacterMeta } from '../services/character.service';
 import { getCurrentCharacter } from '../services/player.service';
+import { build as buildCharacterCard } from './view_character_card';
 
 const id = 'handleToggleCharacterVisibilityButton';
 
@@ -20,7 +21,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   const [, characterId] = interaction.customId.split(':');
 
   try {
-    const character = (await getCharacterWithStats(characterId)) as any;
+    const character = await getCharacterWithStats(characterId);
 
     if (!character) {
       await interaction.reply({
@@ -35,9 +36,14 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
 
     await updateCharacterMeta(characterId, { visibility: newVisibility });
 
-    const updated = (await getCharacterWithStats(characterId)) as any;
-
-    const { build: buildCharacterCard } = require('./view_character_card');
+    const updated = await getCharacterWithStats(characterId);
+    if (!updated) {
+      await interaction.reply({
+        content: '⚠️ Character not found after updating visibility.',
+        ephemeral: true,
+      });
+      return;
+    }
 
     const userId = interaction.user.id;
     const guildId = interaction.guildId!;

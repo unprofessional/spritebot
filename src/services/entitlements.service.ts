@@ -1,9 +1,9 @@
 // src/services/entitlements.service.ts
 
 import type { FeatureKey } from '../access/features';
-import { featuresForSkus } from './plans';
 import { EntitlementsCacheDAO } from '../dao/entitlements_cache.dao';
 import { fetchGuildEntitlementsLazy } from './discord_entitlements_api';
+import { featuresForSkus } from './plans';
 
 const dao = new EntitlementsCacheDAO();
 
@@ -63,7 +63,7 @@ export async function getEntitlementsFor({
           status: isActive ? 'active' : 'expired',
           startsAt: e.starts_at ?? new Date(0).toISOString(),
           endsAt: e.ends_at ?? null,
-          raw: e as any,
+          raw: e,
         });
       }
 

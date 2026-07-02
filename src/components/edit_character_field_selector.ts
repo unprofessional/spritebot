@@ -17,7 +17,11 @@ interface FieldDescriptor {
   field_type?: string;
 }
 
-type DraftData = Record<string, any>;
+type DraftData = Record<string, unknown>;
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
 
 /**
  * Truncates a string for use in labels or titles.
@@ -36,7 +40,7 @@ export function build(
   const filledFields = allFields.filter((f) => {
     if (f.field_type === 'count') {
       const meta = draftData[`meta:${f.name}`];
-      return meta?.max != null;
+      return isRecord(meta) && meta.max != null;
     } else {
       const val = draftData?.[f.name];
       return typeof val === 'string' && val.trim().length > 0;

@@ -4,6 +4,7 @@ import { CharacterWithInventory, InventoryItem } from 'types/character';
 import { CharacterDAO } from '../dao/character.dao';
 import { CharacterInventoryDAO } from '../dao/character_inventory.dao';
 import { CharacterInventoryFieldDAO } from '../dao/character_inventory_field.dao';
+import type { FieldInput } from '../types/field_input';
 
 const characterDAO = new CharacterDAO();
 const inventoryDAO = new CharacterInventoryDAO();
@@ -22,7 +23,7 @@ export async function createItem(
     type?: string | null;
     description?: string | null;
     equipped?: boolean;
-    fields?: Record<string, any>;
+    fields?: Record<string, FieldInput>;
   },
 ) {
   const item = await inventoryDAO.create({
@@ -75,6 +76,7 @@ export async function getCharacterWithInventory(
 
   return {
     id: character.id,
+    game_id: character.game_id,
     name: character.name,
     inventory,
   };
@@ -83,13 +85,13 @@ export async function getCharacterWithInventory(
 export async function updateField(
   inventoryId: string,
   name: string,
-  value: any,
-  meta: Record<string, any> = {},
+  value: string,
+  meta: Record<string, unknown> = {},
 ) {
   return fieldDAO.create(inventoryId, name, value, meta);
 }
 
-export async function updateFields(inventoryId: string, fieldMap: Record<string, any>) {
+export async function updateFields(inventoryId: string, fieldMap: Record<string, FieldInput>) {
   return fieldDAO.bulkUpsert(inventoryId, fieldMap);
 }
 

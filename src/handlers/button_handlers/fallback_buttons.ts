@@ -27,7 +27,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
   try {
     const allCharacters = await getCharactersByUser(userId, guildId);
-    const character = allCharacters.find((c) => c.guild_id === guildId) || allCharacters[0];
+    const character = allCharacters[0];
 
     if (!character) {
       await interaction.reply({

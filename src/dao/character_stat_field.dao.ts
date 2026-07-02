@@ -2,9 +2,38 @@
 
 import { query } from '../db/client';
 
+type JsonObject = Record<string, unknown>;
+
 export interface StatFieldEntry {
   value: string;
-  meta?: Record<string, any>;
+  meta?: JsonObject;
+}
+
+export interface CharacterStatFieldRow {
+  id?: string;
+  character_id?: string;
+  template_id: string;
+  value: string;
+  meta: JsonObject;
+}
+
+interface RawCharacterStatFieldRow {
+  id?: string;
+  character_id?: string;
+  template_id: string;
+  value: string;
+  meta: JsonObject | string | null;
+}
+
+function parseMeta(meta: JsonObject | string | null | undefined): JsonObject {
+  if (typeof meta === 'string') {
+    const parsed = JSON.parse(meta || '{}') as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as JsonObject)
+      : {};
+  }
+
+  return meta ?? {};
 }
 
 export class CharacterStatFieldDAO {
@@ -12,8 +41,8 @@ export class CharacterStatFieldDAO {
     characterId: string,
     templateId: string,
     value: string,
-    meta: Record<string, any> = {},
-  ): Promise<Record<string, any>> {
+    meta: JsonObject = {},
+  ): Promise<CharacterStatFieldRow> {
     const sql = `
       INSERT INTO character_stat_field (character_id, template_id, value, meta)
       VALUES ($1, $2, $3, $4)
@@ -21,24 +50,29 @@ export class CharacterStatFieldDAO {
       DO UPDATE SET value = EXCLUDED.value, meta = EXCLUDED.meta
       RETURNING *
     `;
-    const result = await query(sql, [characterId, templateId, value, JSON.stringify(meta)]);
+    const result = await query<RawCharacterStatFieldRow>(sql, [
+      characterId,
+      templateId,
+      value,
+      JSON.stringify(meta),
+    ]);
     const row = result.rows[0];
 
     return {
       ...row,
-      meta: typeof row.meta === 'string' ? JSON.parse(row.meta || '{}') : row.meta || {},
+      meta: parseMeta(row.meta),
     };
   }
 
   async bulkUpsert(
     characterId: string,
     statMap: Record<string, StatFieldEntry | string> = {},
-  ): Promise<Record<string, any>[]> {
-    const results: Record<string, any>[] = [];
+  ): Promise<CharacterStatFieldRow[]> {
+    const results: CharacterStatFieldRow[] = [];
 
     for (const [templateId, entry] of Object.entries(statMap)) {
       let value: string;
-      let meta: Record<string, any>;
+      let meta: JsonObject;
 
       if (typeof entry === 'object' && entry !== null) {
         value = entry.value ?? '';
@@ -57,8 +91,8 @@ export class CharacterStatFieldDAO {
 
   async findByCharacter(
     characterId: string,
-  ): Promise<{ template_id: string; value: string; meta: Record<string, any> }[]> {
-    const result = await query(
+  ): Promise<{ template_id: string; value: string; meta: JsonObject }[]> {
+    const result = await query<RawCharacterStatFieldRow>(
       `SELECT template_id, value, meta FROM character_stat_field WHERE character_id = $1 ORDER BY template_id`,
       [characterId],
     );
@@ -66,7 +100,7 @@ export class CharacterStatFieldDAO {
     return result.rows.map((row) => ({
       template_id: row.template_id,
       value: row.value,
-      meta: typeof row.meta === 'string' ? JSON.parse(row.meta || '{}') : row.meta || {},
+      meta: parseMeta(row.meta),
     }));
   }
 

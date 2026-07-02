@@ -97,7 +97,6 @@ function buildActionRow(character: CharacterWithStats) {
   );
 }
 
-// Local type to replace all `any`
 interface ParsedStat {
   label: string;
   value: string | null;
@@ -125,8 +124,10 @@ function parseCharacterStats(stats: CharacterWithStats['stats']) {
     };
 
     if (field_type === 'count') {
-      bucket.max = meta.max ?? null;
-      bucket.current = meta.current ?? meta.max ?? null;
+      const max = typeof meta.max === 'number' ? meta.max : null;
+      const current = typeof meta.current === 'number' ? meta.current : max;
+      bucket.max = max;
+      bucket.current = current;
     } else {
       bucket.value = value ?? null;
     }
