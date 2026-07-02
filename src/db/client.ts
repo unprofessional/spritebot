@@ -30,7 +30,7 @@ type TestDbState = {
   schemaApplied?: boolean;
 };
 
-const TEST_DB_STATE_KEY = '__SOULBOT_TEST_DB_STATE__';
+const TEST_DB_STATE_KEY = '__SPRITEBOT_TEST_DB_STATE__';
 
 let client: DbClient | undefined;
 let pool: Pool | undefined;
