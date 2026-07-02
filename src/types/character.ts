@@ -57,6 +57,7 @@ export interface HydratedStatField {
   meta: Record<string, any>;
   label: string;
   field_type: string;
+  sort_index?: number;
 }
 
 export interface HydratedCustomField {
