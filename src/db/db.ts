@@ -39,6 +39,7 @@ export async function initializeDB(): Promise<void> {
       'character_inventory_field',
       'thread_bumps', // <— NEW
       'rp_channel_mode',
+      'rp_proxy_message',
     ];
 
     // 🔍 Check which tables exist
