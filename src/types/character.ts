@@ -7,7 +7,7 @@ export interface CharacterDraft {
   id: string;
   user_id: string;
   game_id: string;
-  data: Record<string, any>;
+  data: Record<string, unknown>;
   created_at?: string;
   updated_at?: string;
 }
@@ -21,7 +21,7 @@ export interface Character {
   rp_display_name?: string | null;
   rp_display_avatar_url?: string | null;
   bio?: string | null;
-  visibility?: 'public' | 'private';
+  visibility?: 'public' | 'private' | 'link-only';
   created_at?: string;
   updated_at?: string;
 }
@@ -49,6 +49,7 @@ export interface InventoryItem {
 
 export interface CharacterWithInventory {
   id: string;
+  game_id: string;
   name: string;
   inventory: InventoryItem[];
 }
@@ -56,7 +57,7 @@ export interface CharacterWithInventory {
 export interface HydratedStatField {
   template_id: string;
   value: string;
-  meta: Record<string, any>;
+  meta: Record<string, unknown>;
   label: string;
   field_type: string;
   sort_index?: number;
@@ -65,11 +66,11 @@ export interface HydratedStatField {
 export interface HydratedCustomField {
   name: string;
   value: string;
-  meta: Record<string, any>;
+  meta: Record<string, unknown>;
 }
 
 export interface UserDefinedField {
   name: string;
   label: string; // make required (was: label?: string)
-  meta?: Record<string, any>;
+  meta?: Record<string, unknown>;
 }

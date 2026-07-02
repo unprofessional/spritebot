@@ -56,7 +56,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
   let current: number;
   if (stat.field_type === 'count') {
-    current = parseInt(stat.meta?.current ?? stat.meta?.max ?? '0', 10);
+    current = parseInt(String(stat.meta?.current ?? stat.meta?.max ?? '0'), 10);
   } else if (stat.field_type === 'number') {
     current = parseInt(stat.value ?? '0', 10);
   } else {

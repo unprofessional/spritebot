@@ -56,7 +56,7 @@ const isCommandModule = (x: unknown): x is CommandModule =>
   typeof x === 'object' &&
   'data' in x &&
   'execute' in x &&
-  typeof (x as any).execute === 'function';
+  typeof (x as { execute?: unknown }).execute === 'function';
 
 async function loadCommands(files: string[]): Promise<CommandModule[]> {
   const loaded: CommandModule[] = [];

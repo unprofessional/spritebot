@@ -18,6 +18,10 @@ function summarize(value: string, max = 40): string {
   return cleaned.length > max ? `${cleaned.slice(0, max - 1)}…` : cleaned;
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value);
+}
+
 /**
  * Constructs the character creation content message.
  */
@@ -84,8 +88,8 @@ function buildCreateCharacterMessage(
     const filledGameCount = statTemplates.filter((t) => {
       const fieldKey = `game:${t.id}`;
       if (t.field_type === 'count') {
-        const meta = draftData[`meta:${fieldKey}`] as Record<string, any>;
-        return meta?.max != null;
+        const meta = draftData[`meta:${fieldKey}`];
+        return isRecord(meta) && meta.max != null;
       } else {
         const value = draftData[fieldKey];
         return value && value.toString().trim();
@@ -104,8 +108,8 @@ function buildCreateCharacterMessage(
       let display = '';
 
       if (t.field_type === 'count') {
-        const meta = draftData[`meta:${fieldKey}`] as Record<string, any>;
-        if (meta?.max != null) {
+        const meta = draftData[`meta:${fieldKey}`];
+        if (isRecord(meta) && meta.max != null) {
           filled = true;
           display = `${meta.current ?? meta.max} / ${meta.max}`;
         }
