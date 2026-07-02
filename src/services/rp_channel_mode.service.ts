@@ -2,20 +2,24 @@ import { RpChannelModeDAO } from '../dao/rp_channel_mode.dao';
 
 const rpChannelModeDAO = new RpChannelModeDAO();
 
-export async function setChannelInCharacterMode({
+export async function setUserChannelInCharacterMode({
   guildId,
   channelId,
+  userId,
   isIc,
-  updatedBy,
 }: {
   guildId: string;
   channelId: string;
+  userId: string;
   isIc: boolean;
-  updatedBy: string;
 }) {
-  return rpChannelModeDAO.setMode({ guildId, channelId, isIc, updatedBy });
+  return rpChannelModeDAO.setMode({ guildId, channelId, userId, isIc });
 }
 
-export async function isChannelInCharacter(guildId: string, channelId: string): Promise<boolean> {
-  return rpChannelModeDAO.isInCharacter(guildId, channelId);
+export async function isUserInCharacterForChannel(
+  guildId: string,
+  channelId: string,
+  userId: string,
+): Promise<boolean> {
+  return rpChannelModeDAO.isInCharacter(guildId, channelId, userId);
 }
