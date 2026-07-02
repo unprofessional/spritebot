@@ -1,17 +1,11 @@
-import {
-  CacheType,
-  ChatInputCommandInteraction,
-  PermissionFlagsBits,
-  SlashCommandBuilder,
-} from 'discord.js';
+import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 
-import { setChannelInCharacterMode } from '../services/rp_channel_mode.service';
+import { setUserChannelInCharacterMode } from '../services/rp_channel_mode.service';
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('ic')
-    .setDescription('Set this channel to in-character roleplay proxy mode.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageChannels),
+    .setDescription('Set your messages in this channel to in-character roleplay proxy mode.'),
 
   async execute(interaction: ChatInputCommandInteraction<CacheType>) {
     const { channelId, guildId, user } = interaction;
@@ -23,16 +17,16 @@ module.exports = {
       });
     }
 
-    await setChannelInCharacterMode({
+    await setUserChannelInCharacterMode({
       guildId,
       channelId,
+      userId: user.id,
       isIc: true,
-      updatedBy: user.id,
     });
 
     return interaction.reply({
       content:
-        '✅ This channel is now in-character. Player messages will proxy through their active character.',
+        '✅ You are now in-character in this channel. Your messages here will proxy through your active character.',
       ephemeral: true,
     });
   },
