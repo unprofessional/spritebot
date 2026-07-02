@@ -192,6 +192,10 @@ PG_USER=postgres
 PG_PASS=your_password
 PG_DB=spritebot
 
+# Lifecycle status notifications
+LIFECYCLE_NOTIFY_GUILD_ID=1170400834270548009
+LIFECYCLE_NOTIFY_CHANNEL_ID=1522327870221975674
+
 # Thread bump tuning
 BUMP_DEFAULT_MINUTES=10050
 BUMP_BUFFER_MINUTES=30
@@ -209,6 +213,7 @@ Notes:
 
 - `DEV_GUILD_ID` is used for registering ops-only commands
 - `OWNER_DISCORD_ID` is used by `/gift` and `/toggle-bypass`
+- `LIFECYCLE_NOTIFY_GUILD_ID` and `LIFECYCLE_NOTIFY_CHANNEL_ID` control where startup/shutdown status messages are posted
 - production DB auto-init is disabled unless `ALLOW_DB_INIT=true`
 
 ### 3. Discord application setup
@@ -237,6 +242,12 @@ At minimum, Spritebot needs these permissions in any channel where slash-command
 - Read Message History
 
 For character sheets, game setup, inventory, buttons, selects, and modals, no elevated server permissions are expected beyond normal interaction access.
+
+Lifecycle notification channels need the baseline channel permissions so Spritebot can announce when it comes online or is shutting down/restarting:
+
+- View Channel
+- Send Messages
+- Read Message History
 
 RP proxy channels need additional permissions:
 
@@ -305,6 +316,8 @@ docker compose up --build
 ```
 
 The container expects a `.env` file to be present and does not currently provision PostgreSQL for you, so you will still need a reachable database.
+
+TODO: Add production restart/deploy steps for draining active Discord and database work before stopping the container, so shutdown notifications and in-flight operations have time to finish cleanly.
 
 ## Feature Access Model
 
