@@ -153,6 +153,59 @@ Inventory is tied to your active character, so switch characters first if you ar
 
 Items have a text name, optional type/category, optional description, and quantity. Large inventories are shown as separate paginated views from the main character sheet.
 
+You can also open inventory from your character sheet:
+
+1. Run `/view-character`.
+2. Click `🎒 Inventory`.
+
+### Adding Items
+
+1. Open your inventory.
+2. Click `➕ Add Item`.
+3. Enter the item name.
+4. Optionally enter an item type/category, quantity, and description.
+5. Submit the modal.
+
+The inventory message updates in place after the item is added.
+
+### Viewing Or Editing Item Details
+
+The main inventory list is intentionally compact. It shows item name, quantity, type/category, and whether the item is equipped. Long descriptions are not shown in the list.
+
+To view or edit item details:
+
+1. Open your inventory.
+2. Use the `View/Edit an inventory item` dropdown.
+3. Pick the item.
+4. Click `View/Edit Item`.
+5. Update the fields in the modal, or read the existing details.
+6. Submit the modal if you made changes.
+
+### Equipping Items
+
+Equipped items are marked with `✅`.
+
+To equip or unequip an item:
+
+1. Open your inventory.
+2. Use the `View/Edit an inventory item` dropdown.
+3. Pick the item.
+4. Click `Equip Item` or `Unequip Item`.
+
+### Deleting Items
+
+To delete one item:
+
+1. Open your inventory.
+2. Use the `View/Edit an inventory item` dropdown.
+3. Pick the item.
+4. Click `Delete Item`.
+5. Confirm the deletion.
+
+To delete everything in your active character's inventory, click `🗑️ Delete All` and confirm.
+
+Use `↩️ Go Back` to return to the inventory list without changing the selected item.
+
 ## Troubleshooting
 
 If `/create-character` says you have not joined a game, use `/join-game` first.
