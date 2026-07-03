@@ -24,7 +24,7 @@ export class CharacterInventoryFieldDAO {
     return {
       name: row.name,
       value: row.value,
-      meta: JSON.parse(row.meta || '{}'),
+      meta: parseMeta(row.meta),
     };
   }
 
@@ -55,7 +55,7 @@ export class CharacterInventoryFieldDAO {
     return result.rows.map((row) => ({
       name: row.name,
       value: row.value,
-      meta: JSON.parse(row.meta || '{}'),
+      meta: parseMeta(row.meta),
     }));
   }
 
@@ -66,4 +66,11 @@ export class CharacterInventoryFieldDAO {
   async deleteById(fieldId: string): Promise<void> {
     await query(`DELETE FROM character_inventory_field WHERE id = $1`, [fieldId]);
   }
+}
+
+function parseMeta(meta: unknown): Meta {
+  if (!meta) return {};
+  if (typeof meta === 'string') return JSON.parse(meta || '{}');
+  if (typeof meta === 'object') return meta as Meta;
+  return {};
 }
