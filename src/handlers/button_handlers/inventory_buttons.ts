@@ -13,20 +13,23 @@ import {
 import { build as buildInventoryCard } from '../../components/view_inventory_card';
 import { belongsToUser } from '../../services/character.service';
 import {
+  deleteItemForCharacter,
   deleteInventoryByCharacter,
   getCharacterWithInventory,
 } from '../../services/inventory.service';
+import { buildEditModal } from '../select_menu_handlers/inventory_item_select';
 
 export async function handle(interaction: ButtonInteraction): Promise<void> {
   const { customId } = interaction;
 
   if (customId.startsWith('add_inventory_item:')) {
-    const [, characterId] = customId.split(':');
+    const [, characterId, rawPage] = customId.split(':');
 
     if (!(await canUseInventory(interaction, characterId))) return;
 
+    const page = parseInt(rawPage, 10) || 0;
     const modal = new ModalBuilder()
-      .setCustomId(`addInventoryModal:${characterId}`)
+      .setCustomId(`addInventoryModal:${characterId}:${page}`)
       .setTitle('Add Inventory Item')
       .addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -120,40 +123,104 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId.startsWith('clear_inventory:')) {
-    const [, characterId] = customId.split(':');
+  if (customId.startsWith('edit_inventory_item:')) {
+    const [, characterId, itemId, rawPage] = customId.split(':');
+    try {
+      if (!(await canUseInventory(interaction, characterId))) return;
+
+      const page = parseInt(rawPage, 10) || 0;
+      await buildEditModal(interaction, characterId, itemId, page);
+    } catch (err) {
+      console.error('Error preparing inventory item edit:', err);
+      await interaction.reply({
+        content: '❌ Failed to edit inventory item.',
+        ephemeral: true,
+      });
+    }
+    return;
+  }
+
+  if (customId.startsWith('delete_inventory_item:')) {
+    const [, characterId, itemId, rawPage] = customId.split(':');
 
     if (!(await canUseInventory(interaction, characterId))) return;
 
+    const page = parseInt(rawPage, 10) || 0;
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`confirm_clear_inventory:${characterId}`)
-        .setLabel('Yes, Delete All Items')
+        .setCustomId(`confirm_delete_inventory_item:${characterId}:${itemId}:${page}`)
+        .setLabel('Yes, Delete Item')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId('cancel_clear_inventory')
+        .setCustomId(`cancel_inventory_item_action:${characterId}:${page}`)
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.reply({
+    await interaction.update({
+      content: '⚠️ Delete this inventory item?',
+      components: [confirmRow],
+    });
+    return;
+  }
+
+  if (customId.startsWith('confirm_delete_inventory_item:')) {
+    const [, characterId, itemId, rawPage] = customId.split(':');
+    try {
+      if (!(await canUseInventory(interaction, characterId))) return;
+
+      await deleteItemForCharacter(characterId, itemId);
+      const page = parseInt(rawPage, 10) || 0;
+      await updateInventoryMessage(interaction, characterId, page, '🗑️ Inventory item deleted.');
+    } catch (err) {
+      console.error('Error deleting inventory item:', err);
+      await interaction.reply({
+        content: '❌ Failed to delete inventory item.',
+        ephemeral: true,
+      });
+    }
+    return;
+  }
+
+  if (customId.startsWith('cancel_inventory_item_action:')) {
+    const [, characterId, rawPage] = customId.split(':');
+    const page = parseInt(rawPage, 10) || 0;
+    await updateInventoryMessage(interaction, characterId, page);
+    return;
+  }
+
+  if (customId.startsWith('clear_inventory:')) {
+    const [, characterId, rawPage] = customId.split(':');
+
+    if (!(await canUseInventory(interaction, characterId))) return;
+
+    const page = parseInt(rawPage, 10) || 0;
+    const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`confirm_clear_inventory:${characterId}:${page}`)
+        .setLabel('Yes, Delete All Items')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`cancel_clear_inventory:${characterId}:${page}`)
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary),
+    );
+
+    await interaction.update({
       content: '⚠️ Are you sure you want to delete all inventory items for this character?',
       components: [confirmRow],
-      ephemeral: true,
     });
     return;
   }
 
   if (customId.startsWith('confirm_clear_inventory:')) {
-    const [, characterId] = customId.split(':');
+    const [, characterId, rawPage] = customId.split(':');
     try {
       if (!(await canUseInventory(interaction, characterId))) return;
 
       await deleteInventoryByCharacter(characterId);
-      await interaction.update({
-        content: '🗑️ Inventory cleared.',
-        components: [],
-      });
+      const page = parseInt(rawPage, 10) || 0;
+      await updateInventoryMessage(interaction, characterId, page, '🗑️ Inventory cleared.');
     } catch (err) {
       console.error('Error clearing inventory:', err);
       await interaction.update({
@@ -164,13 +231,36 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId === 'cancel_clear_inventory') {
+  if (customId.startsWith('cancel_clear_inventory:')) {
+    const [, characterId, rawPage] = customId.split(':');
+    const page = parseInt(rawPage, 10) || 0;
+    await updateInventoryMessage(interaction, characterId, page);
+    return;
+  }
+}
+
+export async function updateInventoryMessage(
+  interaction: ButtonInteraction,
+  characterId: string,
+  page = 0,
+  content: string | null = null,
+): Promise<void> {
+  const character = await getCharacterWithInventory(characterId);
+  if (!character) {
     await interaction.update({
-      content: '❎ Inventory deletion cancelled.',
+      content: '❌ Character not found.',
+      embeds: [],
       components: [],
     });
     return;
   }
+
+  const { embeds, components } = buildInventoryCard(character, page);
+  await interaction.update({
+    content,
+    embeds,
+    components,
+  });
 }
 
 async function canUseInventory(

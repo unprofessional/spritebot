@@ -3,9 +3,11 @@ import {
   APIActionRowComponent,
   APIButtonComponent,
   APIEmbed,
+  APIStringSelectComponent,
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  StringSelectMenuBuilder,
 } from 'discord.js';
 
 export const id = 'viewInventoryCard';
@@ -40,7 +42,7 @@ export function build(
   page = 0,
 ): {
   embeds: APIEmbed[];
-  components: APIActionRowComponent<APIButtonComponent>[];
+  components: APIActionRowComponent<APIButtonComponent | APIStringSelectComponent>[];
 } {
   const items = character.inventory || [];
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -69,16 +71,22 @@ export function build(
 
   const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`add_inventory_item:${character.id}`)
+      .setCustomId(`add_inventory_item:${character.id}:${safePage}`)
       .setLabel('➕ Add Item')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`clear_inventory:${character.id}`)
+      .setCustomId(`clear_inventory:${character.id}:${safePage}`)
       .setLabel('🗑️ Delete All')
       .setStyle(ButtonStyle.Danger),
   );
 
-  const rows: APIActionRowComponent<APIButtonComponent>[] = [controls.toJSON()];
+  const rows: APIActionRowComponent<APIButtonComponent | APIStringSelectComponent>[] = [
+    controls.toJSON(),
+  ];
+
+  if (pageItems.length > 0) {
+    rows.push(buildEditSelectRow(character.id, safePage, pageItems).toJSON());
+  }
 
   if (totalPages > 1) {
     rows.push(buildPaginationRow(character.id, safePage, totalPages).toJSON());
@@ -88,6 +96,30 @@ export function build(
     embeds: [embed.toJSON()],
     components: rows,
   };
+}
+
+function buildEditSelectRow(
+  characterId: string,
+  page: number,
+  items: InventoryCharacter['inventory'],
+): ActionRowBuilder<StringSelectMenuBuilder> {
+  const select = new StringSelectMenuBuilder()
+    .setCustomId(`editInventoryItemSelect:${characterId}:${page}`)
+    .setPlaceholder('Edit an inventory item')
+    .addOptions(
+      items.map((item) => ({
+        label: truncate(item.name, 100),
+        value: item.id,
+        description: truncate(
+          [item.quantity > 1 ? `x${item.quantity}` : null, item.type, item.description]
+            .filter(Boolean)
+            .join(' • ') || 'Inventory item',
+          100,
+        ),
+      })),
+    );
+
+  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
 }
 
 function buildPaginationRow(

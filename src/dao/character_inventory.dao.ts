@@ -21,6 +21,13 @@ interface InventoryItemInput {
   equipped?: boolean;
 }
 
+interface InventoryItemUpdateInput {
+  name: string;
+  type?: string | null;
+  description?: string | null;
+  quantity?: number;
+}
+
 export class CharacterInventoryDAO {
   async create({
     characterId,
@@ -52,6 +59,31 @@ export class CharacterInventoryDAO {
       [characterId],
     );
     return result.rows;
+  }
+
+  async findById(itemId: string): Promise<CharacterInventoryRow | null> {
+    const result = await query<CharacterInventoryRow>(
+      `SELECT * FROM character_inventory WHERE id = $1`,
+      [itemId],
+    );
+    return result.rows[0] || null;
+  }
+
+  async updateById(
+    itemId: string,
+    { name, type = null, description = null, quantity = 1 }: InventoryItemUpdateInput,
+  ): Promise<CharacterInventoryRow> {
+    const result = await query<CharacterInventoryRow>(
+      `UPDATE character_inventory
+       SET name = $1,
+           type = $2,
+           description = $3,
+           quantity = $4
+       WHERE id = $5
+       RETURNING *`,
+      [name, type, description, quantity, itemId],
+    );
+    return result.rows[0];
   }
 
   async deleteByCharacter(characterId: string): Promise<void> {

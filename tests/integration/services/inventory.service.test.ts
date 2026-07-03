@@ -2,8 +2,10 @@ import { CharacterDAO } from '../../../src/dao/character.dao';
 import { GameDAO } from '../../../src/dao/game.dao';
 import {
   createItem,
+  deleteItemForCharacter,
   getCharacterWithInventory,
   getInventory,
+  updateItem,
 } from '../../../src/services/inventory.service';
 
 describe('inventory.service', () => {
@@ -77,6 +79,90 @@ describe('inventory.service', () => {
         ],
       }),
     );
+  });
+
+  test('updates an existing inventory item for its owning character', async () => {
+    const character = await createCharacter();
+    const item = await createItem(character.id, {
+      name: 'Potion',
+      type: 'Consumable',
+      description: 'Restores a little health.',
+      quantity: 3,
+    });
+
+    await expect(
+      updateItem(character.id, item.id, {
+        name: 'Hi-Potion',
+        type: 'Medicine',
+        description: 'Restores more health.',
+        quantity: 2,
+      }),
+    ).resolves.toEqual(
+      expect.objectContaining({
+        id: item.id,
+        name: 'Hi-Potion',
+        type: 'Medicine',
+        description: 'Restores more health.',
+        quantity: 2,
+      }),
+    );
+
+    await expect(getInventory(character.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: item.id,
+        name: 'Hi-Potion',
+        quantity: 2,
+      }),
+    ]);
+  });
+
+  test('does not update an item through the wrong character id', async () => {
+    const owner = await createCharacter();
+    const other = await createCharacter();
+    const item = await createItem(owner.id, {
+      name: 'Map',
+      quantity: 1,
+    });
+
+    await expect(
+      updateItem(other.id, item.id, {
+        name: 'Forged Map',
+        quantity: 1,
+      }),
+    ).resolves.toBeNull();
+
+    await expect(getInventory(owner.id)).resolves.toEqual([
+      expect.objectContaining({
+        name: 'Map',
+      }),
+    ]);
+  });
+
+  test('deletes an existing inventory item for its owning character', async () => {
+    const character = await createCharacter();
+    const item = await createItem(character.id, {
+      name: 'Old Key',
+      quantity: 1,
+    });
+
+    await expect(deleteItemForCharacter(character.id, item.id)).resolves.toBe(true);
+    await expect(getInventory(character.id)).resolves.toEqual([]);
+  });
+
+  test('does not delete an item through the wrong character id', async () => {
+    const owner = await createCharacter();
+    const other = await createCharacter();
+    const item = await createItem(owner.id, {
+      name: 'Signed Letter',
+      quantity: 1,
+    });
+
+    await expect(deleteItemForCharacter(other.id, item.id)).resolves.toBe(false);
+    await expect(getInventory(owner.id)).resolves.toEqual([
+      expect.objectContaining({
+        name: 'Signed Letter',
+      }),
+    ]);
   });
 
   test('rejects invalid quantities before writing an item', async () => {

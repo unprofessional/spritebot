@@ -70,6 +70,71 @@ export async function getInventory(characterId: string): Promise<InventoryItem[]
   return enriched;
 }
 
+export async function getItem(itemId: string): Promise<InventoryItem | null> {
+  const item = await inventoryDAO.findById(itemId);
+  if (!item) return null;
+
+  return hydrateItem(item);
+}
+
+export async function getItemForCharacter(
+  characterId: string,
+  itemId: string,
+): Promise<InventoryItem | null> {
+  const item = await inventoryDAO.findById(itemId);
+  if (!item || item.character_id !== characterId) return null;
+
+  return hydrateItem(item);
+}
+
+async function hydrateItem(item: Awaited<ReturnType<CharacterInventoryDAO['findById']>>) {
+  if (!item) return null;
+
+  const rawFields = await fieldDAO.findByInventory(item.id);
+  const fields: Record<string, unknown> = {};
+  for (const field of rawFields) {
+    fields[field.name] = field.value;
+  }
+
+  return {
+    id: item.id,
+    name: item.name,
+    type: item.type,
+    description: item.description,
+    quantity: item.quantity,
+    equipped: item.equipped,
+    fields,
+  };
+}
+
+export async function updateItem(
+  characterId: string,
+  itemId: string,
+  {
+    name,
+    type = null,
+    description = null,
+    quantity = 1,
+  }: {
+    name: string;
+    type?: string | null;
+    description?: string | null;
+    quantity?: number;
+  },
+): Promise<InventoryItem | null> {
+  const existing = await inventoryDAO.findById(itemId);
+  if (!existing || existing.character_id !== characterId) return null;
+
+  await inventoryDAO.updateById(itemId, {
+    name,
+    type,
+    description,
+    quantity: normalizeQuantity(quantity),
+  });
+
+  return getItem(itemId);
+}
+
 export async function getCharacterWithInventory(
   characterId: string,
 ): Promise<CharacterWithInventory | null> {
@@ -102,6 +167,17 @@ export async function updateFields(inventoryId: string, fieldMap: Record<string,
 export async function deleteItem(inventoryId: string) {
   await fieldDAO.deleteByInventory(inventoryId);
   await inventoryDAO.deleteById(inventoryId);
+}
+
+export async function deleteItemForCharacter(
+  characterId: string,
+  itemId: string,
+): Promise<boolean> {
+  const existing = await inventoryDAO.findById(itemId);
+  if (!existing || existing.character_id !== characterId) return false;
+
+  await deleteItem(itemId);
+  return true;
 }
 
 export async function setEquipped(inventoryId: string, equipped: boolean) {
