@@ -16,12 +16,14 @@ export async function createItem(
     name,
     type = null,
     description = null,
+    quantity = 1,
     equipped = false,
     fields = {},
   }: {
     name: string;
     type?: string | null;
     description?: string | null;
+    quantity?: number;
     equipped?: boolean;
     fields?: Record<string, FieldInput>;
   },
@@ -31,6 +33,7 @@ export async function createItem(
     name,
     type,
     description,
+    quantity: normalizeQuantity(quantity),
     equipped,
   });
 
@@ -57,6 +60,7 @@ export async function getInventory(characterId: string): Promise<InventoryItem[]
         name: item.name,
         type: item.type,
         description: item.description,
+        quantity: item.quantity,
         equipped: item.equipped,
         fields,
       };
@@ -104,10 +108,22 @@ export async function setEquipped(inventoryId: string, equipped: boolean) {
   return inventoryDAO.toggleEquipped(inventoryId, equipped);
 }
 
+export async function setQuantity(inventoryId: string, quantity: number) {
+  return inventoryDAO.updateQuantity(inventoryId, normalizeQuantity(quantity));
+}
+
 export async function deleteInventoryByCharacter(characterId: string) {
   const items = await inventoryDAO.findByCharacter(characterId);
   for (const item of items) {
     await fieldDAO.deleteByInventory(item.id);
     await inventoryDAO.deleteById(item.id);
   }
+}
+
+function normalizeQuantity(quantity: number): number {
+  if (!Number.isInteger(quantity) || quantity < 1) {
+    throw new Error('Inventory item quantity must be a positive integer.');
+  }
+
+  return quantity;
 }

@@ -48,6 +48,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
   if (
     /^add_inventory_item:/.test(customId) ||
     /^view_inventory:/.test(customId) ||
+    /^inventoryPage:/.test(customId) ||
     /^clear_inventory:/.test(customId) ||
     /^confirm_clear_inventory:/.test(customId) ||
     customId === 'cancel_clear_inventory'

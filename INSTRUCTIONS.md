@@ -151,6 +151,8 @@ Use `/inventory` to view and manage your active character's inventory.
 
 Inventory is tied to your active character, so switch characters first if you are managing items for someone else.
 
+Items have a text name, optional type/category, optional description, and quantity. Large inventories are shown as separate paginated views from the main character sheet.
+
 ## Troubleshooting
 
 If `/create-character` says you have not joined a game, use `/join-game` first.

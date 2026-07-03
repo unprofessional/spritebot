@@ -7,6 +7,7 @@ import { build as buildCalculateStatsButton } from './calculate_character_stats_
 import { build as buildDeleteCharacterButton } from './delete_character_button';
 import { build as buildEditCharacterStatsButton } from './edit_character_stats_button';
 import { build as buildToggleCharacterVisibilityButton } from './toggle_character_visibility_button';
+import { buildViewInventoryButton } from './view_inventory_card';
 import { build as buildViewParagraphFieldsButton } from './view_paragraph_fields_button';
 
 export function build(character: CharacterWithStats, isSelf = false) {
@@ -19,6 +20,9 @@ export function build(character: CharacterWithStats, isSelf = false) {
 
   if (isSelf) {
     actionRows.push(buildActionRow(character));
+    actionRows.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(buildViewInventoryButton(character.id)),
+    );
   } else if (hasParagraphFields) {
     actionRows.push(
       new ActionRowBuilder<ButtonBuilder>().addComponents(
