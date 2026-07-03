@@ -184,6 +184,18 @@ export async function setEquipped(inventoryId: string, equipped: boolean) {
   return inventoryDAO.toggleEquipped(inventoryId, equipped);
 }
 
+export async function setEquippedForCharacter(
+  characterId: string,
+  itemId: string,
+  equipped: boolean,
+): Promise<InventoryItem | null> {
+  const existing = await inventoryDAO.findById(itemId);
+  if (!existing || existing.character_id !== characterId) return null;
+
+  await inventoryDAO.toggleEquipped(itemId, equipped);
+  return getItem(itemId);
+}
+
 export async function setQuantity(inventoryId: string, quantity: number) {
   return inventoryDAO.updateQuantity(inventoryId, normalizeQuantity(quantity));
 }
