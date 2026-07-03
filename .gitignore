@@ -31,3 +31,5 @@ secrets.*.js
 
 # auto-generated directories
 /ffmpeg
+.env.infisical
+.env.bak*
