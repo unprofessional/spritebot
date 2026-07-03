@@ -6,6 +6,6 @@ services:
     container_name: spritebot
     env_file:
       - .env.infisical
-    command: ["/app/entrypoint.sh"]
+    command: ['/app/entrypoint.sh']
     restart: unless-stopped
     network_mode: bridge

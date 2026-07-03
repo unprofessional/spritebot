@@ -79,8 +79,7 @@ async function rebuildListCharactersResponse(
   const pageSlice = hydrated.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const components: (
-    | ActionRowBuilder<StringSelectMenuBuilder>
-    | ActionRowBuilder<ButtonBuilder>
+    ActionRowBuilder<StringSelectMenuBuilder> | ActionRowBuilder<ButtonBuilder>
   )[] = [buildCharacterSelector(page, pageSlice)];
 
   if (hydrated.length > PAGE_SIZE) {
