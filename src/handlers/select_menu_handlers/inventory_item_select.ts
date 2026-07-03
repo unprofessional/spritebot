@@ -51,7 +51,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
       .setStyle(item.equipped ? ButtonStyle.Secondary : ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`edit_inventory_item:${characterId}:${itemId}:${page}`)
-      .setLabel('Edit Item')
+      .setLabel('View/Edit Item')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`delete_inventory_item:${characterId}:${itemId}:${page}`)
