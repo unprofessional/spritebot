@@ -49,6 +49,7 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     /^add_inventory_item:/.test(customId) ||
     /^view_inventory:/.test(customId) ||
     /^inventoryPage:/.test(customId) ||
+    /^toggle_inventory_item_equipped:/.test(customId) ||
     /^edit_inventory_item:/.test(customId) ||
     /^delete_inventory_item:/.test(customId) ||
     /^confirm_delete_inventory_item:/.test(customId) ||

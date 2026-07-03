@@ -50,6 +50,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['add_inventory_item:', 'rpg:inventory'], // button → modal follows
   ['addInventoryModal:', 'rpg:inventory'], // modal
   ['editInventoryItemSelect:', 'rpg:inventory'], // select → modal follows
+  ['toggle_inventory_item_equipped:', 'rpg:inventory'], // button
   ['edit_inventory_item:', 'rpg:inventory'], // button → modal follows
   ['editInventoryModal:', 'rpg:inventory'], // modal
   ['delete_inventory_item:', 'rpg:inventory'], // button
