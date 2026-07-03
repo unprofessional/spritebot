@@ -7,6 +7,7 @@ export interface CharacterInventoryRow {
   character_id: string;
   name: string;
   type: string | null;
+  quantity: number;
   equipped: boolean;
   description: string | null;
 }
@@ -16,6 +17,7 @@ interface InventoryItemInput {
   name: string;
   type?: string | null;
   description?: string | null;
+  quantity?: number;
   equipped?: boolean;
 }
 
@@ -25,11 +27,12 @@ export class CharacterInventoryDAO {
     name,
     type = null,
     description = null,
+    quantity = 1,
     equipped = false,
   }: InventoryItemInput): Promise<CharacterInventoryRow> {
     const sql = `
-      INSERT INTO character_inventory (character_id, name, type, description, equipped)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO character_inventory (character_id, name, type, description, quantity, equipped)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *
     `;
     const result = await query<CharacterInventoryRow>(sql, [
@@ -37,6 +40,7 @@ export class CharacterInventoryDAO {
       name,
       type,
       description,
+      quantity,
       equipped,
     ]);
     return result.rows[0];
@@ -65,6 +69,17 @@ export class CharacterInventoryDAO {
        WHERE id = $2
        RETURNING *`,
       [equipped, itemId],
+    );
+    return result.rows[0];
+  }
+
+  async updateQuantity(itemId: string, quantity: number): Promise<CharacterInventoryRow> {
+    const result = await query<CharacterInventoryRow>(
+      `UPDATE character_inventory
+       SET quantity = $1
+       WHERE id = $2
+       RETURNING *`,
+      [quantity, itemId],
     );
     return result.rows[0];
   }

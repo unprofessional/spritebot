@@ -43,6 +43,7 @@ export interface InventoryItem {
   name: string;
   type?: string | null;
   description?: string | null;
+  quantity: number;
   equipped: boolean;
   fields?: Record<string, unknown>;
 }

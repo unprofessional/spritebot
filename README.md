@@ -78,7 +78,10 @@ They also include game-defined stat fields and optional custom fields.
 
 ### Inventory
 
-Each character can have inventory entries, along with per-item custom fields stored separately in the database.
+Each character can have inventory entries with a text name, optional type/category, optional
+description, quantity, equipped state, and per-item custom fields stored separately in the database.
+The character card opens inventory in a separate paginated view so large item lists do not crowd the
+main character sheet.
 
 ### Roleplay Proxy
 
