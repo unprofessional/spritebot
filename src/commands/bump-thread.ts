@@ -73,7 +73,7 @@ function hasThreadPerms(interaction: ChatInputCommandInteraction<CacheType>): bo
   const userPerms = interaction.memberPermissions;
   return Boolean(
     userPerms?.has(PermissionFlagsBits.ManageThreads) ||
-    userPerms?.has(PermissionFlagsBits.Administrator),
+      userPerms?.has(PermissionFlagsBits.Administrator),
   );
 }
 
