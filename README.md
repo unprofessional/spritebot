@@ -175,9 +175,11 @@ The app can initialize its schema automatically on startup in non-production env
 npm ci
 ```
 
-### 2. Create your environment file
+### 2. Configure secrets
 
-Copy `.env.example` to `.env` and fill in the required values.
+**For production/Docker:** See the [Docker / Infisical](#secret-management-infisical) section. Secrets are managed centrally in Infisical.
+
+**For local development:** Copy `.env.example` to `.env` and fill in the required values.
 
 Current environment variables referenced by the code include:
 
@@ -309,15 +311,37 @@ npm start
 
 ## Docker
 
-The repo includes a multistage [Dockerfile](/Users/power/dev/devcru/spritebot/Dockerfile) and a simple [docker-compose.yml](/Users/power/dev/devcru/spritebot/docker-compose.yml).
+The repo includes a multistage [Dockerfile](Dockerfile) and a [docker-compose.yml](docker-compose.yml).
 
-To build and run:
+### Secret Management (Infisical)
 
-```bash
-docker compose up --build
-```
+Spritebot uses [Infisical](https://infisical.com/) for secret management. Application secrets (bot token, DB credentials, etc.) are stored in Infisical and injected at container startup via the Infisical CLI. No application secrets are stored in local files.
 
-The container expects a `.env` file to be present and does not currently provision PostgreSQL for you, so you will still need a reachable database.
+**Setup:**
+
+1. Create a `.env.infisical` file (gitignored) with your Infisical machine identity credentials:
+
+   ```env
+   INFISICAL_CLIENT_ID=your-machine-identity-client-id
+   INFISICAL_CLIENT_SECRET=your-machine-identity-client-secret
+   INFISICAL_API_URL=http://your-infisical-instance
+   INFISICAL_PROJECT_ID=your-project-id
+   INFISICAL_ENV=prod
+   ```
+
+2. Ensure all application secrets are stored in the corresponding Infisical project and environment.
+
+3. Build and run:
+
+   ```bash
+   docker compose up --build
+   ```
+
+The entrypoint script (`entrypoint.sh`) authenticates with Infisical using Universal Auth, fetches secrets, and injects them as environment variables before starting the bot. The application code reads `process.env` as usual — no SDK or code changes required.
+
+**Fallback:** If you need to run without Infisical, you can override the container command to `node dist/index.js` and provide a traditional `.env` file with all application secrets.
+
+The container does not provision PostgreSQL — you still need a reachable database.
 
 TODO: Add production restart/deploy steps for draining active Discord and database work before stopping the container, so shutdown notifications and in-flight operations have time to finish cleanly.
 
