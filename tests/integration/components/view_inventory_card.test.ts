@@ -27,7 +27,12 @@ describe('view_inventory_card', () => {
     expect(view.embeds[0].description).toContain('**Item 2** x2');
     expect(view.embeds[0].description).not.toContain('**Item 7**');
     expect(view.embeds[0].footer?.text).toContain('Page 1 of 2');
-    expect(view.components).toHaveLength(2);
+    expect(view.components).toHaveLength(3);
+    expect(JSON.stringify(view.components[0])).toContain('add_inventory_item:character-1:0');
+    expect(JSON.stringify(view.components[0])).toContain('clear_inventory:character-1:0');
+    expect(JSON.stringify(view.components[1])).toContain('editInventoryItemSelect:character-1:0');
+    expect(JSON.stringify(view.components[1])).toContain('Item 1');
+    expect(JSON.stringify(view.components[1])).not.toContain('Item 7');
   });
 
   test('renders later inventory pages from the same character view', () => {

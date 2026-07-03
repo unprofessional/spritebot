@@ -49,12 +49,18 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   // ===== INVENTORY (view = core, mutations = gated) =====
   ['add_inventory_item:', 'rpg:inventory'], // button → modal follows
   ['addInventoryModal:', 'rpg:inventory'], // modal
+  ['editInventoryItemSelect:', 'rpg:inventory'], // select → modal follows
+  ['edit_inventory_item:', 'rpg:inventory'], // button → modal follows
+  ['editInventoryModal:', 'rpg:inventory'], // modal
+  ['delete_inventory_item:', 'rpg:inventory'], // button
+  ['confirm_delete_inventory_item:', 'rpg:inventory'], // button
   ['clear_inventory:', 'rpg:inventory'], // button
   ['confirm_clear_inventory:', 'rpg:inventory'], // button
 
   // ===== CORE (read-only navigation / safe actions) =====
   ['view_inventory:', 'core'], // read-only
   ['inventoryPage:', 'core'], // inventory pagination
+  ['cancel_inventory_item_action:', 'core'], // cancel action
   ['cancel_clear_inventory', 'core'], // cancel action
   ['charPage:', 'core'], // pagination on char views
   ['goBackToCharacter:', 'core'], // nav

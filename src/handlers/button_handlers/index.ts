@@ -49,9 +49,13 @@ export async function handleButton(interaction: ButtonInteraction): Promise<void
     /^add_inventory_item:/.test(customId) ||
     /^view_inventory:/.test(customId) ||
     /^inventoryPage:/.test(customId) ||
+    /^edit_inventory_item:/.test(customId) ||
+    /^delete_inventory_item:/.test(customId) ||
+    /^confirm_delete_inventory_item:/.test(customId) ||
+    /^cancel_inventory_item_action:/.test(customId) ||
     /^clear_inventory:/.test(customId) ||
     /^confirm_clear_inventory:/.test(customId) ||
-    customId === 'cancel_clear_inventory'
+    /^cancel_clear_inventory:/.test(customId)
   ) {
     return inventoryButtons.handle(interaction);
   }
