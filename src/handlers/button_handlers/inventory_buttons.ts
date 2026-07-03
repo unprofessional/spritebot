@@ -16,6 +16,7 @@ import {
   deleteItemForCharacter,
   deleteInventoryByCharacter,
   getCharacterWithInventory,
+  setEquippedForCharacter,
 } from '../../services/inventory.service';
 import { buildEditModal } from '../select_menu_handlers/inventory_item_select';
 
@@ -117,6 +118,38 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
       console.error('Error paging inventory:', err);
       await interaction.reply({
         content: '❌ Failed to change inventory page.',
+        ephemeral: true,
+      });
+    }
+    return;
+  }
+
+  if (customId.startsWith('toggle_inventory_item_equipped:')) {
+    const [, characterId, itemId, rawPage, mode] = customId.split(':');
+    try {
+      if (!(await canUseInventory(interaction, characterId))) return;
+
+      const equipped = mode === 'on';
+      const item = await setEquippedForCharacter(characterId, itemId, equipped);
+      if (!item) {
+        await interaction.reply({
+          content: '❌ Inventory item not found.',
+          ephemeral: true,
+        });
+        return;
+      }
+
+      const page = parseInt(rawPage, 10) || 0;
+      await updateInventoryMessage(
+        interaction,
+        characterId,
+        page,
+        `${equipped ? '✅ Equipped' : '▫️ Unequipped'} **${item.name}**.`,
+      );
+    } catch (err) {
+      console.error('Error toggling inventory item equipped state:', err);
+      await interaction.reply({
+        content: '❌ Failed to update inventory item.',
         ephemeral: true,
       });
     }

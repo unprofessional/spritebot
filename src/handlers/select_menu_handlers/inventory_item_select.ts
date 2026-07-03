@@ -44,8 +44,14 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   const page = parseInt(rawPage, 10) || 0;
   const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
+      .setCustomId(
+        `toggle_inventory_item_equipped:${characterId}:${itemId}:${page}:${item.equipped ? 'off' : 'on'}`,
+      )
+      .setLabel(item.equipped ? 'Unequip Item' : 'Equip Item')
+      .setStyle(item.equipped ? ButtonStyle.Secondary : ButtonStyle.Success),
+    new ButtonBuilder()
       .setCustomId(`edit_inventory_item:${characterId}:${itemId}:${page}`)
-      .setLabel('Edit Item')
+      .setLabel('View/Edit Item')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`delete_inventory_item:${characterId}:${itemId}:${page}`)
