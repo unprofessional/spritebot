@@ -4,7 +4,7 @@ import { CharacterDAO } from '../dao/character.dao';
 import { PlayerDAO } from '../dao/player.dao';
 import { RpProxyMessageDAO } from '../dao/rp_proxy_message.dao';
 import { RP_PROXY_TOTAL_CHARACTER_LIMIT, splitRpMessage } from '../utils/rp_message_limits';
-import { isUserInCharacterForChannel } from './rp_channel_mode.service';
+import { isUserInCharacterForChannelScope } from './rp_channel_mode.service';
 
 const RP_PROXY_WEBHOOK_NAME = 'Spritebot RP Proxy';
 const MESSAGE_TEXT_ATTACHMENT_NAME = 'message.txt';
@@ -33,12 +33,37 @@ type WebhookCapableChannel = TextBasedChannel & {
 
 type TextBasedChannel = Message['channel'];
 
+interface ProxyWebhookTarget {
+  channel: WebhookCapableChannel;
+  threadId?: string;
+}
+
 function isWebhookCapableChannel(channel: unknown): channel is WebhookCapableChannel {
   return (
     !!channel &&
     typeof channel === 'object' &&
     'fetchWebhooks' in channel &&
     'createWebhook' in channel
+  );
+}
+
+function getParentChannelId(channel: unknown): string | null {
+  if (!channel || typeof channel !== 'object') return null;
+  if ('parentId' in channel) {
+    const parentId = (channel as { parentId?: unknown }).parentId;
+    return typeof parentId === 'string' ? parentId : null;
+  }
+
+  return null;
+}
+
+function isThreadChannel(channel: unknown): boolean {
+  return (
+    !!channel &&
+    typeof channel === 'object' &&
+    'isThread' in channel &&
+    typeof (channel as { isThread?: unknown }).isThread === 'function' &&
+    (channel as { isThread: () => boolean }).isThread()
   );
 }
 
@@ -106,6 +131,52 @@ async function fetchWebhookCapableChannel(
   return isWebhookCapableChannel(channel) ? channel : null;
 }
 
+async function resolveProxyWebhookTarget(message: Message): Promise<ProxyWebhookTarget | null> {
+  if (isWebhookCapableChannel(message.channel)) {
+    return { channel: message.channel };
+  }
+
+  if (!isThreadChannel(message.channel)) {
+    return null;
+  }
+
+  const parentChannelId = getParentChannelId(message.channel);
+  if (!parentChannelId) return null;
+
+  const parentChannel = await fetchWebhookCapableChannel(message.client, parentChannelId);
+  if (!parentChannel) return null;
+
+  return {
+    channel: parentChannel,
+    threadId: message.channelId,
+  };
+}
+
+async function resolveProxyWebhookTargetForChannel(
+  client: Client,
+  channelId: string,
+): Promise<ProxyWebhookTarget | null> {
+  const channel = await client.channels.fetch(channelId).catch(() => null);
+  if (isWebhookCapableChannel(channel)) {
+    return { channel };
+  }
+
+  if (!isThreadChannel(channel)) {
+    return null;
+  }
+
+  const parentChannelId = getParentChannelId(channel);
+  if (!parentChannelId) return null;
+
+  const parentChannel = await fetchWebhookCapableChannel(client, parentChannelId);
+  if (!parentChannel) return null;
+
+  return {
+    channel: parentChannel,
+    threadId: channelId,
+  };
+}
+
 export type RpProxyMutationResult =
   | { status: 'updated' }
   | { status: 'deleted' }
@@ -139,14 +210,15 @@ export async function editRoleplayProxyMessage({
   }
   if (record.user_id !== userId) return { status: 'forbidden' };
 
-  const channel = await fetchWebhookCapableChannel(client, record.channel_id);
-  if (!channel) return { status: 'failed', reason: 'channel_cannot_webhook' };
+  const target = await resolveProxyWebhookTargetForChannel(client, record.channel_id);
+  if (!target) return { status: 'failed', reason: 'channel_cannot_webhook' };
 
-  const webhook = await getExistingProxyWebhook(channel, record.webhook_id);
+  const webhook = await getExistingProxyWebhook(target.channel, record.webhook_id);
   if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
 
   await webhook.editMessage(record.proxy_message_id, {
     content: trimmed,
+    threadId: target.threadId,
     allowedMentions: { parse: [] },
   });
   await proxyMessageDAO.touch(record.proxy_message_id);
@@ -173,13 +245,13 @@ export async function deleteRoleplayProxyMessage({
   }
   if (record.user_id !== userId) return { status: 'forbidden' };
 
-  const channel = await fetchWebhookCapableChannel(client, record.channel_id);
-  if (!channel) return { status: 'failed', reason: 'channel_cannot_webhook' };
+  const target = await resolveProxyWebhookTargetForChannel(client, record.channel_id);
+  if (!target) return { status: 'failed', reason: 'channel_cannot_webhook' };
 
-  const webhook = await getExistingProxyWebhook(channel, record.webhook_id);
+  const webhook = await getExistingProxyWebhook(target.channel, record.webhook_id);
   if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
 
-  await webhook.deleteMessage(record.proxy_message_id);
+  await webhook.deleteMessage(record.proxy_message_id, target.threadId);
   await proxyMessageDAO.delete(record.proxy_message_id);
 
   return { status: 'deleted' };
@@ -188,15 +260,17 @@ export async function deleteRoleplayProxyMessage({
 export async function handleRoleplayProxyMessage(message: Message): Promise<RpProxyResult> {
   if (message.author.bot || message.webhookId) return { status: 'ignored', reason: 'bot' };
   if (!message.guildId || !message.guild) return { status: 'ignored', reason: 'not_guild' };
-  if (!isWebhookCapableChannel(message.channel)) {
+  const target = await resolveProxyWebhookTarget(message);
+  if (!target) {
     return { status: 'ignored', reason: 'channel_cannot_webhook' };
   }
 
-  const isIc = await isUserInCharacterForChannel(
-    message.guildId,
-    message.channelId,
-    message.author.id,
-  );
+  const isIc = await isUserInCharacterForChannelScope({
+    guildId: message.guildId,
+    channelId: message.channelId,
+    parentChannelId: getParentChannelId(message.channel),
+    userId: message.author.id,
+  });
   if (!isIc) return { status: 'ignored', reason: 'user_ooc_in_channel' };
 
   const activeCharacterId = await playerDAO.getCurrentCharacter(message.author.id, message.guildId);
@@ -234,7 +308,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
   }
 
   const chunks = splitRpMessage(content);
-  const webhook = await getOrCreateProxyWebhook(message.channel);
+  const webhook = await getOrCreateProxyWebhook(target.channel);
   const display = getProxyDisplay(character);
   const embeds = message.embeds.map((embed) => embed.toJSON() as APIEmbed);
   const sends = chunks.length ? chunks : [''];
@@ -244,6 +318,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
       content: sends[index],
       username: display.username,
       avatarURL: display.avatarURL,
+      threadId: target.threadId,
       files: index === 0 ? files : [],
       embeds: index === 0 ? embeds : [],
       allowedMentions: { parse: [] },
