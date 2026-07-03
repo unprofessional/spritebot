@@ -38,7 +38,9 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
   if (customId.startsWith('adjustStatModal:')) return statCalculatorModal.handle(interaction);
 
   // === Inventory ===
-  if (customId.startsWith('addInventoryModal:')) return inventoryModals.handle(interaction);
+  if (customId.startsWith('addInventoryModal:') || customId.startsWith('editInventoryModal:')) {
+    return inventoryModals.handle(interaction);
+  }
 
   await interaction.reply({
     content: '❓ Unknown modal submission.',
