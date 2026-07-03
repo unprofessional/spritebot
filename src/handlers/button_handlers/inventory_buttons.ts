@@ -124,7 +124,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId.startsWith('toggle_inventory_item_equipped:')) {
+  if (customId.startsWith('invEq:') || customId.startsWith('toggle_inventory_item_equipped:')) {
     const [, characterId, itemId, rawPage, mode] = customId.split(':');
     try {
       if (!(await canUseInventory(interaction, characterId))) return;
@@ -156,7 +156,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId.startsWith('edit_inventory_item:')) {
+  if (customId.startsWith('invEdit:') || customId.startsWith('edit_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
     try {
       if (!(await canUseInventory(interaction, characterId))) return;
@@ -173,7 +173,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId.startsWith('delete_inventory_item:')) {
+  if (customId.startsWith('invDel:') || customId.startsWith('delete_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
 
     if (!(await canUseInventory(interaction, characterId))) return;
@@ -181,7 +181,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     const page = parseInt(rawPage, 10) || 0;
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`confirm_delete_inventory_item:${characterId}:${itemId}:${page}`)
+        .setCustomId(`invDelOk:${characterId}:${itemId}:${page}`)
         .setLabel('Yes, Delete Item')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
@@ -197,7 +197,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
     return;
   }
 
-  if (customId.startsWith('confirm_delete_inventory_item:')) {
+  if (customId.startsWith('invDelOk:') || customId.startsWith('confirm_delete_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
     try {
       if (!(await canUseInventory(interaction, characterId))) return;
