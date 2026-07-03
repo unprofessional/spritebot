@@ -1,5 +1,3 @@
-version: '3.9'
-
 services:
   spritebot:
     build:
@@ -7,6 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: spritebot
     env_file:
-      - .env
+      - .env.infisical
+    command: ['/app/entrypoint.sh']
     restart: unless-stopped
     network_mode: bridge
