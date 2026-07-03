@@ -11,10 +11,8 @@ export const pgUser = process.env.PG_USER ?? '';
 export const pgPass = process.env.PG_PASS ?? '';
 export const pgDb = process.env.PG_DB ?? '';
 
-export const lifecycleNotifyGuildId =
-  process.env.LIFECYCLE_NOTIFY_GUILD_ID ?? '1170400834270548009';
-export const lifecycleNotifyChannelId =
-  process.env.LIFECYCLE_NOTIFY_CHANNEL_ID ?? '1522327870221975674';
+export const lifecycleNotifyGuildId = process.env.LIFECYCLE_NOTIFY_GUILD_ID ?? '';
+export const lifecycleNotifyChannelId = process.env.LIFECYCLE_NOTIFY_CHANNEL_ID ?? '';
 
 /** Bump config (minutes) */
 const toInt = (v: string | undefined, dflt: number) => {

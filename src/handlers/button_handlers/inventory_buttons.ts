@@ -153,7 +153,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
         .setCustomId(`cancel_inventory_item_action:${characterId}:${page}`)
-        .setLabel('Cancel')
+        .setLabel('↩️ Go Back')
         .setStyle(ButtonStyle.Secondary),
     );
 
