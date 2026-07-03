@@ -14,6 +14,7 @@ import { handle as handleSwitchCharacterSelector } from '../../components/switch
 import { handle as handleSwitchGameSelector } from '../../components/switch_game_selector';
 import * as adjustNumericStatSelectHandler from './adjust_numeric_stat_select';
 import * as characterStatSelect from './character_stat_select_menu';
+import * as inventoryItemSelect from './inventory_item_select';
 
 export async function handleSelectMenu(interaction: StringSelectMenuInteraction): Promise<void> {
   const { customId } = interaction;
@@ -35,6 +36,8 @@ export async function handleSelectMenu(interaction: StringSelectMenuInteraction)
     return characterStatSelect.handle(interaction);
   if (customId.startsWith('adjustStatSelect:'))
     return adjustNumericStatSelectHandler.handle(interaction);
+  if (customId.startsWith('editInventoryItemSelect:'))
+    return inventoryItemSelect.handle(interaction);
 
   await interaction.reply({
     content: '❌ Unknown menu selection.',
