@@ -14,7 +14,6 @@ export const id = 'viewInventoryCard';
 export const inventoryPageId = 'inventoryPage';
 
 const pageSize = 6;
-const maxDescriptionLength = 140;
 
 export function buildViewInventoryButton(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
@@ -53,10 +52,7 @@ export function build(
     const equipped = item.equipped ? '✅' : '▫️';
     const typeText = item.type ? `(${item.type})` : '';
     const quantityText = item.quantity > 1 ? ` x${item.quantity}` : '';
-    const descText = item.description
-      ? ` — _${truncate(item.description, maxDescriptionLength)}_`
-      : '';
-    return `${equipped} **${item.name}**${quantityText} ${typeText}${descText}`.trim();
+    return `${equipped} **${item.name}**${quantityText} ${typeText}`.trim();
   });
 
   const embed = new EmbedBuilder()
@@ -105,15 +101,14 @@ function buildEditSelectRow(
 ): ActionRowBuilder<StringSelectMenuBuilder> {
   const select = new StringSelectMenuBuilder()
     .setCustomId(`editInventoryItemSelect:${characterId}:${page}`)
-    .setPlaceholder('Edit an inventory item')
+    .setPlaceholder('View/Edit an inventory item')
     .addOptions(
       items.map((item) => ({
         label: truncate(item.name, 100),
         value: item.id,
         description: truncate(
-          [item.quantity > 1 ? `x${item.quantity}` : null, item.type, item.description]
-            .filter(Boolean)
-            .join(' • ') || 'Inventory item',
+          [item.quantity > 1 ? `x${item.quantity}` : null, item.type].filter(Boolean).join(' • ') ||
+            'Inventory item',
           100,
         ),
       })),

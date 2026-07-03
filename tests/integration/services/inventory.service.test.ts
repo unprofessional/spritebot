@@ -5,6 +5,7 @@ import {
   deleteItemForCharacter,
   getCharacterWithInventory,
   getInventory,
+  setEquippedForCharacter,
   updateItem,
 } from '../../../src/services/inventory.service';
 
@@ -161,6 +162,46 @@ describe('inventory.service', () => {
     await expect(getInventory(owner.id)).resolves.toEqual([
       expect.objectContaining({
         name: 'Signed Letter',
+      }),
+    ]);
+  });
+
+  test('toggles equipped state for an owning character inventory item', async () => {
+    const character = await createCharacter();
+    const item = await createItem(character.id, {
+      name: 'Iron Sword',
+      quantity: 1,
+    });
+
+    await expect(setEquippedForCharacter(character.id, item.id, true)).resolves.toEqual(
+      expect.objectContaining({
+        id: item.id,
+        name: 'Iron Sword',
+        equipped: true,
+      }),
+    );
+
+    await expect(getInventory(character.id)).resolves.toEqual([
+      expect.objectContaining({
+        id: item.id,
+        equipped: true,
+      }),
+    ]);
+  });
+
+  test('does not toggle equipped state through the wrong character id', async () => {
+    const owner = await createCharacter();
+    const other = await createCharacter();
+    const item = await createItem(owner.id, {
+      name: 'Borrowed Cloak',
+      quantity: 1,
+    });
+
+    await expect(setEquippedForCharacter(other.id, item.id, true)).resolves.toBeNull();
+    await expect(getInventory(owner.id)).resolves.toEqual([
+      expect.objectContaining({
+        name: 'Borrowed Cloak',
+        equipped: false,
       }),
     ]);
   });
