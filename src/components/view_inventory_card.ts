@@ -19,7 +19,7 @@ const maxDescriptionLength = 140;
 export function buildViewInventoryButton(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
     .setCustomId(`view_inventory:${characterId}`)
-    .setLabel('Inventory')
+    .setLabel('🎒 Inventory')
     .setStyle(ButtonStyle.Secondary);
 }
 

@@ -40,6 +40,7 @@ export async function initializeDB(): Promise<void> {
       'thread_bumps', // <— NEW
       'rp_channel_mode',
       'rp_proxy_message',
+      'lifecycle_notification_channel',
     ];
 
     // 🔍 Check which tables exist

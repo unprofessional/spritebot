@@ -40,6 +40,7 @@ The repo currently defines these slash commands:
 - `/ic-delete` - Delete one of your tracked proxied in-character messages
 - `/inventory` - View and manage inventory for your active character
 - `/bump-thread` - Register and manage auto-bumped threads
+- `/bot-announcements` - Configure lifecycle announcement channels for this server
 - `/gift` - Ops-only gifted access management
 - `/toggle-bypass` - Ops-only entitlement bypass toggle
 
@@ -199,9 +200,9 @@ PG_USER=postgres
 PG_PASS=your_password
 PG_DB=spritebot
 
-# Lifecycle status notifications
-LIFECYCLE_NOTIFY_GUILD_ID=1170400834270548009
-LIFECYCLE_NOTIFY_CHANNEL_ID=1522327870221975674
+# Optional fallback lifecycle status notification channel
+LIFECYCLE_NOTIFY_GUILD_ID=
+LIFECYCLE_NOTIFY_CHANNEL_ID=
 
 # Thread bump tuning
 BUMP_DEFAULT_MINUTES=10050
@@ -220,7 +221,8 @@ Notes:
 
 - `DEV_GUILD_ID` is used for registering ops-only commands
 - `OWNER_DISCORD_ID` is used by `/gift` and `/toggle-bypass`
-- `LIFECYCLE_NOTIFY_GUILD_ID` and `LIFECYCLE_NOTIFY_CHANNEL_ID` control where startup/shutdown status messages are posted
+- `/bot-announcements set` controls where startup/shutdown status messages are posted per server
+- `LIFECYCLE_NOTIFY_GUILD_ID` and `LIFECYCLE_NOTIFY_CHANNEL_ID` can provide one optional fallback startup/shutdown status channel
 - production DB auto-init is disabled unless `ALLOW_DB_INIT=true`
 
 ### 3. Discord application setup
@@ -250,7 +252,9 @@ At minimum, Spritebot needs these permissions in any channel where slash-command
 
 For character sheets, game setup, inventory, buttons, selects, and modals, no elevated server permissions are expected beyond normal interaction access.
 
-Lifecycle notification channels need the baseline channel permissions so Spritebot can announce when it comes online or is shutting down/restarting:
+Lifecycle notification channels can be configured per server with `/bot-announcements set`.
+`LIFECYCLE_NOTIFY_GUILD_ID` and `LIFECYCLE_NOTIFY_CHANNEL_ID` remain as an optional fallback channel.
+Configured channels need the baseline channel permissions so Spritebot can announce when it comes online or is shutting down/restarting:
 
 - View Channel
 - Send Messages
