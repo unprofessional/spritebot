@@ -54,6 +54,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
 
   // ===== CORE (read-only navigation / safe actions) =====
   ['view_inventory:', 'core'], // read-only
+  ['inventoryPage:', 'core'], // inventory pagination
   ['cancel_clear_inventory', 'core'], // cancel action
   ['charPage:', 'core'], // pagination on char views
   ['goBackToCharacter:', 'core'], // nav

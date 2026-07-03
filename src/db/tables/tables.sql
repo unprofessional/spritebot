@@ -115,6 +115,7 @@ CREATE TABLE character_inventory (
   character_id UUID NOT NULL REFERENCES character(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   type TEXT,
+  quantity INTEGER NOT NULL DEFAULT 1 CHECK (quantity > 0),
   equipped BOOLEAN DEFAULT FALSE,
   description TEXT
 );
