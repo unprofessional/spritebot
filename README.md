@@ -332,7 +332,7 @@ The pipeline:
 - runs `npm run lint`
 - runs `npm test -- --runInBand`
 - runs `npm run build`
-- builds the Docker image as a CI smoke check
+- builds the Docker image as an optional CI smoke check when Docker is available on the Jenkins agent
 - packages the repo into `spritebot-deploy.tar.gz`
 - deploys from `main` or `master` to `shinralabs`
 - preserves remote `.env.infisical` and rebuilds/restarts with `docker compose up -d --build --remove-orphans`
@@ -344,6 +344,7 @@ Jenkins assumptions:
 - SSH Publisher host config name: `shinralabs`
 - Remote deploy directory: `~/dev/spritebot`
 - Remote `.env.infisical` already exists and contains the Infisical machine identity settings
+- Docker is available on the remote host; local Jenkins-agent Docker is optional
 
 If this job should deploy from `develop` instead of `main`/`master`, update `isDeployBranch()` in
 the Jenkinsfile.
