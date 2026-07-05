@@ -82,6 +82,15 @@ function buildEmbed(character: CharacterWithStats) {
     inline: true,
   });
 
+  const equippedItems = formatEquippedItems(character);
+  if (equippedItems) {
+    embed.addFields({
+      name: 'Equipped Items',
+      value: equippedItems,
+      inline: false,
+    });
+  }
+
   const created = character.created_at ?? new Date().toISOString();
 
   embed.setFooter({
@@ -165,4 +174,23 @@ function formatStatDisplay(stat: ParsedStat): string {
   } else {
     return `**${stat.label}**: _Not set_`;
   }
+}
+
+function formatEquippedItems(character: CharacterWithStats): string | null {
+  const equipped = (character.inventory || []).filter((item) => item.equipped);
+  if (!equipped.length) return null;
+
+  const maxVisible = 12;
+  const visible = equipped.slice(0, maxVisible);
+  const lines = visible.map((item) => {
+    const quantity = item.quantity > 1 ? ` x${item.quantity}` : '';
+    const type = item.type ? ` _(${item.type})_` : '';
+    return `**${item.name}**${quantity}${type}`;
+  });
+
+  if (equipped.length > maxVisible) {
+    lines.push(`_and ${equipped.length - maxVisible} more equipped item(s)_`);
+  }
+
+  return lines.join('\n');
 }

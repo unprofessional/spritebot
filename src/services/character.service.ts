@@ -13,6 +13,7 @@ import type {
   UserDefinedField,
 } from '../types/character';
 import { getStatTemplates } from './game.service';
+import { getInventory } from './inventory.service';
 import { getCurrentGame } from './player.service';
 
 const characterDAO = new CharacterDAO();
@@ -81,6 +82,7 @@ export async function getCharacterWithStats(
   const stats = await statDAO.findByCharacter(characterId);
   const custom = await customDAO.findByCharacter(characterId);
   const templates = await getStatTemplates(character.game_id);
+  const inventory = await getInventory(characterId);
 
   const statMap = new Map(stats.map((stat) => [stat.template_id, stat]));
   const templateIds = new Set(templates.map((template) => template.id));
@@ -112,6 +114,7 @@ export async function getCharacterWithStats(
     ...(character as CharacterWithStats), // 👈 This cast satisfies TS
     stats: enrichedStats,
     customFields: custom as HydratedCustomField[],
+    inventory,
   };
 
   return hydrated;
