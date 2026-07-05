@@ -36,6 +36,7 @@ export interface CharacterStatWithLabel extends StatFieldEntry {
 export interface CharacterWithStats extends Character {
   stats: CharacterStatWithLabel[];
   customFields: FieldInput[];
+  inventory?: InventoryItem[];
 }
 
 export interface InventoryItem {
