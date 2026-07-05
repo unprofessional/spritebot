@@ -320,6 +320,34 @@ npm start
 
 The repo includes a multistage [Dockerfile](Dockerfile) and a [docker-compose.yml](docker-compose.yml).
 
+## Jenkins Pipeline Deployment
+
+The repo includes a [Jenkinsfile](Jenkinsfile) for a pipeline-style Jenkins job. This replaces manual
+click-created Jenkins job config with source-controlled build and deploy behavior.
+
+The pipeline:
+
+- reports pending/success/failure status back to GitHub under `ci/jenkins/spritebot`
+- runs `npm ci`
+- runs `npm run lint`
+- runs `npm test -- --runInBand`
+- runs `npm run build`
+- builds the Docker image as a CI smoke check
+- packages the repo into `spritebot-deploy.tar.gz`
+- deploys from `main` or `master` to `shinralabs`
+- preserves remote `.env.infisical` and rebuilds/restarts with `docker compose up -d --build --remove-orphans`
+
+Jenkins assumptions:
+
+- Node tool name: `NodeJS 22.22`
+- GitHub status credential id: `github_username_plus_personal_token`
+- SSH Publisher host config name: `shinralabs`
+- Remote deploy directory: `~/dev/spritebot`
+- Remote `.env.infisical` already exists and contains the Infisical machine identity settings
+
+If this job should deploy from `develop` instead of `main`/`master`, update `isDeployBranch()` in
+the Jenkinsfile.
+
 ### Secret Management (Infisical)
 
 Spritebot uses [Infisical](https://infisical.com/) for secret management. Application secrets (bot token, DB credentials, etc.) are stored in Infisical and injected at container startup via the Infisical CLI. No application secrets are stored in local files.
