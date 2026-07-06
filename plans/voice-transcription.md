@@ -218,11 +218,20 @@ Unlike LLM conversations, STT has **no context window problem**:
 
 ### Phase 1 — Transcription Backend (yharnam)
 
-- [ ] Build whisper.cpp from source on yharnam (with `whisper-server` target)
-- [ ] Download `ggml-large-v3.bin` model
-- [ ] Test `whisper-server` manually — POST a sample WAV to `/inference`, confirm response
-- [ ] Write systemd unit file for auto-start + restart on failure
+- [x] Build whisper.cpp from source on yharnam (with `whisper-server` target)
+- [x] Download `ggml-large-v3.bin` model
+- [x] Test `whisper-server` manually — POST a sample WAV to `/inference`, confirm response
+- [x] Write systemd unit file for auto-start + restart on failure
 - [ ] Bind to LAN only (firewall or `--host` flag)
+
+**Phase 1 results (2026-07-06):**
+
+- `whisper-server` is running as a lingering user systemd service on `yharnam`: `~/.config/systemd/user/spritebot-whisper.service`.
+- The service is enabled under `hunter`'s user manager (`Linger=yes`) and uses `Restart=on-failure`.
+- Service command: `/home/hunter/src/whisper.cpp/build/bin/whisper-server -m /home/hunter/src/whisper.cpp/models/ggml-large-v3.bin --host 192.168.7.73 --port 9700 -t 24 -ng`.
+- Local inference test passed via `curl http://192.168.7.73:9700/inference -F file=@samples/jfk.wav -F response_format=json`, returning the expected JFK transcript JSON.
+- Socket bind is correct and LAN-scoped: `192.168.7.73:9700`.
+- Remaining blocker: `shinralabs` (`192.168.7.210`) can reach `yharnam` over SSH, but `192.168.7.73:9700` times out. Non-interactive `sudo` on `yharnam` requires a password, so opening the host firewall/allowlist for TCP 9700 needs root access. Likely command once root is available: `sudo ufw allow from 192.168.7.210 to any port 9700 proto tcp`.
 
 ### Phase 2 — Voice Integration (SPRITEbot)
 
