@@ -1,6 +1,6 @@
 # SPRITEbot Voice Transcription — Implementation Plan
 
-> **Status:** Draft v1 — awaiting mads review
+> **Status:** Phase 0 complete — ready for Phase 1 backend service setup
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14, Docker on shinralabs)
 > **Approach:** CPU-first (whisper.cpp). GPU offload is a future optimization.
 
@@ -117,7 +117,7 @@ whisper.cpp ships with `whisper-server`, a built-in HTTP server that exposes a `
 **Run command:**
 
 ```bash
-./whisper-server -m ggml-large-v3.bin --host 0.0.0.0 --port 9700 -t 8
+./whisper-server -m ggml-large-v3.bin --host 0.0.0.0 --port 9700 -t 24
 ```
 
 **What it provides out of the box:**
@@ -129,7 +129,7 @@ whisper.cpp ships with `whisper-server`, a built-in HTTP server that exposes a `
 **Model:** `ggml-large-v3.bin` (~3.1GB disk, loaded into RAM on startup)
 
 - With 256GB RAM on yharnam, keeping the model resident is trivial
-- EPYC 7402P (24c/48t, AVX2) handles inference comfortably — 8 threads per request leaves plenty of headroom
+- EPYC 7402P (24c/48t, AVX2) handles inference comfortably. Phase 0 timing showed `-t 24` is needed to keep large-v3 under 30 seconds for a 60-second clip; `-t 16` is roughly realtime and `-t 8` is slower than the target.
 
 **Deployment:** systemd unit file on yharnam for auto-start + restart on failure. Bind to LAN only (`--host 192.168.x.x` or firewall rule) since shinralabs is the only consumer.
 
@@ -196,11 +196,25 @@ Unlike LLM conversations, STT has **no context window problem**:
 
 ### Phase 0 — Proof of Concept (do this first)
 
-- [ ] Install whisper.cpp on yharnam, download `ggml-large-v3.bin`
-- [ ] Manually transcribe a sample audio file from CLI to verify speed/quality on the EPYC
-- [ ] Test with Discord-quality audio (48kHz Opus → 16kHz PCM conversion)
-- [ ] Benchmark: time a 60-second clip, confirm <30s processing time on CPU
-- [ ] Install Silero VAD, run on a sample file, verify segment boundaries are sane
+- [x] Install whisper.cpp on yharnam, download `ggml-large-v3.bin`
+- [x] Manually transcribe a sample audio file from CLI to verify speed/quality on the EPYC
+- [x] Test with Discord-quality audio (48kHz Opus → 16kHz PCM conversion)
+- [x] Benchmark: time a 60-second clip, confirm <30s processing time on CPU
+- [x] Install Silero VAD, run on a sample file, verify segment boundaries are sane
+
+**Phase 0 results (2026-07-06):**
+
+- whisper.cpp installed at `yharnam:~/src/whisper.cpp`; binaries verified at `build/bin/whisper-cli` and `build/bin/whisper-server`.
+- Model installed at `yharnam:~/src/whisper.cpp/models/ggml-large-v3.bin` (`2.9G`, sha256 `64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2`).
+- Sample fixtures live at `yharnam:~/src/whisper-phase0/`: `jfk-60s.wav`, `jfk-60s-discord.opus`, and `jfk-60s-discord-decoded-16k.wav`.
+- CLI quality check on `samples/jfk.wav` produced the expected JFK transcript.
+- 60-second large-v3 benchmark on Discord-style decoded audio:
+  - `-t 8`: `51.54s` wall clock
+  - `-t 12`: `36.82s` wall clock
+  - `-t 16`: `30.12s` wall clock
+  - `-t 24`: `23.47s` wall clock, meeting the <30s CPU target
+- Opus roundtrip quality was acceptable: the 48kHz Opus -> 16kHz WAV clip transcribed cleanly and matched the source phrase repetition.
+- Silero VAD was verified through whisper.cpp's VAD example using `models/for-tests-silero-v6.2.0-ggml.bin`; it found 22 speech segments across the 60-second repeated JFK fixture with sane 1.15-2.53 second speech windows.
 
 ### Phase 1 — Transcription Backend (yharnam)
 
