@@ -1,6 +1,6 @@
 # SPRITEbot Voice Transcription — Implementation Plan
 
-> **Status:** Phase 2 code path implemented — live Discord voice smoke pending
+> **Status:** Phase 3 implemented — live Discord voice smoke pending
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14, Docker on shinralabs)
 > **Approach:** CPU-first (whisper.cpp). GPU offload is a future optimization.
 
@@ -263,13 +263,25 @@ in memory during the session and dumped as a `.txt` file attachment when the ses
 Live posting was deemed too spammy, especially with STT misheard words — a batch dump
 is cleaner and a downstream LLM or human can summarize the raw transcript separately.
 
-- [ ] **Remove live posting** — `voice_manager.ts` currently posts each segment to the text channel as it's transcribed. Change to accumulate `TranscriptEntry[]` in memory (userId, displayName, timestamp, text) instead of posting
-- [ ] **On `/transcribe stop`** — format accumulated entries chronologically into a raw transcript `.txt` file, attach to a message in the configured text channel. Message body = session metadata (duration, participant count, segment count), not a summary
-- [ ] **GM-only permissions** — gate `/transcribe` behind SPRITEbot's existing GM role/permission check (from the game system) instead of `ManageGuild`. Only GMs should be able to start/stop transcription sessions
-- [ ] **Session management** — track active sessions per guild (already partially in place from Phase 2's `VoiceManager.sessions` map)
-- [ ] **Auto-stop on empty VC** — if all users leave the voice channel, auto-stop and dump transcript
-- [ ] **Transcript format** — each line: `[HH:MM:SS] DisplayName: transcribed text`. Header with session metadata (channel, start time, duration, participants)
-- [ ] **LLM summary** — deferred to a future phase. Raw transcript is sufficient for now; users or agents can summarize externally
+- [x] **Remove live posting** — `voice_manager.ts` currently posts each segment to the text channel as it's transcribed. Change to accumulate `TranscriptEntry[]` in memory (userId, displayName, timestamp, text) instead of posting
+- [x] **On `/transcribe stop`** — format accumulated entries chronologically into a raw transcript `.txt` file, attach to a message in the configured text channel. Message body = session metadata (duration, participant count, segment count), not a summary
+- [x] **GM-only permissions** — gate `/transcribe` behind SPRITEbot's existing GM role/permission check (from the game system) instead of `ManageGuild`. Only GMs should be able to start/stop transcription sessions
+- [x] **Session management** — track active sessions per guild (already partially in place from Phase 2's `VoiceManager.sessions` map)
+- [x] **Auto-stop on empty VC** — if all users leave the voice channel, auto-stop and dump transcript
+- [x] **Transcript format** — each line: `[HH:MM:SS] DisplayName: transcribed text`. Header with session metadata (channel, start time, duration, participants)
+- [x] **LLM summary** — deferred to a future phase. Raw transcript is sufficient for now; users or agents can summarize externally
+
+**Phase 3 results (2026-07-07):**
+
+- `/transcribe start` now records into an in-memory session transcript instead of posting live segment messages.
+- `/transcribe stop` waits for in-flight transcription requests, destroys the voice connection, and posts a `.txt` transcript attachment to the configured text channel.
+- Transcript dump messages contain only session metadata: duration, participant count, and segment count.
+- Transcript file includes a header plus chronological raw lines in `[HH:MM:SS] DisplayName: text` format.
+- `/transcribe` no longer uses Discord `ManageGuild` default member permissions. It checks SPRITEbot's server GM link (`player_server_link.role = 'gm'`) before start/stop/status.
+- `VoiceManager` still tracks sessions per guild and now tracks transcript entries, participants, and pending transcription requests.
+- A `VoiceStateUpdate` listener auto-stops and dumps the transcript when the session voice channel has no non-bot members.
+- Verification: `npm run build`, `npm run lint`, and `npm test -- --runInBand` passed.
+- Remaining live smoke: run `/transcribe start` in Discord with a real voice channel, speak into the channel, stop or empty the channel, and confirm the transcript attachment is posted.
 
 **Not in Phase 3 scope (moved or dropped):**
 

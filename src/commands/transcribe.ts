@@ -3,22 +3,23 @@ import {
   ChannelType,
   ChatInputCommandInteraction,
   GuildTextBasedChannel,
-  PermissionFlagsBits,
   SlashCommandBuilder,
   VoiceBasedChannel,
 } from 'discord.js';
 
+import { PlayerDAO } from '../dao/player.dao';
 import { voiceManager } from '../voice/voice_manager';
+
+const playerDAO = new PlayerDAO();
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('transcribe')
-    .setDescription('Manage live voice transcription for this server.')
-    .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+    .setDescription('Manage voice transcription for this server.')
     .addSubcommand((sub) =>
       sub
         .setName('start')
-        .setDescription('Join a voice channel and start sending rough live transcripts.')
+        .setDescription('Join a voice channel and record a transcript for dump-on-stop.')
         .addChannelOption((option) =>
           option
             .setName('voice-channel')
@@ -51,6 +52,13 @@ module.exports = {
     if (!interaction.guild) {
       return interaction.reply({
         content: '⚠️ This command must be used in a server.',
+        ephemeral: true,
+      });
+    }
+
+    if (!(await isServerGm(interaction.user.id, interaction.guild.id))) {
+      return interaction.reply({
+        content: '⚠️ Only a GM can manage transcription sessions.',
         ephemeral: true,
       });
     }
@@ -88,16 +96,20 @@ module.exports = {
       });
 
       return interaction.editReply(
-        `✅ Transcription started in <#${status.voiceChannelId}>. Rough transcripts will post in <#${status.textChannelId}>.`,
+        `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
       );
     }
 
     if (subcommand === 'stop') {
-      const stopped = voiceManager.stop(interaction.guild.id);
-      return interaction.reply({
-        content: stopped ? '✅ Transcription stopped.' : '⚠️ No transcription session is active.',
-        ephemeral: true,
-      });
+      await interaction.deferReply({ ephemeral: true });
+      const result = await voiceManager.stop(interaction.guild.id);
+      if (!result.stopped) {
+        return interaction.editReply('⚠️ No transcription session is active.');
+      }
+
+      return interaction.editReply(
+        `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+      );
     }
 
     const status = voiceManager.status(interaction.guild.id);
@@ -109,8 +121,13 @@ module.exports = {
     }
 
     return interaction.reply({
-      content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}.`,
+      content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}.`,
       ephemeral: true,
     });
   },
 };
+
+async function isServerGm(userId: string, guildId: string): Promise<boolean> {
+  const link = await playerDAO.getServerLink(userId, guildId);
+  return link?.role === 'gm';
+}
