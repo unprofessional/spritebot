@@ -11,6 +11,7 @@ import { PlayerDAO } from '../dao/player.dao';
 import { voiceManager } from '../voice/voice_manager';
 
 const playerDAO = new PlayerDAO();
+const TRANSCRIBE_ADMIN_USER_IDS = new Set<string>(['818606180095885332']);
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -128,6 +129,8 @@ module.exports = {
 };
 
 async function isServerGm(userId: string, guildId: string): Promise<boolean> {
+  if (TRANSCRIBE_ADMIN_USER_IDS.has(userId)) return true;
+
   const link = await playerDAO.getServerLink(userId, guildId);
   return link?.role === 'gm';
 }
