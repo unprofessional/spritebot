@@ -222,7 +222,7 @@ Unlike LLM conversations, STT has **no context window problem**:
 - [x] Download `ggml-large-v3.bin` model
 - [x] Test `whisper-server` manually — POST a sample WAV to `/inference`, confirm response
 - [x] Write systemd unit file for auto-start + restart on failure
-- [ ] Bind to LAN only (firewall or `--host` flag)
+- [x] Bind to LAN only (firewall or `--host` flag)
 
 **Phase 1 results (2026-07-06):**
 
@@ -231,7 +231,8 @@ Unlike LLM conversations, STT has **no context window problem**:
 - Service command: `/home/hunter/src/whisper.cpp/build/bin/whisper-server -m /home/hunter/src/whisper.cpp/models/ggml-large-v3.bin --host 192.168.7.73 --port 9700 -t 24 -ng`.
 - Local inference test passed via `curl http://192.168.7.73:9700/inference -F file=@samples/jfk.wav -F response_format=json`, returning the expected JFK transcript JSON.
 - Socket bind is correct and LAN-scoped: `192.168.7.73:9700`.
-- Remaining blocker: `shinralabs` (`192.168.7.210`) can reach `yharnam` over SSH, but `192.168.7.73:9700` times out. Non-interactive `sudo` on `yharnam` requires a password, so opening the host firewall/allowlist for TCP 9700 needs root access. Likely command once root is available: `sudo ufw allow from 192.168.7.210 to any port 9700 proto tcp`.
+- Firewall allowlist is open for `shinralabs` (`192.168.7.210`) via `sudo ufw allow from 192.168.7.210 to any port 9700 proto tcp`.
+- End-to-end consumer-path inference passed from `shinralabs`: posting `/tmp/spritebot-jfk.wav` to `http://192.168.7.73:9700/inference` returned the expected JFK transcript JSON.
 
 ### Phase 2 — Voice Integration (SPRITEbot)
 
