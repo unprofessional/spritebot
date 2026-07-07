@@ -11,6 +11,7 @@ import {
   installShutdownNotifications,
   sendLifecycleNotification,
 } from './services/lifecycle_notification.service';
+import { initializeVoiceTranscription } from './voice/voice_manager';
 
 dotenv.config();
 
@@ -27,6 +28,7 @@ async function main(): Promise<void> {
   try {
     await initializeCommands(client);
     initializeRoleplayProxy(client);
+    initializeVoiceTranscription(client);
     installShutdownNotifications(client);
     await testPgConnection();
     await initializeDB();
