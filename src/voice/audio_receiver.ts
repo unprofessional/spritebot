@@ -30,11 +30,22 @@ export class AudioReceiver {
         duration: 1_000,
       },
     });
-    const decoder = new prism.opus.Decoder({
-      frameSize: 960,
-      channels: 2,
-      rate: 48_000,
-    });
+    let decoder: prism.opus.Decoder;
+    try {
+      decoder = new prism.opus.Decoder({
+        frameSize: 960,
+        channels: 2,
+        rate: 48_000,
+      });
+    } catch (err) {
+      this.activeUsers.delete(userId);
+      console.error(
+        '[voice] unable to create Opus decoder; install opusscript or @discordjs/opus',
+        err,
+      );
+      opus.destroy();
+      return;
+    }
     const downsampler = new Pcm48StereoTo16Mono();
     const segments = new SegmentBuffer();
 
