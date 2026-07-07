@@ -256,14 +256,26 @@ Unlike LLM conversations, STT has **no context window problem**:
 - Verification: `npm run build`, `npm run lint`, and `npm test -- --runInBand` passed. A compiled `TranscriptionClient` smoke from the local machine could not reach `yharnam` because UFW intentionally allows only `shinralabs`; the Phase 1 `shinralabs` POST remains the service-path verification.
 - Remaining live smoke: run `/transcribe start` in Discord with a real voice channel, speak into the channel, and confirm a transcript posts to the chosen text channel.
 
-### Phase 3 — Commands & Output
+### Phase 3 — Commands & Output (UX Revision)
 
-- [ ] `/transcribe` slash command (start/stop/status/export subcommands)
-- [ ] `transcript_output.ts` — live posting to text channel via webhook
-- [ ] Message coalescing (batch rapid segments from same user)
-- [ ] Session management (track active sessions per guild)
-- [ ] Export as .txt file attachment
-- [ ] Permission guards (reuse guards.ts pattern)
+**Key UX decision (2026-07-06):** No live transcript posting. Transcripts are accumulated
+in memory during the session and dumped as a `.txt` file attachment when the session ends.
+Live posting was deemed too spammy, especially with STT misheard words — a batch dump
+is cleaner and a downstream LLM or human can summarize the raw transcript separately.
+
+- [ ] **Remove live posting** — `voice_manager.ts` currently posts each segment to the text channel as it's transcribed. Change to accumulate `TranscriptEntry[]` in memory (userId, displayName, timestamp, text) instead of posting
+- [ ] **On `/transcribe stop`** — format accumulated entries chronologically into a raw transcript `.txt` file, attach to a message in the configured text channel. Message body = session metadata (duration, participant count, segment count), not a summary
+- [ ] **GM-only permissions** — gate `/transcribe` behind SPRITEbot's existing GM role/permission check (from the game system) instead of `ManageGuild`. Only GMs should be able to start/stop transcription sessions
+- [ ] **Session management** — track active sessions per guild (already partially in place from Phase 2's `VoiceManager.sessions` map)
+- [ ] **Auto-stop on empty VC** — if all users leave the voice channel, auto-stop and dump transcript
+- [ ] **Transcript format** — each line: `[HH:MM:SS] DisplayName: transcribed text`. Header with session metadata (channel, start time, duration, participants)
+- [ ] **LLM summary** — deferred to a future phase. Raw transcript is sufficient for now; users or agents can summarize externally
+
+**Not in Phase 3 scope (moved or dropped):**
+
+- ~~Live posting to text channel via webhook~~ — removed by design
+- ~~Message coalescing~~ — not needed without live posting
+- `/transcribe export` — not needed as a separate command since stop already dumps the file
 
 ### Phase 4 — Persistence & Polish
 
