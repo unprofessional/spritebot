@@ -1,6 +1,6 @@
 # SPRITEbot Voice Transcription — Implementation Plan
 
-> **Status:** Phase 0 complete — ready for Phase 1 backend service setup
+> **Status:** Phase 2 code path implemented — live Discord voice smoke pending
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14, Docker on shinralabs)
 > **Approach:** CPU-first (whisper.cpp). GPU offload is a future optimization.
 
@@ -236,12 +236,25 @@ Unlike LLM conversations, STT has **no context window problem**:
 
 ### Phase 2 — Voice Integration (SPRITEbot)
 
-- [ ] Add `@discordjs/voice`, `@discordjs/opus`, voice intents
-- [ ] `voice_manager.ts` — join/leave voice channels
-- [ ] `audio_receiver.ts` — subscribe to per-user audio, decode Opus → PCM 16kHz mono
+- [x] Add `@discordjs/voice`, `@discordjs/opus`, voice intents
+- [x] `voice_manager.ts` — join/leave voice channels
+- [x] `audio_receiver.ts` — subscribe to per-user audio, decode Opus → PCM 16kHz mono
 - [ ] `segment_buffer.ts` — integrate Silero VAD (onnxruntime-node), buffer speech segments
-- [ ] `transcription_client.ts` — send segments to yharnam service over HTTP
+- [x] `transcription_client.ts` — send segments to yharnam service over HTTP
 - [ ] Wire up basic end-to-end: join VC → hear speech → get text back
+
+**Phase 2 results (2026-07-07):**
+
+- Added voice dependencies: `@discordjs/voice`, `@discordjs/opus`, `prism-media`, and `sodium-native`.
+- Added `GatewayIntentBits.GuildVoiceStates` to the Discord client.
+- Added `src/voice/voice_manager.ts` for per-guild session lifecycle, bot voice permission checks, join/stop/status behavior, and rough transcript posting.
+- Added `src/voice/audio_receiver.ts` for `VoiceReceiver` per-user subscriptions and Opus decode.
+- Added `src/voice/pcm_downsampler.ts` to convert decoded 48kHz stereo PCM to 16kHz mono PCM without requiring ffmpeg in the bot container.
+- Added `src/voice/segment_buffer.ts` with a first-pass RMS speech gate, silence flushing, min segment duration, and max segment duration. This proves the buffering boundary, but Silero/ONNX is still pending.
+- Added `src/voice/transcription_client.ts` and `src/voice/wav.ts` to send WAV segments to `TRANSCRIPTION_SERVICE_URL` (`http://192.168.7.73:9700/inference` by default).
+- Added `/transcribe start|stop|status` for basic Phase 2 control. It is intentionally rough: polished output, coalescing, export, and permissions/product gating remain Phase 3.
+- Verification: `npm run build`, `npm run lint`, and `npm test -- --runInBand` passed. A compiled `TranscriptionClient` smoke from the local machine could not reach `yharnam` because UFW intentionally allows only `shinralabs`; the Phase 1 `shinralabs` POST remains the service-path verification.
+- Remaining live smoke: run `/transcribe start` in Discord with a real voice channel, speak into the channel, and confirm a transcript posts to the chosen text channel.
 
 ### Phase 3 — Commands & Output
 
