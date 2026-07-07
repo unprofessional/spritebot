@@ -24,6 +24,13 @@ const toMs = (v: string | undefined, dfltMs: number) => {
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
 };
 
+export const transcriptionServiceUrl =
+  process.env.TRANSCRIPTION_SERVICE_URL ?? 'http://192.168.7.73:9700/inference';
+export const transcriptionSilenceMs = toMs(process.env.TRANSCRIPTION_SILENCE_MS, 700);
+export const transcriptionMaxSegmentMs = toMs(process.env.TRANSCRIPTION_MAX_SEGMENT_MS, 30_000);
+export const transcriptionMinSegmentMs = toMs(process.env.TRANSCRIPTION_MIN_SEGMENT_MS, 600);
+export const transcriptionVadThreshold = Number(process.env.TRANSCRIPTION_VAD_THRESHOLD ?? '0.012');
+
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)
 export const bumpDefaultMinutes = toInt(process.env.BUMP_DEFAULT_MINUTES, 10050);
 /** Safety margin subtracted from thread.autoArchiveDuration when deriving default & next-due */
