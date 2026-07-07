@@ -236,6 +236,63 @@ Use `/view-game` later to manage the game fields or publish status.
 
 Players cannot join a game until it is public.
 
+## Voice Transcription
+
+GMs can use `/transcribe` to record a voice-channel transcript for a session.
+
+Spritebot does not post live transcription messages while people are talking. Instead, it listens during the session, collects transcript entries, and posts one raw `.txt` transcript file when transcription stops.
+
+### Starting Transcription
+
+Use:
+
+```text
+/transcribe start voice-channel:<voice channel> text-channel:<text channel>
+```
+
+Spritebot joins the selected voice channel and records speech from the people in that channel.
+
+The selected text channel is where Spritebot posts the transcript file when the session ends.
+
+Only GMs can manage transcription sessions. If Spritebot says you are not a GM, make sure you have created or are assigned to the game as a GM in this server.
+
+### Checking Status
+
+Use:
+
+```text
+/transcribe status
+```
+
+This shows the active voice channel, output text channel, participant count, and how many speech segments have been transcribed so far.
+
+### Stopping Transcription
+
+Use:
+
+```text
+/transcribe stop
+```
+
+Spritebot leaves the voice channel, finishes any in-progress transcription work, and posts a `.txt` transcript attachment in the configured text channel.
+
+The transcript file includes:
+
+- Session metadata
+- Start and end time
+- Duration
+- Participant count
+- Segment count
+- Raw transcript lines in this format: `[HH:MM:SS] DisplayName: transcribed text`
+
+If everyone leaves the voice channel, Spritebot automatically stops transcription and posts the same transcript dump.
+
+### Transcription Notes
+
+Transcription is best-effort. It may mishear names, accents, background noise, overlapping speakers, or Discord audio glitches.
+
+The transcript is intentionally raw. Spritebot does not summarize it, clean up wording, or rewrite it.
+
 ## Thread Bumps
 
 If Spritebot is configured for thread bumping, use `/bump-thread` to manage auto-bumped threads.
