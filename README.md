@@ -34,6 +34,7 @@ The repo currently defines these slash commands:
 - `/view-character` - View your active character
 - `/list-characters` - List public characters in the active game
 - `/switch-character` - Switch your active character
+- `/roll` - Roll dice from `1d2` through `15d999`
 - `/ic` - Set your messages in the current channel to in-character proxy mode
 - `/ooc` - Set your messages in the current channel to out-of-character mode
 - `/ic-edit` - Edit one of your tracked proxied in-character messages
@@ -83,6 +84,12 @@ Each character can have inventory entries with a text name, optional type/catego
 description, quantity, equipped state, and per-item custom fields stored separately in the database.
 The character card opens inventory in a separate paginated view so large item lists do not crowd the
 main character sheet.
+
+### Dice Roller
+
+Players can use `/roll num-dice:<count> num-sides:<sides>` for quick table rolls. The command accepts
+from `1d2` through `15d999` and uses Node's cryptographic random integer generator instead of
+`Math.random`.
 
 ### Roleplay Proxy
 
