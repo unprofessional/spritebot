@@ -6,6 +6,7 @@ import {
   MAX_SIDES,
   MIN_DICE,
   MIN_SIDES,
+  parseDiceExpression,
   rollDice,
 } from '../utils/dice_roller';
 import { getCharacterById } from '../services/character.service';
@@ -15,27 +16,26 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('roll')
     .setDescription('Roll dice.')
-    .addIntegerOption((option) =>
+    .addStringOption((option) =>
       option
-        .setName('num-dice')
-        .setDescription(`Number of dice to roll (${MIN_DICE}-${MAX_DICE}).`)
-        .setMinValue(MIN_DICE)
-        .setMaxValue(MAX_DICE)
-        .setRequired(true),
-    )
-    .addIntegerOption((option) =>
-      option
-        .setName('num-sides')
-        .setDescription(`Number of sides on each die (${MIN_SIDES}-${MAX_SIDES}).`)
-        .setMinValue(MIN_SIDES)
-        .setMaxValue(MAX_SIDES)
+        .setName('dice')
+        .setDescription(
+          `Roll expression, like 2d20 or 2D20 (${MIN_DICE}d${MIN_SIDES}-${MAX_DICE}d${MAX_SIDES}).`,
+        )
         .setRequired(true),
     ),
 
   async execute(interaction: ChatInputCommandInteraction<CacheType>) {
-    const numDice = interaction.options.getInteger('num-dice', true);
-    const numSides = interaction.options.getInteger('num-sides', true);
-    const result = rollDice(numDice, numSides);
+    const expression = interaction.options.getString('dice', true);
+    const parsed = parseRollExpression(expression);
+    if (!parsed) {
+      return interaction.reply({
+        content: `⚠️ Use a roll like \`2d20\` or \`2D20\`. Supported range is \`${MIN_DICE}d${MIN_SIDES}\` through \`${MAX_DICE}d${MAX_SIDES}\`.`,
+        ephemeral: true,
+      });
+    }
+
+    const result = rollDice(parsed.numDice, parsed.numSides);
     const rollerName = await resolveRollerDisplayName(interaction);
 
     return interaction.reply({
@@ -44,6 +44,14 @@ module.exports = {
     });
   },
 };
+
+function parseRollExpression(expression: string): { numDice: number; numSides: number } | null {
+  try {
+    return parseDiceExpression(expression);
+  } catch {
+    return null;
+  }
+}
 
 async function resolveRollerDisplayName(
   interaction: ChatInputCommandInteraction<CacheType>,
