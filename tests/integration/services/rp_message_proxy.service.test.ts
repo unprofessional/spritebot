@@ -6,6 +6,7 @@ import { RpProxyMessageDAO } from '../../../src/dao/rp_proxy_message.dao';
 import {
   deleteRoleplayProxyMessage,
   editRoleplayProxyMessage,
+  fetchProxyMessageContent,
   handleRoleplayProxyMessage,
 } from '../../../src/services/rp_message_proxy.service';
 import { setUserChannelInCharacterMode } from '../../../src/services/rp_channel_mode.service';
@@ -17,6 +18,7 @@ function createWebhookMock() {
     name: 'Spritebot RP Proxy',
     send: jest.fn().mockResolvedValue({ id: 'proxy-1' }),
     editMessage: jest.fn().mockResolvedValue({ id: 'proxy-1' }),
+    fetchMessage: jest.fn().mockResolvedValue({ id: 'proxy-1', content: 'Current content' }),
     deleteMessage: jest.fn().mockResolvedValue(undefined),
   };
 }
@@ -160,7 +162,6 @@ describe('rp_message_proxy.service thread handling', () => {
       editRoleplayProxyMessage({
         client: client as never,
         guildId: 'guild-1',
-        channelId: 'thread-1',
         userId: 'user-1',
         messageId: 'proxy-1',
         content: 'Edited in thread',
@@ -176,6 +177,46 @@ describe('rp_message_proxy.service thread handling', () => {
         threadId: 'thread-1',
       }),
     );
+  });
+
+  test('fetches current proxied message content through the webhook', async () => {
+    await createActiveCharacter();
+    const [character] = await new CharacterDAO().findByUser('user-1');
+    await new RpProxyMessageDAO().create({
+      proxyMessageId: 'proxy-1',
+      guildId: 'guild-1',
+      channelId: 'thread-1',
+      userId: 'user-1',
+      characterId: character.id,
+      webhookId: 'webhook-1',
+      chunkIndex: 0,
+    });
+
+    const webhook = createWebhookMock();
+    const webhooks = new Collection<string, typeof webhook>();
+    webhooks.set(webhook.id, webhook);
+    const parentChannel = createParentChannel(webhook);
+    parentChannel.fetchWebhooks.mockResolvedValue(webhooks);
+    const threadChannel = createThreadChannel();
+    const client = {
+      channels: {
+        fetch: jest.fn(async (channelId: string) =>
+          channelId === 'parent-1' ? parentChannel : threadChannel,
+        ),
+      },
+    };
+
+    await expect(
+      fetchProxyMessageContent({
+        client: client as never,
+        guildId: 'guild-1',
+        channelId: 'thread-1',
+        userId: 'user-1',
+        messageId: 'proxy-1',
+      }),
+    ).resolves.toEqual({ status: 'found', content: 'Current content' });
+
+    expect(webhook.fetchMessage).toHaveBeenCalledWith('proxy-1', { threadId: 'thread-1' });
   });
 
   test('deletes proxied thread messages by resolving the parent webhook and passing threadId', async () => {

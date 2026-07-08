@@ -1,9 +1,21 @@
-import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  CacheType,
+  ChatInputCommandInteraction,
+  ModalBuilder,
+  SlashCommandBuilder,
+  TextInputBuilder,
+  TextInputStyle,
+} from 'discord.js';
 
-import { editRoleplayProxyMessage } from '../services/rp_message_proxy.service';
+import {
+  fetchProxyMessageContent,
+  type RpProxyContentResult,
+  type RpProxyMutationResult,
+} from '../services/rp_message_proxy.service';
 import { parseDiscordMessageReference } from '../utils/discord_message_reference';
 
-function resultMessage(status: string, reason?: string): string {
+export function resultMessage(status: string, reason?: string): string {
   if (status === 'updated') return '✅ Updated your proxied RP message.';
   if (status === 'forbidden') return '⛔ You can only edit your own proxied RP messages.';
   if (status === 'not_found') {
@@ -21,11 +33,36 @@ function resultMessage(status: string, reason?: string): string {
   if (status === 'failed' && reason === 'channel_cannot_webhook') {
     return '⚠️ That channel cannot be managed through RP webhooks.';
   }
+  if (status === 'failed' && reason === 'message_not_found') {
+    return '⚠️ That proxied RP message no longer exists in Discord.';
+  }
 
   return '❌ Failed to update that proxied RP message.';
 }
 
+export function buildIcEditModal(messageId: string, content: string): ModalBuilder {
+  const input = new TextInputBuilder()
+    .setCustomId('content')
+    .setLabel('Message Content')
+    .setStyle(TextInputStyle.Paragraph)
+    .setRequired(true)
+    .setMaxLength(2000)
+    .setValue(content);
+
+  return new ModalBuilder()
+    .setCustomId(`ic-edit-modal:${messageId}`)
+    .setTitle('Edit IC Message')
+    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+}
+
+export function resultReason(
+  result: RpProxyContentResult | RpProxyMutationResult,
+): string | undefined {
+  return 'reason' in result ? result.reason : undefined;
+}
+
 module.exports = {
+  buildIcEditModal,
   data: new SlashCommandBuilder()
     .setName('ic-edit')
     .setDescription('Edit one of your proxied in-character messages.')
@@ -34,13 +71,6 @@ module.exports = {
         .setName('message')
         .setDescription('The proxied message ID or message link')
         .setRequired(true),
-    )
-    .addStringOption((option) =>
-      option
-        .setName('content')
-        .setDescription('Replacement message content')
-        .setRequired(true)
-        .setMaxLength(2000),
     ),
 
   async execute(interaction: ChatInputCommandInteraction<CacheType>) {
@@ -64,18 +94,23 @@ module.exports = {
       });
     }
 
-    const result = await editRoleplayProxyMessage({
+    const result = await fetchProxyMessageContent({
       client: interaction.client,
       guildId,
       channelId: reference.channelId,
       userId: user.id,
       messageId: reference.messageId,
-      content: interaction.options.getString('content', true),
     });
 
-    return interaction.reply({
-      content: resultMessage(result.status, 'reason' in result ? result.reason : undefined),
-      ephemeral: true,
-    });
+    if (result.status !== 'found') {
+      return interaction.reply({
+        content: resultMessage(result.status, resultReason(result)),
+        ephemeral: true,
+      });
+    }
+
+    return interaction.showModal(buildIcEditModal(reference.messageId, result.content));
   },
+  resultMessage,
+  resultReason,
 };
