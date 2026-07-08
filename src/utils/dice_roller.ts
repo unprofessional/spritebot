@@ -14,6 +14,20 @@ export type RollResult = {
 
 export type RandomInt = (min: number, max: number) => number;
 
+export function parseDiceExpression(input: string): { numDice: number; numSides: number } {
+  const expression = input.trim();
+  const shorthand = expression.match(/^(\d+)d(\d+)$/i);
+
+  if (!shorthand) {
+    throw new Error('Use a roll like 2d20 or 2D20.');
+  }
+
+  const numDice = Number(shorthand[1]);
+  const numSides = Number(shorthand[2]);
+  validateDiceInput(numDice, numSides);
+  return { numDice, numSides };
+}
+
 export function validateDiceInput(numDice: number, numSides: number): void {
   if (!Number.isInteger(numDice) || numDice < MIN_DICE || numDice > MAX_DICE) {
     throw new Error(`numDice must be an integer from ${MIN_DICE} to ${MAX_DICE}.`);
@@ -44,12 +58,8 @@ export function rollDice(
 
 export function formatRollResult(result: RollResult, rollerName?: string): string {
   const expression = `${result.numDice}d${result.numSides}`;
-  const rollList = result.rolls.join(' + ');
-  const prefix = rollerName ? `🎲 ${rollerName} rolled` : '🎲 Rolled';
+  const rollList = `[${result.rolls.join(', ')}]`;
+  const prefix = rollerName ? `🎲 **${rollerName}** rolled` : '🎲 Rolled';
 
-  if (result.numDice === 1) {
-    return `${prefix} ${expression}: **${result.total}**`;
-  }
-
-  return `${prefix} ${expression}: ${rollList} = **${result.total}**`;
+  return `${prefix} \`${expression}\`: \`${rollList}\` = **${result.total}**`;
 }
