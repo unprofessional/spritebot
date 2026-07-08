@@ -206,6 +206,27 @@ To delete everything in your active character's inventory, click `🗑️ Delete
 
 Use `↩️ Go Back` to return to the inventory list without changing the selected item.
 
+## Dice Rolling
+
+Use `/roll` when you need a quick dice result in Discord.
+
+Example:
+
+```text
+/roll num-dice:3 num-sides:6
+```
+
+Spritebot supports rolls from `1d2` through `15d999`.
+
+The result uses your active character name when you have one selected in the server. If you do not,
+Spritebot uses your server profile name, then falls back to your account display name.
+
+The result shows each die and the total for multi-die rolls. Single-die rolls show only the final
+number.
+
+Spritebot uses cryptographic local randomness for dice rolls. That is appropriate for normal table
+play, but it is not publicly verifiable like a commit-reveal or shared-seed system.
+
 ## Troubleshooting
 
 If `/create-character` says you have not joined a game, use `/join-game` first.
