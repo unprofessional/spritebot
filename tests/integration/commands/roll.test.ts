@@ -12,17 +12,18 @@ function createInteraction({
   memberDisplayName = 'Server Sage',
   userDisplayName = 'Account Sage',
   username = 'account_sage',
+  dice = '2d6',
 }: {
   userId?: string;
   guildId?: string | null;
   memberDisplayName?: string | null;
   userDisplayName?: string;
   username?: string;
+  dice?: string;
 } = {}) {
   const reply = jest.fn().mockResolvedValue(undefined);
-  const getInteger = jest.fn((name: string) => {
-    if (name === 'num-dice') return 2;
-    if (name === 'num-sides') return 6;
+  const getString = jest.fn((name: string) => {
+    if (name === 'dice') return dice;
     return null;
   });
 
@@ -35,7 +36,7 @@ function createInteraction({
         displayName: userDisplayName,
         username,
       },
-      options: { getInteger },
+      options: { getString },
       reply,
     },
     reply,
@@ -83,7 +84,7 @@ describe('/roll', () => {
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining('Mira Vale rolled 2d6'),
+        content: expect.stringContaining('**Mira Vale** rolled `2d6`'),
         allowedMentions: { parse: [] },
       }),
     );
@@ -96,7 +97,7 @@ describe('/roll', () => {
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining('Table Captain rolled 2d6'),
+        content: expect.stringContaining('**Table Captain** rolled `2d6`'),
         allowedMentions: { parse: [] },
       }),
     );
@@ -113,9 +114,33 @@ describe('/roll', () => {
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining('Wandering Account rolled 2d6'),
+        content: expect.stringContaining('**Wandering Account** rolled `2d6`'),
         allowedMentions: { parse: [] },
       }),
     );
+  });
+
+  test('accepts an uppercase dice expression', async () => {
+    const { interaction, reply } = createInteraction({ dice: '2D20' });
+
+    await rollCommand.execute(interaction);
+
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('**Server Sage** rolled `2d20`'),
+        allowedMentions: { parse: [] },
+      }),
+    );
+  });
+
+  test('explains unsupported dice expressions', async () => {
+    const { interaction, reply } = createInteraction({ dice: '2 dice 20 sides' });
+
+    await rollCommand.execute(interaction);
+
+    expect(reply).toHaveBeenCalledWith({
+      content: expect.stringContaining('Use a roll like `2d20`'),
+      ephemeral: true,
+    });
   });
 });

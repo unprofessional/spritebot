@@ -213,16 +213,22 @@ Use `/roll` when you need a quick dice result in Discord.
 Example:
 
 ```text
-/roll num-dice:3 num-sides:6
+/roll dice:3d6
 ```
 
-Spritebot supports rolls from `1d2` through `15d999`.
+Spritebot supports rolls from `1d2` through `15d999`. Use strict dice notation like `2d20` or
+`2D20`.
 
 The result uses your active character name when you have one selected in the server. If you do not,
 Spritebot uses your server profile name, then falls back to your account display name.
 
-The result shows each die and the total for multi-die rolls. Single-die rolls show only the final
-number.
+Results include the normalized dice expression, each die result, and the total.
+
+Example result:
+
+```text
+🎲 **Robin Sage** rolled `4d20`: `[14, 14, 13, 1]` = **42**
+```
 
 Spritebot uses cryptographic local randomness for dice rolls. That is appropriate for normal table
 play, but it is not publicly verifiable like a commit-reveal or shared-seed system.
