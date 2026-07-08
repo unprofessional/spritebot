@@ -87,9 +87,9 @@ main character sheet.
 
 ### Dice Roller
 
-Players can use `/roll num-dice:<count> num-sides:<sides>` for quick table rolls. The command accepts
-from `1d2` through `15d999` and uses Node's cryptographic random integer generator instead of
-`Math.random`.
+Players can use `/roll dice:<expression>` for quick table rolls. The command accepts strict dice
+notation like `2d20` or `2D20`. Supported rolls range from `1d2` through `15d999`, and the roller
+uses Node's cryptographic random integer generator instead of `Math.random`.
 
 ### Roleplay Proxy
 
