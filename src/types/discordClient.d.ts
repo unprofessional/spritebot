@@ -2,11 +2,18 @@
 
 import 'discord.js';
 import type { Collection } from 'discord.js';
-import type { SlashCommandBuilder, ChatInputCommandInteraction } from 'discord.js';
+import type {
+  ChatInputCommandInteraction,
+  ContextMenuCommandBuilder,
+  MessageContextMenuCommandInteraction,
+  SlashCommandBuilder,
+} from 'discord.js';
 
 type CommandModule = {
-  data: SlashCommandBuilder;
-  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+  data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  execute: (
+    interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
+  ) => Promise<unknown>;
 };
 
 declare module 'discord.js' {

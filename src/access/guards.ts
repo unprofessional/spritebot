@@ -1,7 +1,7 @@
 // src/access/guards.ts
 import type {
   ButtonInteraction,
-  ChatInputCommandInteraction,
+  CommandInteraction,
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
 } from 'discord.js';
@@ -14,30 +14,30 @@ const UPGRADE_MSG =
 const NEED_GUILD_MSG =
   '⚠️ This action only works in a server. Please use this in a Discord server where the bot is installed.';
 
-export async function guardSlash(interaction: ChatInputCommandInteraction): Promise<true | string> {
-  console.debug(`[GuardSlash] command=${interaction.commandName} user=${interaction.user.id}`);
+export async function guardCommand(interaction: CommandInteraction): Promise<true | string> {
+  console.debug(`[GuardCommand] command=${interaction.commandName} user=${interaction.user.id}`);
 
   const requiredFeature = CommandPolicy[interaction.commandName];
   if (!requiredFeature) {
-    console.debug(`[GuardSlash] No gating policy → allowed`);
+    console.debug(`[GuardCommand] No gating policy → allowed`);
     return true; // no gate for this command
   }
-  console.debug(`[GuardSlash] Required feature=${requiredFeature}`);
+  console.debug(`[GuardCommand] Required feature=${requiredFeature}`);
 
   const guildId = interaction.guild?.id ?? null;
   if (!guildId) {
-    console.debug(`[GuardSlash] No guildId → NEED_GUILD_MSG`);
+    console.debug(`[GuardCommand] No guildId → NEED_GUILD_MSG`);
     return NEED_GUILD_MSG;
   }
 
   const member = interaction.guild?.members?.me
     ? await interaction.guild.members.fetch(interaction.user.id).catch((err) => {
-        console.warn(`[GuardSlash] Failed to fetch member:`, err);
+        console.warn(`[GuardCommand] Failed to fetch member:`, err);
         return null;
       })
     : null;
 
-  console.debug(`[GuardSlash] Authorizing feature=${requiredFeature} guild=${guildId}`);
+  console.debug(`[GuardCommand] Authorizing feature=${requiredFeature} guild=${guildId}`);
 
   const res = await authorizeInteraction(
     {
@@ -48,7 +48,7 @@ export async function guardSlash(interaction: ChatInputCommandInteraction): Prom
     member,
   );
 
-  console.debug(`[GuardSlash] Auth result ok=${res.ok}`);
+  console.debug(`[GuardCommand] Auth result ok=${res.ok}`);
 
   return res.ok ? true : UPGRADE_MSG;
 }
