@@ -98,13 +98,19 @@ Use `/ic-edit` to edit one of your own proxied RP messages.
 Example:
 
 ```text
-/ic-edit message:<message id or message link> content:<new message text>
+/ic-edit message:<message id or message link>
 ```
 
 You can provide either:
 
 - The message ID
 - A Discord message link
+
+Spritebot opens a text editor pre-filled with the current Discord message. The editor supports
+multiple lines and paragraph spacing.
+
+You can also right-click one of your proxied messages and choose
+`Apps` → `Edit IC Message` to open the same editor.
 
 Spritebot only lets you edit messages that were proxied by your own Discord account.
 
