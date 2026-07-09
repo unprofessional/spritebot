@@ -38,6 +38,7 @@ The repo currently defines these slash commands:
 - `/ic` - Set your messages in the current channel to in-character proxy mode
 - `/ooc` - Set your messages in the current channel to out-of-character mode
 - `/ic-edit` - Edit one of your tracked proxied in-character messages
+- `Edit IC Message` - Right-click a proxied message to edit it
 - `/ic-delete` - Delete one of your tracked proxied in-character messages
 - `/inventory` - View and manage inventory for your active character
 - `/bump-thread` - Register and manage auto-bumped threads
@@ -104,7 +105,11 @@ When proxying, the bot uses the character's optional RP display fields first:
 
 If those fields are blank, it falls back to the character's normal name and avatar URL.
 
-Spritebot tracks the ownership of every proxied webhook message. Players can pass a proxied message ID or Discord message link to `/ic-edit` or `/ic-delete`, and the bot will only update/delete the message if it was originally proxied by that same Discord user.
+Spritebot tracks the ownership of every proxied webhook message. Players can pass a proxied message
+ID or Discord message link to `/ic-edit`, which opens a multi-line editor pre-filled from the
+current Discord message. They can also right-click a message and choose `Apps` →
+`Edit IC Message`. `/ic-delete` accepts the same ID or link format, and the bot only updates or
+deletes messages originally proxied by that same Discord user.
 
 For split RP posts, each chunk is a separate proxied Discord message and can be edited or deleted by its own message ID/link.
 
