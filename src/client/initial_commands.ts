@@ -8,19 +8,21 @@ import {
   ChatInputCommandInteraction,
   Client,
   Collection,
+  ContextMenuCommandBuilder,
   Events,
+  MessageContextMenuCommandInteraction,
   REST,
   Routes,
   type SlashCommandBuilder,
 } from 'discord.js';
-import type { RESTPostAPIChatInputApplicationCommandsJSONBody } from 'discord-api-types/v10';
+import type { RESTPostAPIApplicationCommandsJSONBody } from 'discord-api-types/v10';
 import dotenv = require('dotenv');
 dotenv.config();
 
 import { handleButton } from '../handlers/button_handlers';
 import { handleModal } from '../handlers/modal_handlers';
 import { handleSelectMenu } from '../handlers/select_menu_handlers';
-import { guardSlash, guardComponent } from '../access/guards';
+import { guardCommand, guardComponent } from '../access/guards';
 
 const { DISCORD_CLIENT_ID, DISCORD_BOT_TOKEN } = process.env;
 // Allow override via env; default to the provided ops guild id
@@ -35,8 +37,10 @@ const requireCommand = createRequire(__filename);
 
 // --- Types ---
 type CommandModule = {
-  data: SlashCommandBuilder;
-  execute: (interaction: ChatInputCommandInteraction) => Promise<void>;
+  data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  execute: (
+    interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
+  ) => Promise<unknown>;
 };
 
 // --- Small helpers ---
@@ -78,9 +82,7 @@ async function loadCommands(files: string[]): Promise<CommandModule[]> {
 }
 
 async function registerGlobalCommands(rest: REST, cmds: CommandModule[]) {
-  const payload: RESTPostAPIChatInputApplicationCommandsJSONBody[] = cmds.map((c) =>
-    c.data.toJSON(),
-  );
+  const payload: RESTPostAPIApplicationCommandsJSONBody[] = cmds.map((c) => c.data.toJSON());
   await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID!), { body: payload });
   console.log(`🛰️  Registered ${payload.length} global command(s)`);
 }
@@ -90,9 +92,7 @@ async function registerOpsCommands(rest: REST, opsCmds: CommandModule[]) {
     console.warn('⚠️ DEV_GUILD_ID not set; skipping ops-only command registration.');
     return;
   }
-  const payload: RESTPostAPIChatInputApplicationCommandsJSONBody[] = opsCmds.map((c) =>
-    c.data.toJSON(),
-  );
+  const payload: RESTPostAPIApplicationCommandsJSONBody[] = opsCmds.map((c) => c.data.toJSON());
   await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, DEV_GUILD_ID), {
     body: payload,
   });
@@ -145,7 +145,17 @@ export async function initializeCommands(client: Client): Promise<Client> {
     void (async () => {
       try {
         if (interaction.isChatInputCommand()) {
-          const auth = await guardSlash(interaction);
+          const auth = await guardCommand(interaction);
+          if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
+
+          const cmd = client.commands.get(interaction.commandName);
+          if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
+          await cmd.execute(interaction);
+          return;
+        }
+
+        if (interaction.isMessageContextMenuCommand()) {
+          const auth = await guardCommand(interaction);
           if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
 
           const cmd = client.commands.get(interaction.commandName);

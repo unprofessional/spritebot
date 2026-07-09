@@ -6,6 +6,7 @@ import { handle as handleCreateStatModal } from '../../components/create_stat_mo
 import * as characterCreationModals from './character_creation_modals';
 import * as characterEditModals from './character_edit_modals';
 import * as inventoryModals from './inventory_modals';
+import * as icEditModal from './ic_edit_modal';
 import * as statCalculatorModal from './stat_calculator_modal';
 import * as statTemplateModals from './stat_template_modals';
 
@@ -41,6 +42,9 @@ export async function handleModal(interaction: ModalSubmitInteraction): Promise<
   if (customId.startsWith('addInventoryModal:') || customId.startsWith('editInventoryModal:')) {
     return inventoryModals.handle(interaction);
   }
+
+  // === Roleplay Proxy ===
+  if (customId.startsWith('ic-edit-modal:')) return icEditModal.handle(interaction);
 
   await interaction.reply({
     content: '❓ Unknown modal submission.',
