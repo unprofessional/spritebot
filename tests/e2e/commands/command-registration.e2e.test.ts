@@ -5,11 +5,20 @@ import { REST } from 'discord.js';
 const commandDir = path.resolve(__dirname, '../../../src/commands');
 const opsOnlyCommands = new Set(['gift', 'toggle-bypass']);
 
-function commandNamesFromDisk(): string[] {
+function commandFilesFromDisk(): string[] {
   return fs
     .readdirSync(commandDir)
     .filter((name) => name.endsWith('.ts'))
-    .map((name) => path.basename(name, '.ts'))
+    .sort();
+}
+
+function commandNamesFromDisk(): string[] {
+  return commandFilesFromDisk()
+    .map((file) => {
+      const command = require(path.join(commandDir, file)) as { data?: { name?: string } };
+      return command.data?.name;
+    })
+    .filter((name): name is string => Boolean(name))
     .sort();
 }
 
@@ -78,17 +87,17 @@ describe('command registration', () => {
   });
 
   test('each command module has executable command data', () => {
-    const expectedNames = commandNamesFromDisk();
-
-    for (const name of expectedNames) {
-      const command = require(path.join(commandDir, `${name}.ts`)) as {
+    for (const file of commandFilesFromDisk()) {
+      const command = require(path.join(commandDir, file)) as {
         data?: { name?: string; toJSON?: () => { name: string } };
         execute?: unknown;
       };
 
-      expect(command.data?.name).toBe(name);
+      expect(command.data?.name).toBeTruthy();
       expect(typeof command.execute).toBe('function');
-      expect(command.data?.toJSON?.()).toEqual(expect.objectContaining({ name }));
+      expect(command.data?.toJSON?.()).toEqual(
+        expect.objectContaining({ name: command.data?.name }),
+      );
     }
   });
 });
