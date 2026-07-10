@@ -7,6 +7,7 @@ export interface NudgeContext {
   hasStatTemplates?: boolean;
   hasCharacters?: boolean;
   hasActiveCharacter?: boolean;
+  hasGamesInServer?: boolean;
   isInIC?: boolean;
 }
 
@@ -22,6 +23,7 @@ export type NudgeTrigger =
   | 'submit-character'
   | 'switch-character'
   | 'switch-game'
+  | 'switch-game-empty'
   | 'ic'
   | 'ooc'
   | 'create-character-no-game'
@@ -68,6 +70,9 @@ export function buildNudge(context: NudgeContext, trigger: NudgeTrigger | string
       return null;
 
     case 'join-game-empty':
+      if (context.hasGamesInServer === false) {
+        return '💡 No games exist in this server yet. A GM can create one with `/create-game`.';
+      }
       return "💡 If you're the GM, your game might need to be published first. Use `/view-game` to check.";
 
     case 'join-game':
@@ -91,6 +96,12 @@ export function buildNudge(context: NudgeContext, trigger: NudgeTrigger | string
       }
       return '💡 Active game switched. Use `/create-character` to make a character for this game.';
 
+    case 'switch-game-empty':
+      if (context.hasGamesInServer === false) {
+        return '💡 No games exist in this server yet. Start one with `/create-game`, or ask your GM to create and publish one.';
+      }
+      return '💡 No published games available. Ask your GM to publish a game so you can join.';
+
     case 'ic':
       return "💡 You're in-character! Your messages in this channel will now proxy through your active character. Use `/ooc` to switch back.";
 
@@ -98,6 +109,9 @@ export function buildNudge(context: NudgeContext, trigger: NudgeTrigger | string
       return '💡 Back out-of-character. Use `/ic` when you want to proxy messages through your active character again.';
 
     case 'create-character-no-game':
+      if (context.hasGamesInServer === false) {
+        return '💡 No games exist in this server yet. Start one with `/create-game`, or ask your GM to set one up.';
+      }
       return '💡 You need to join a game first. Use `/join-game` to pick one.';
 
     case 'view-character-none':
@@ -105,6 +119,12 @@ export function buildNudge(context: NudgeContext, trigger: NudgeTrigger | string
       return "💡 You don't have a character yet. Use `/create-character` to make one.";
 
     case 'view-game':
+      if (!context.gameId) {
+        if (context.hasGamesInServer === false) {
+          return '💡 No games exist in this server yet. Start one with `/create-game`.';
+        }
+        return '💡 You need to select a game first. Use `/switch-game` to pick one.';
+      }
       if (context.isGM && !context.hasStatTemplates) {
         return "💡 Next: define your game's stat fields with **➕ Add Another Stat**.";
       }

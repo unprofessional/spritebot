@@ -3,6 +3,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'discord.js';
 
 import { getCharactersByGame } from '../services/character.service';
+import { getGamesByGuild } from '../services/game.service';
 import { getCurrentGame } from '../services/player.service';
 import { rebuildListCharactersResponse } from '../components/rebuild_list_characters_response';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
@@ -29,10 +30,19 @@ module.exports = {
       console.log('🧠 [list-characters] gameId:', gameId);
 
       if (!gameId) {
+        const games = await getGamesByGuild(guildId);
+
         return await interaction.reply({
           content: appendNudge(
             '⚠️ You must join or create a game first.',
-            buildNudge({ userId, guildId }, 'create-character-no-game'),
+            buildNudge(
+              {
+                userId,
+                guildId,
+                hasGamesInServer: games.length > 0,
+              },
+              'create-character-no-game',
+            ),
           ),
           ephemeral: true,
         });
