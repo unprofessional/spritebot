@@ -33,6 +33,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['editCharacterStat', 'rpg:characters'], // buttons
   ['editCharacterStatDropdown:', 'rpg:characters'], // select
   ['createCharacterDropdown', 'rpg:characters'], // select
+  ['restoreCharacterDropdown', 'rpg:characters'], // select
   ['editCharacterFieldDropdown', 'rpg:characters'], // select
   ['createCharacterModal:', 'rpg:characters'], // modal
   ['createDraftCharacterField:', 'rpg:characters'], // modal

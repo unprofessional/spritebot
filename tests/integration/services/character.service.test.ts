@@ -2,10 +2,20 @@ import { CharacterDAO } from '../../../src/dao/character.dao';
 import { CharacterStatFieldDAO } from '../../../src/dao/character_stat_field.dao';
 import { GameDAO } from '../../../src/dao/game.dao';
 import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
+import { query } from '../../../src/db/client';
 import {
+  deleteCharacter,
   getCharacterWithStats,
+  getRestorableCharacters,
+  restoreCharacterAsAdmin,
+  restoreCharacterForUser,
   updateStatMetaField,
 } from '../../../src/services/character.service';
+import {
+  getOrCreatePlayer,
+  setCurrentCharacter,
+  setCurrentGame,
+} from '../../../src/services/player.service';
 
 describe('character.service', () => {
   const characterDAO = new CharacterDAO();
@@ -139,6 +149,115 @@ describe('character.service', () => {
       expect.objectContaining({
         rp_display_name: 'Dagger',
         rp_display_avatar_url: 'https://example.com/rp-avatar.png',
+      }),
+    );
+  });
+
+  test('soft-deletes characters and exposes them for user restore within 30 days', async () => {
+    const game = await createGame();
+    await getOrCreatePlayer('player-1', 'guild-1');
+    await setCurrentGame('player-1', 'guild-1', game.id);
+
+    const character = await characterDAO.create({
+      user_id: 'player-1',
+      game_id: game.id,
+      name: 'Restore Me',
+    });
+    await setCurrentCharacter('player-1', 'guild-1', character.id);
+
+    await deleteCharacter(character.id);
+
+    await expect(getCharacterWithStats(character.id)).resolves.toBeNull();
+    await expect(characterDAO.findByUser('player-1')).resolves.toEqual([]);
+    await expect(getRestorableCharacters('player-1', 'guild-1')).resolves.toEqual([
+      expect.objectContaining({
+        id: character.id,
+        name: 'Restore Me',
+      }),
+    ]);
+
+    const result = await restoreCharacterForUser({
+      characterId: character.id,
+      userId: 'player-1',
+      guildId: 'guild-1',
+    });
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        ok: true,
+        character: expect.objectContaining({
+          id: character.id,
+          visibility: 'private',
+        }),
+      }),
+    );
+    await expect(getCharacterWithStats(character.id)).resolves.toEqual(
+      expect.objectContaining({
+        id: character.id,
+      }),
+    );
+  });
+
+  test('rejects user restore outside ownership or retention window', async () => {
+    const game = await createGame();
+    await getOrCreatePlayer('player-1', 'guild-1');
+    await setCurrentGame('player-1', 'guild-1', game.id);
+
+    const otherCharacter = await characterDAO.create({
+      user_id: 'player-2',
+      game_id: game.id,
+      name: 'Not Yours',
+    });
+    await deleteCharacter(otherCharacter.id);
+
+    await expect(
+      restoreCharacterForUser({
+        characterId: otherCharacter.id,
+        userId: 'player-1',
+        guildId: 'guild-1',
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'not_owner' });
+
+    const expiredCharacter = await characterDAO.create({
+      user_id: 'player-1',
+      game_id: game.id,
+      name: 'Too Late',
+    });
+    await deleteCharacter(expiredCharacter.id);
+    await query(
+      `UPDATE character SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [expiredCharacter.id],
+    );
+
+    await expect(
+      restoreCharacterForUser({
+        characterId: expiredCharacter.id,
+        userId: 'player-1',
+        guildId: 'guild-1',
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'expired' });
+  });
+
+  test('allows admin restore for any soft-deleted character that still exists', async () => {
+    const game = await createGame();
+    const character = await characterDAO.create({
+      user_id: 'player-2',
+      game_id: game.id,
+      name: 'Admin Saved',
+    });
+    await deleteCharacter(character.id);
+    await query(
+      `UPDATE character SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [character.id],
+    );
+
+    await expect(restoreCharacterAsAdmin(character.id)).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        character: expect.objectContaining({
+          id: character.id,
+          visibility: 'private',
+        }),
       }),
     );
   });

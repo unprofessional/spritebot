@@ -62,14 +62,34 @@ export class CharacterDAO {
   }
 
   async findByUser(userId: string): Promise<Character[]> {
-    const result = await query<Character>(`SELECT * FROM character WHERE user_id = $1`, [
-      userId.trim(),
-    ]);
+    const result = await query<Character>(
+      `SELECT * FROM character WHERE user_id = $1 AND deleted_at IS NULL`,
+      [userId.trim()],
+    );
     return result.rows;
   }
 
   async findByGame(gameId: string): Promise<Character[]> {
-    const result = await query<Character>(`SELECT * FROM character WHERE game_id = $1`, [gameId]);
+    const result = await query<Character>(
+      `SELECT * FROM character WHERE game_id = $1 AND deleted_at IS NULL`,
+      [gameId],
+    );
+    return result.rows;
+  }
+
+  async findRestorableByUserInGame(userId: string, gameId: string): Promise<Character[]> {
+    const result = await query<Character>(
+      `
+        SELECT *
+        FROM character
+        WHERE user_id = $1
+          AND game_id = $2
+          AND deleted_at IS NOT NULL
+          AND deleted_at >= CURRENT_TIMESTAMP - INTERVAL '30 days'
+        ORDER BY deleted_at DESC, created_at DESC
+      `,
+      [userId.trim(), gameId],
+    );
     return result.rows;
   }
 
@@ -114,5 +134,37 @@ export class CharacterDAO {
 
   async delete(characterId: string): Promise<void> {
     await query(`DELETE FROM character WHERE id = $1`, [characterId]);
+  }
+
+  async softDelete(characterId: string): Promise<Character | null> {
+    const result = await query<Character>(
+      `
+        UPDATE character
+        SET deleted_at = CURRENT_TIMESTAMP,
+            visibility = 'private',
+            last_updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND deleted_at IS NULL
+        RETURNING *
+      `,
+      [characterId],
+    );
+    return result.rows[0] || null;
+  }
+
+  async restore(characterId: string): Promise<Character | null> {
+    const result = await query<Character>(
+      `
+        UPDATE character
+        SET deleted_at = NULL,
+            visibility = 'private',
+            last_updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1
+          AND deleted_at IS NOT NULL
+        RETURNING *
+      `,
+      [characterId],
+    );
+    return result.rows[0] || null;
   }
 }
