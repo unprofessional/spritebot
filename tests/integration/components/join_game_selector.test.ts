@@ -67,6 +67,8 @@ describe('join game selector', () => {
         '📭 There are no joinable public games in this server right now.',
         '',
         'If you created a game, you’re already considered a player as the **Game Master**.',
+        '',
+        "💡 If you're the GM, your game might need to be published first. Use `/view-game` to check.",
       ].join('\n'),
       ephemeral: true,
     });

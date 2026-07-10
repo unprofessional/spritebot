@@ -3,7 +3,9 @@
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
 
 import { getGamesByGuild } from '../services/game.service';
+import { getCharactersByUser } from '../services/character.service';
 import { getOrCreatePlayer, setCurrentGame } from '../services/player.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { Game } from '../types/game'; // Adjust the import path/type name as needed
 
 export const id = 'joinGameDropdown';
@@ -30,6 +32,8 @@ export async function build(
         '📭 There are no joinable public games in this server right now.',
         '',
         'If you created a game, you’re already considered a player as the **Game Master**.',
+        '',
+        buildNudge({ userId, guildId }, 'join-game-empty'),
       ].join('\n'),
       ephemeral: true,
     };
@@ -81,9 +85,19 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   try {
     await getOrCreatePlayer(user.id, guildId);
     await setCurrentGame(user.id, guildId, selected);
+    const characters = await getCharactersByUser(user.id, guildId);
+    const nudge = buildNudge(
+      {
+        userId: user.id,
+        guildId,
+        gameId: selected,
+        hasCharacters: characters.length > 0,
+      },
+      'join-game',
+    );
 
     await interaction.update({
-      content: `✅ You have joined the selected game.`,
+      content: appendNudge(`✅ You have joined the selected game.`, nudge),
       components: [],
     });
   } catch (err) {
