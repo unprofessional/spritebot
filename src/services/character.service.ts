@@ -14,12 +14,17 @@ import type {
 } from '../types/character';
 import { getStatTemplates } from './game.service';
 import { getInventory } from './inventory.service';
-import { getCurrentGame } from './player.service';
+import { getCurrentGame, setCurrentCharacter } from './player.service';
 
 const characterDAO = new CharacterDAO();
 const statDAO = new CharacterStatFieldDAO();
 const customDAO = new CharacterCustomFieldDAO();
 const playerDAO = new PlayerDAO();
+const RESTORE_WINDOW_DAYS = 30;
+
+export type RestoreCharacterResult =
+  | { ok: true; character: CharacterWithStats }
+  | { ok: false; reason: 'not_found' | 'not_deleted' | 'not_owner' | 'expired' };
 
 export async function createCharacter({
   userId,
@@ -78,6 +83,8 @@ export async function getCharacterWithStats(
     console.warn('⚠️ Character not found:', characterId);
     return null;
   }
+
+  if (character.deleted_at) return null;
 
   const stats = await statDAO.findByCharacter(characterId);
   const custom = await customDAO.findByCharacter(characterId);
@@ -171,9 +178,72 @@ export async function updateCharacterMeta(
 }
 
 export async function deleteCharacter(characterId: string) {
-  await statDAO.deleteByCharacter(characterId);
-  await customDAO.deleteByCharacter(characterId);
-  await characterDAO.delete(characterId);
+  await characterDAO.softDelete(characterId);
+  await playerDAO.clearCurrentCharacter(characterId);
+}
+
+export async function getRestorableCharacters(userId: string, guildId: string) {
+  const currentGameId = await getCurrentGame(userId, guildId);
+  if (!currentGameId) return [];
+
+  return characterDAO.findRestorableByUserInGame(userId, currentGameId);
+}
+
+function restoreWindowExpired(deletedAt?: string | null): boolean {
+  if (!deletedAt) return false;
+  const deletedTime = new Date(deletedAt).getTime();
+  const cutoff = Date.now() - RESTORE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return deletedTime < cutoff;
+}
+
+async function hydrateRestoredCharacter(characterId: string): Promise<CharacterWithStats | null> {
+  const character = await getCharacterWithStats(characterId);
+  return character;
+}
+
+export async function restoreCharacterForUser({
+  characterId,
+  userId,
+  guildId,
+}: {
+  characterId: string;
+  userId: string;
+  guildId: string;
+}): Promise<RestoreCharacterResult> {
+  const currentGameId = await getCurrentGame(userId, guildId);
+  const character = await characterDAO.findById(characterId);
+
+  if (!character || !currentGameId || character.game_id !== currentGameId) {
+    return { ok: false, reason: 'not_found' };
+  }
+
+  if (!character.deleted_at) return { ok: false, reason: 'not_deleted' };
+  if (character.user_id !== userId) return { ok: false, reason: 'not_owner' };
+  if (restoreWindowExpired(character.deleted_at)) return { ok: false, reason: 'expired' };
+
+  await characterDAO.restore(characterId);
+  await setCurrentCharacter(userId, guildId, characterId);
+
+  const restored = await hydrateRestoredCharacter(characterId);
+  if (!restored) return { ok: false, reason: 'not_found' };
+
+  return { ok: true, character: restored };
+}
+
+export async function restoreCharacterAsAdmin(
+  characterId: string,
+): Promise<RestoreCharacterResult> {
+  const character = await characterDAO.findById(characterId);
+
+  if (!character) return { ok: false, reason: 'not_found' };
+  if (!character.deleted_at) return { ok: false, reason: 'not_deleted' };
+
+  await characterDAO.restore(characterId);
+
+  const restored = await hydrateRestoredCharacter(characterId);
+  if (!restored) return { ok: false, reason: 'not_found' };
+
+  return { ok: true, character: restored };
 }
 
 export async function getUserDefinedFields(userId: string): Promise<UserDefinedField[]> {
@@ -237,7 +307,8 @@ export async function updateStatMetaField(
 
 // raw access for validations (user_id, game_id, etc.)
 export async function getCharacterById(characterId: string) {
-  return characterDAO.findById(characterId);
+  const character = await characterDAO.findById(characterId);
+  return character?.deleted_at ? null : character;
 }
 
 export async function belongsToUser(characterId: string, userId: string): Promise<boolean> {

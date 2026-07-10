@@ -31,7 +31,8 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     await deleteCharacter(characterId);
 
     await interaction.update({
-      content: '🗑️ Character successfully deleted.',
+      content:
+        '🗑️ Character deleted.\n⚠️ You have **30 days** to restore it before it is permanently removed. Use `/restore-character` to recover it.',
       embeds: [],
       components: [],
     });

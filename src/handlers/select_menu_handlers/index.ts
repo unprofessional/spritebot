@@ -9,6 +9,7 @@ import { handle as editStatSelectorHandler } from '../../components/edit_stat_se
 import { handle as handleJoinGameSelector } from '../../components/join_game_selector';
 import { handle as handleParagraphFieldSelector } from '../../components/paragraph_field_selector';
 import { handle as handlePublicCharacterSelector } from '../../components/public_character_selector';
+import { handle as handleRestoreCharacterSelector } from '../../components/restore_character_selector';
 import { handle as statTypeSelectorHandler } from '../../components/stat_type_selector';
 import { handle as handleSwitchCharacterSelector } from '../../components/switch_character_selector';
 import { handle as handleSwitchGameSelector } from '../../components/switch_game_selector';
@@ -22,6 +23,7 @@ export async function handleSelectMenu(interaction: StringSelectMenuInteraction)
   if (customId === 'switchCharacterDropdown') return handleSwitchCharacterSelector(interaction);
   if (customId === 'switchGameDropdown') return handleSwitchGameSelector(interaction);
   if (customId === 'joinGameDropdown') return handleJoinGameSelector(interaction);
+  if (customId === 'restoreCharacterDropdown') return handleRestoreCharacterSelector(interaction);
   if (customId.startsWith('editStatSelect:')) return editStatSelectorHandler(interaction);
   if (customId.startsWith('deleteStatSelect:')) return deleteStatSelectorHandler(interaction);
   if (customId.startsWith('selectStatType:')) return statTypeSelectorHandler(interaction);

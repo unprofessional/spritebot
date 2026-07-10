@@ -22,6 +22,7 @@ export interface Character {
   rp_display_avatar_url?: string | null;
   bio?: string | null;
   visibility?: 'public' | 'private' | 'link-only';
+  deleted_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
