@@ -151,6 +151,46 @@ No integration test changes needed — the nudges are pure string appends to exi
 
 ---
 
+## Follow-up: Zero-Game Server Awareness
+
+> **Status:** Open
+> **Context:** When a server has no games at all, several commands nudge toward
+> `/join-game` or `/switch-game` which are also dead ends. The nudge utility
+> needs to distinguish "no games exist in this server" from "games exist but
+> you haven't joined one."
+
+### Problem
+
+On a fresh server with zero games:
+
+- `/list-characters` nudges `/join-game` → dead end
+- `/join-game` nudges to check `/view-game` as if user is a GM → confusing
+- `/view-game` nudges `/switch-game` → dead end
+- `/switch-game` says "no accessible games" with no nudge at all
+
+### Solution
+
+Add a `hasGamesInServer` boolean to `NudgeContext`. Callers that already
+query games (or can cheaply check) pass this flag. The nudge map branches:
+
+| Trigger                           | hasGamesInServer=false                                                                                             | hasGamesInServer=true (current)                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------- |
+| `list-characters` (no game)       | `💡 No games exist in this server yet. Start one with \`/create-game\`, or ask your GM to set one up.`             | `💡 You need to join a game first. Use \`/join-game\` to pick one.`                             |
+| `join-game-empty`                 | `💡 No games exist in this server yet. A GM can create one with \`/create-game\`.`                                 | `💡 If you're the GM, your game might need to be published first. Use \`/view-game\` to check.` |
+| `view-game` (no active)           | `💡 No games exist in this server yet. Start one with \`/create-game\`.`                                           | (current: nudge `/switch-game`)                                                                 |
+| `switch-game-empty` (new trigger) | `💡 No games exist in this server yet. Start one with \`/create-game\`, or ask your GM to create and publish one.` | `💡 No published games available. Ask your GM to publish a game so you can join.`               |
+
+### Files to update
+
+- `src/utils/onboarding_nudge.ts` — add `hasGamesInServer?: boolean` to `NudgeContext`, add `'switch-game-empty'` trigger, update branching for affected triggers.
+- `src/commands/list-characters.ts` — query game existence, pass flag.
+- `src/components/join_game_selector.ts` — already queries games, pass flag.
+- `src/commands/view-game.ts` — the "no active game" path should check if any games exist.
+- `src/components/switch_game_selector.ts` — add nudge to empty state, pass flag.
+- `tests/unit/utils/onboarding_nudge.test.ts` — add cases for `hasGamesInServer: false`.
+
+---
+
 ## Out of Scope
 
 - **Buttons that auto-run the next command** — nudges are text hints, not interactive wizards. The existing button flows (define stats, toggle publish) stay as-is.

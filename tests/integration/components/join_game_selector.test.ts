@@ -59,7 +59,29 @@ describe('join game selector', () => {
     );
   });
 
-  test('explains when no public games are joinable', async () => {
+  test('explains when no games exist in the server', async () => {
+    const response = await buildJoinGameSelector('player-1', 'guild-1');
+
+    expect(response).toEqual({
+      content: [
+        '📭 There are no joinable public games in this server right now.',
+        '',
+        'If you created a game, you’re already considered a player as the **Game Master**.',
+        '',
+        '💡 No games exist in this server yet. A GM can create one with `/create-game`.',
+      ].join('\n'),
+      ephemeral: true,
+    });
+  });
+
+  test('explains when games exist but none are joinable', async () => {
+    await gameDao.create({
+      name: 'Draft Game',
+      description: '',
+      created_by: 'gren',
+      guild_id: 'guild-1',
+    });
+
     const response = await buildJoinGameSelector('player-1', 'guild-1');
 
     expect(response).toEqual({
