@@ -88,6 +88,64 @@ incomplete drafts.
 
 ---
 
+## Soft-Delete User Communication
+
+Any user-facing action that soft-deletes data **must** inform the user of the
+retention window and how to recover it. This applies to existing delete flows
+(e.g. character deletion via `confirm_delete_character_button`) and any
+future delete operations.
+
+### Requirements
+
+1. **On soft-delete:** The confirmation/success message must include:
+
+   ```
+   ⚠️ This character has been deleted. You have **30 days** to restore it
+   before it is permanently removed. Use `/restore-character` to recover it.
+   ```
+
+   Adjust the entity name and command as appropriate.
+
+2. **On hard-delete (admin purge):** The purge confirmation must show:
+   - Exactly what will be permanently deleted
+   - That this is irreversible
+   - Counts per category
+
+3. **Recovery command:** A user-facing `/restore-character` that lets the
+   original owner recover their own soft-deleted characters within the
+   retention window, plus an admin-level override.
+
+### Recovery Flow
+
+**File:** `src/commands/restore-character.ts` (user-facing)
+
+- Shows a dropdown of the user's own soft-deleted characters in the current
+  game (where `deleted_at IS NOT NULL` and within 30 days)
+- On selection: sets `deleted_at = NULL`, restores visibility to `private`
+- Replies with confirmation + nudge to `/view-character`
+
+**File:** `src/handlers/admin_restore.handler.ts` (admin-facing)
+
+- `/admin restore character <id>` — admin override to restore any character
+  regardless of ownership
+- `/admin restore game <id>` — if we ever add game soft-delete
+
+### Files to Update (Existing)
+
+- `src/components/confirm_delete_character_button.ts` — add retention
+  window messaging to the success response
+- Any future delete flows must follow this same pattern
+
+### Retention Periods
+
+| Entity     | Soft-Delete Window | After Expiry                      |
+| ---------- | ------------------ | --------------------------------- |
+| Characters | 30 days            | Hard-deleted by cleanup scheduler |
+| Games      | N/A (manual only)  | No soft-delete yet                |
+| Other      | N/A                | Operational data, auto-cleaned    |
+
+---
+
 ## Background Cleanup (Automated)
 
 ### Scheduled Purge Task
@@ -95,13 +153,13 @@ incomplete drafts.
 A lightweight scheduled task (same pattern as `bump_scheduler.ts`) that runs
 daily and automatically cleans up data that is unambiguously stale:
 
-| What                       | Condition                                                               | Action                                                              |
-| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
-| Soft-deleted characters    | `deleted_at` older than 30 days                                         | Hard delete (CASCADE handles stat_fields, inventory, custom_fields) |
-| Stale rp_proxy_messages    | `created_at` older than 90 days                                         | Delete                                                              |
-| Stale rp_channel_modes     | `updated_at` older than 90 days                                         | Delete                                                              |
-| Expired entitlements cache | `status IN ('expired', 'canceled')` AND `updated_at` older than 90 days | Delete                                                              |
-| Expired gifted guilds      | `expires_at < now()`                                                    | Delete                                                              |
+| What                       | Condition                                                               | Action                                                                                                                    |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
+| Soft-deleted characters    | `deleted_at` older than 30 days                                         | Hard delete (CASCADE handles stat_fields, inventory, custom_fields). **Only runs after the 30-day user recovery window.** |
+| Stale rp_proxy_messages    | `created_at` older than 90 days                                         | Delete                                                                                                                    |
+| Stale rp_channel_modes     | `updated_at` older than 90 days                                         | Delete                                                                                                                    |
+| Expired entitlements cache | `status IN ('expired', 'canceled')` AND `updated_at` older than 90 days | Delete                                                                                                                    |
+| Expired gifted guilds      | `expires_at < now()`                                                    | Delete                                                                                                                    |
 
 **What it does NOT auto-delete:**
 
