@@ -4,6 +4,7 @@ import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'dis
 
 import { getGame } from '../services/game.service';
 import { getCurrentGame } from '../services/player.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -26,7 +27,10 @@ module.exports = {
 
       if (!game) {
         return await interaction.reply({
-          content: '📭 No games found in this server.',
+          content: appendNudge(
+            '📭 No games found in this server.',
+            buildNudge({ userId, guildId }, 'list-games-empty'),
+          ),
           ephemeral: true,
         });
       }
@@ -40,9 +44,19 @@ module.exports = {
 
       const parts = [`• **${game.name}**`, visibility, creatorTag, activeTag].filter(Boolean);
       const row = parts.join(' — ');
+      const nudge = buildNudge(
+        {
+          userId,
+          guildId,
+          gameId: currentGameId ?? undefined,
+          isGM,
+          gameIsPublished: game.is_public,
+        },
+        'list-games',
+      );
 
       await interaction.reply({
-        content: `🎲 **Game in this server:**\n\n${row}`,
+        content: appendNudge(`🎲 **Game in this server:**\n\n${row}`, nudge),
         ephemeral: true,
       });
     } catch (err) {

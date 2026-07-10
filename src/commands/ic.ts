@@ -1,6 +1,7 @@
 import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 
 import { setUserChannelInCharacterMode } from '../services/rp_channel_mode.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -25,8 +26,10 @@ module.exports = {
     });
 
     return interaction.reply({
-      content:
-        '✅ You are now in-character in this channel. Your messages here will proxy through your active character.',
+      content: appendNudge(
+        '✅ You are now in-character in this channel.',
+        buildNudge({ userId: user.id, guildId, isInIC: true }, 'ic'),
+      ),
       ephemeral: true,
     });
   },

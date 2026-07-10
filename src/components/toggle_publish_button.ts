@@ -6,6 +6,7 @@ import { getStatTemplates, togglePublish } from '../services/game.service';
 import { getOrCreatePlayer } from '../services/player.service';
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 
 const id = 'togglePublishGame';
@@ -42,10 +43,22 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     const statTemplates = rawTemplates as StatTemplate[];
 
     const response = rebuildCreateGameResponse(updatedGame as Game, statTemplates);
+    const nudge = buildNudge(
+      {
+        userId,
+        guildId,
+        gameId,
+        isGM: true,
+        gameIsPublished: updatedGame.is_public,
+        hasStatTemplates: statTemplates.length > 0,
+      },
+      'toggle-publish',
+    );
 
     // Convert components properly
     await interaction.update({
       ...response,
+      content: appendNudge(response.content, nudge),
       components: response.components.map((row) => row.toJSON()),
     });
   } catch (err) {
