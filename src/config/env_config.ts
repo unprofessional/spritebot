@@ -48,3 +48,6 @@ export const bumpJitterMs = toMs(process.env.BUMP_JITTER_MS, 15_000);
 export const bumpPollIntervalMs = toMs(process.env.BUMP_POLLER_INTERVAL_MS, 30_000);
 export const bumpPollerCooldownMs = toMs(process.env.BUMP_POLLER_COOLDOWN_MS, 5 * 60_000);
 export const bumpMaxConcurrency = toInt(process.env.BUMP_MAX_CONCURRENCY, 3);
+
+// Housekeeping cleanup scheduler. Defaults to once per day.
+export const cleanupIntervalHours = toInt(process.env.CLEANUP_INTERVAL_HOURS, 24);
