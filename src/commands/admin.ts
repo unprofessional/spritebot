@@ -3,7 +3,8 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 import { handleAdminCharacters } from '../handlers/admin_characters.handler';
 import { handleAdminGames } from '../handlers/admin_games.handler';
-import { handleAdminOrphans } from '../handlers/admin_orphans.handler';
+import { handleAdminOrphans, handleAdminOrphansPurge } from '../handlers/admin_orphans.handler';
+import { handleAdminRestoreCharacter } from '../handlers/admin_restore.handler';
 import { userOwnsGame, userOwnsGameInGuild } from '../services/admin_housekeeping.service';
 
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
@@ -14,6 +15,11 @@ export const data = new SlashCommandBuilder()
   .setDescription('SPRITEbot admin housekeeping tools')
   .addSubcommand((subcommand) =>
     subcommand.setName('orphans').setDescription('Show a read-only orphan and stale-data report'),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('orphans-purge')
+      .setDescription('Preview and confirm permanent cleanup of safe orphan rows'),
   )
   .addSubcommand((subcommand) =>
     subcommand.setName('games').setDescription('Audit games in this server'),
@@ -27,6 +33,17 @@ export const data = new SlashCommandBuilder()
           .setName('game_id')
           .setDescription('Restrict the audit to a specific game id')
           .setRequired(false),
+      ),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('restore-character')
+      .setDescription('Restore any soft-deleted character by id')
+      .addStringOption((option) =>
+        option
+          .setName('character_id')
+          .setDescription('Soft-deleted character id')
+          .setRequired(true),
       ),
   );
 
@@ -68,6 +85,22 @@ module.exports = {
       return;
     }
 
+    if (subcommand === 'orphans-purge') {
+      if (interaction.guildId !== OPS_GUILD_ID) {
+        return interaction.reply({
+          content: '⛔ Orphan purges are only available in the ops guild.',
+          ephemeral: true,
+        });
+      }
+
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+      }
+
+      await handleAdminOrphansPurge(interaction);
+      return;
+    }
+
     if (subcommand === 'games') {
       if (!(await canAuditGames(interaction))) {
         return interaction.reply({
@@ -104,6 +137,15 @@ module.exports = {
       }
 
       await handleAdminCharacters(interaction);
+      return;
+    }
+
+    if (subcommand === 'restore-character') {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+      }
+
+      await handleAdminRestoreCharacter(interaction);
     }
   },
 };

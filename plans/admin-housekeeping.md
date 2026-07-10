@@ -48,7 +48,7 @@ If everything is clean, show a single "✅ No orphans detected" message.
 **Subcommands:**
 
 - `/admin orphans` — show the full report
-- `/admin orphans purge` — actually delete the detected orphans (with
+- `/admin orphans-purge` — actually delete the detected orphans (with
   confirmation button). Only purges categories marked safe for auto-cleanup
   (soft-deleted characters, stale proxy messages, stale IC modes, expired
   gifts, expired entitlements). Abandoned/empty games require manual review
@@ -126,9 +126,9 @@ future delete operations.
 
 **File:** `src/handlers/admin_restore.handler.ts` (admin-facing)
 
-- `/admin restore character <id>` — admin override to restore any character
+- `/admin restore-character <id>` — admin override to restore any character
   regardless of ownership
-- `/admin restore game <id>` — if we ever add game soft-delete
+- `/admin restore-game <id>` — if we ever add game soft-delete
 
 ### Files to Update (Existing)
 
@@ -207,6 +207,42 @@ Postgres instance:
 - These tables should NOT be touched by SPRITEbot's cleanup scheduler.
   SPRITE-Integrations should own its own housekeeping.
 
+### Pass 5 Audit Result
+
+Verified on July 10, 2026 from the current SPRITEbot and
+SPRITE-Integrations source trees, plus a read-only count check against the
+shared `spritebot` Postgres database on `shinralabs`.
+
+**Findings:**
+
+- SPRITEbot actively uses the singular
+  `lifecycle_notification_channel` table through
+  `src/dao/lifecycle_notification_channel.dao.ts`.
+- SPRITE-Integrations actively uses the plural
+  `lifecycle_notification_channels` table through
+  `spritebot-integrations/src/dao/lifecycle_notification_channel.dao.ts`.
+  It is not dead or duplicate from that repo's perspective.
+- The live database currently has rows in both lifecycle tables:
+  - `lifecycle_notification_channel`: 1 row
+  - `lifecycle_notification_channels`: 1 row
+- `webhook_events` is defined by SPRITE-Integrations and truncated by its
+  test reset helper, but no current SPRITE-Integrations source code inserts
+  into or reads from it.
+- The live database currently has `webhook_events`: 0 rows.
+
+**Recommendation:**
+
+- Do not touch `lifecycle_notification_channels` from SPRITEbot. It is owned
+  and actively used by SPRITE-Integrations.
+- Do not include `webhook_events` in SPRITEbot cleanup. It is also owned by
+  SPRITE-Integrations, even though it appears unused today.
+- Follow up in SPRITE-Integrations with one of two outcomes:
+  - remove `webhook_events` if webhook event logging is intentionally
+    abandoned, or
+  - add a small retention policy there if webhook logging is still planned.
+
+No SPRITEbot code changes are required for this pass.
+
 ---
 
 ## Delivery Plan
@@ -239,7 +275,7 @@ safe to purge.
 
 Includes:
 
-- `/admin orphans purge` preview mode
+- `/admin orphans-purge` preview mode
 - Confirmation button with irreversible-action copy
 - Purge execution for only safe categories:
   - soft-deleted characters older than 30 days
@@ -308,7 +344,7 @@ to Pass 2.
 
 **Files:**
 
-- `src/commands/admin.ts` — slash command with `orphans` and `orphans purge`
+- `src/commands/admin.ts` — slash command with `orphans` and `orphans-purge`
   subcommands
 - `src/handlers/admin_orphans.handler.ts` — calls service, formats embed
 
@@ -324,7 +360,7 @@ deferred to Pass 2.
 - `src/components/confirm_purge_button.ts` — confirmation button component
 - Wire into handler routing in `src/handlers/button_handlers.ts`
 
-When `/admin orphans purge` is run, show the orphan report with a
+When `/admin orphans-purge` is run, show the orphan report with a
 "⚠️ Confirm Purge" button. Button click executes the deletes and shows
 results.
 
