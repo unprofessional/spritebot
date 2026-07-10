@@ -4,6 +4,7 @@ import { Client, GatewayIntentBits } from 'discord.js';
 import dotenv = require('dotenv');
 
 import { startBumpScheduler } from './schedulers/bump_scheduler';
+import { startCleanupScheduler } from './schedulers/cleanup_scheduler';
 import { initializeCommands } from './client/initial_commands';
 import { initializeRoleplayProxy } from './client/rp_proxy_events';
 import { initializeDB, testPgConnection } from './db/db';
@@ -36,6 +37,7 @@ async function main(): Promise<void> {
     client.once('ready', () => {
       console.log(`✅ Logged in as ${client.user?.tag}`);
       startBumpScheduler(client);
+      startCleanupScheduler();
       void sendLifecycleNotification(client, 'online');
     });
 
