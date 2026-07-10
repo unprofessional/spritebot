@@ -6,6 +6,7 @@ import { getOrCreatePlayer, getCurrentGame } from '../services/player.service';
 import { getGame, getStatTemplates } from '../services/game.service';
 import { getUserDefinedFields } from '../services/character.service';
 import { initDraft, getTempCharacterData } from '../services/character_draft.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateCharacterResponse } from '../utils/rebuild_create_character_response';
 
 import type { StatTemplate } from '../types/stat_template';
@@ -37,7 +38,10 @@ module.exports = {
 
     if (!gameId) {
       return interaction.reply({
-        content: '⚠️ You haven’t joined a game yet. Use `/join-game` to select one.',
+        content: appendNudge(
+          '⚠️ You haven’t joined a game yet.',
+          buildNudge({ userId, guildId }, 'create-character-no-game'),
+        ),
         ephemeral: true,
       });
     }

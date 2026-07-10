@@ -77,23 +77,23 @@ The `trigger` parameter identifies which command/action just completed (e.g. `"c
 
 **Nudge map:**
 
-| Trigger | Condition | Nudge |
-|---------|-----------|-------|
-| `create-game` | No stat templates defined | `💡 Next: define your game's stat fields with the **➕ Add Another Stat** button, then publish when ready.` |
-| `create-game` | Stats exist but unpublished | `💡 Your stats are set up! Hit **📣 Toggle Visibility** to publish so players can join.` |
-| `define-stat` | Still adding stats | `💡 Add more stats or hit **↩️ Cancel / Go Back** when you're done to return to the game overview.` |
-| `finish-stat-setup` | Game not published | `💡 Stats look good! When you're ready for players, hit **📣 Toggle Visibility** to publish.` |
-| `toggle-publish` | Game just went public | `💡 Your game is live! Players can now use \`/join-game\` to join and \`/create-character\` to get started.` |
-| `toggle-publish` | Game just went private | `💡 Game is now private. No new players can join until you publish again.` |
-| `list-games-empty` | No games in server | `💡 No games yet! A GM can start one with \`/create-game\`.` |
-| `list-games` | Has games, user not in one | `💡 Want to join? Use \`/join-game\` to pick a game.` |
-| `join-game` | User has no characters | `💡 You're in! Now create your character with \`/create-character\`.` |
-| `join-game` | User has characters (from another game) | `💡 Joined! Use \`/create-character\` to make a new character for this game, or \`/switch-character\` if you already have one.` |
-| `submit-character` | Character created, not in IC | `💡 Character ready! Use \`/ic\` in an RP channel to start posting in-character.` |
-| `switch-character` | Character switched | `💡 Now playing as your selected character. Use \`/ic\` to enter in-character mode in any channel.` |
-| `ic` | Just enabled IC mode | `💡 You're in-character! Your messages in this channel will now proxy through your active character. Use \`/ooc\` to switch back.` |
-| `create-character-no-game` | No active game | `💡 You need to join a game first. Use \`/join-game\` to pick one.` (already exists, just standardize format) |
-| `view-character-none` | No characters at all | `💡 You don't have a character yet. Use \`/create-character\` to make one.` |
+| Trigger                    | Condition                               | Nudge                                                                                                                              |
+| -------------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `create-game`              | No stat templates defined               | `💡 Next: define your game's stat fields with the **➕ Add Another Stat** button, then publish when ready.`                        |
+| `create-game`              | Stats exist but unpublished             | `💡 Your stats are set up! Hit **📣 Toggle Visibility** to publish so players can join.`                                           |
+| `define-stat`              | Still adding stats                      | `💡 Add more stats or hit **↩️ Cancel / Go Back** when you're done to return to the game overview.`                                |
+| `finish-stat-setup`        | Game not published                      | `💡 Stats look good! When you're ready for players, hit **📣 Toggle Visibility** to publish.`                                      |
+| `toggle-publish`           | Game just went public                   | `💡 Your game is live! Players can now use \`/join-game\` to join and \`/create-character\` to get started.`                       |
+| `toggle-publish`           | Game just went private                  | `💡 Game is now private. No new players can join until you publish again.`                                                         |
+| `list-games-empty`         | No games in server                      | `💡 No games yet! A GM can start one with \`/create-game\`.`                                                                       |
+| `list-games`               | Has games, user not in one              | `💡 Want to join? Use \`/join-game\` to pick a game.`                                                                              |
+| `join-game`                | User has no characters                  | `💡 You're in! Now create your character with \`/create-character\`.`                                                              |
+| `join-game`                | User has characters (from another game) | `💡 Joined! Use \`/create-character\` to make a new character for this game, or \`/switch-character\` if you already have one.`    |
+| `submit-character`         | Character created, not in IC            | `💡 Character ready! Use \`/ic\` in an RP channel to start posting in-character.`                                                  |
+| `switch-character`         | Character switched                      | `💡 Now playing as your selected character. Use \`/ic\` to enter in-character mode in any channel.`                                |
+| `ic`                       | Just enabled IC mode                    | `💡 You're in-character! Your messages in this channel will now proxy through your active character. Use \`/ooc\` to switch back.` |
+| `create-character-no-game` | No active game                          | `💡 You need to join a game first. Use \`/join-game\` to pick one.` (already exists, just standardize format)                      |
+| `view-character-none`      | No characters at all                    | `💡 You don't have a character yet. Use \`/create-character\` to make one.`                                                        |
 
 ### Task 2: Wire nudges into command responses
 
@@ -101,24 +101,24 @@ Update each command/component handler to call `buildNudge()` and append the resu
 
 **Files to update:**
 
-| File | What Changes |
-|------|-------------|
-| `src/commands/create-game.ts` | Replace hardcoded setup instructions with nudge. Keep the stat field explanation, add contextual nudge at the bottom. |
-| `src/commands/list-games.ts` | Add nudge to empty state (`📭 No games found` → include `💡 ...create-game`). Add nudge to populated state for users not in a game. |
-| `src/commands/join-game.ts` | No change to command itself (delegates to selector). |
-| `src/components/join_game_selector.ts` | After successful join in `handle()`, append nudge for `/create-character`. Update empty state message with nudge. |
-| `src/commands/create-character.ts` | Error states already nudge (good). No changes needed unless standardizing format. |
-| `src/components/submit_character_button.ts` | After successful creation, append nudge for `/ic`. |
-| `src/components/toggle_publish_button.ts` | After toggle, append state-aware nudge (public vs private). |
-| `src/components/finish_stat_setup_button.ts` | After returning to game overview, append nudge about publishing if not yet public. |
-| `src/commands/view-game.ts` | For GMs viewing unpublished game: nudge to publish. For GMs with no stats: nudge to define stats. |
-| `src/commands/view-character.ts` | Error states already nudge. Standardize format. |
-| `src/commands/list-characters.ts` | Empty state: nudge to `/create-character`. |
-| `src/commands/ic.ts` | Append nudge about `/ooc` to switch back. |
-| `src/commands/ooc.ts` | Append nudge about `/ic` to switch back. |
-| `src/commands/switch-character.ts` | No change to command (delegates to selector). |
-| `src/components/switch_character_selector.ts` | After successful switch, append nudge for `/ic`. |
-| `src/components/switch_game_selector.ts` | After successful switch, append nudge for `/create-character` or `/ic` depending on character state. |
+| File                                          | What Changes                                                                                                                        |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `src/commands/create-game.ts`                 | Replace hardcoded setup instructions with nudge. Keep the stat field explanation, add contextual nudge at the bottom.               |
+| `src/commands/list-games.ts`                  | Add nudge to empty state (`📭 No games found` → include `💡 ...create-game`). Add nudge to populated state for users not in a game. |
+| `src/commands/join-game.ts`                   | No change to command itself (delegates to selector).                                                                                |
+| `src/components/join_game_selector.ts`        | After successful join in `handle()`, append nudge for `/create-character`. Update empty state message with nudge.                   |
+| `src/commands/create-character.ts`            | Error states already nudge (good). No changes needed unless standardizing format.                                                   |
+| `src/components/submit_character_button.ts`   | After successful creation, append nudge for `/ic`.                                                                                  |
+| `src/components/toggle_publish_button.ts`     | After toggle, append state-aware nudge (public vs private).                                                                         |
+| `src/components/finish_stat_setup_button.ts`  | After returning to game overview, append nudge about publishing if not yet public.                                                  |
+| `src/commands/view-game.ts`                   | For GMs viewing unpublished game: nudge to publish. For GMs with no stats: nudge to define stats.                                   |
+| `src/commands/view-character.ts`              | Error states already nudge. Standardize format.                                                                                     |
+| `src/commands/list-characters.ts`             | Empty state: nudge to `/create-character`.                                                                                          |
+| `src/commands/ic.ts`                          | Append nudge about `/ooc` to switch back.                                                                                           |
+| `src/commands/ooc.ts`                         | Append nudge about `/ic` to switch back.                                                                                            |
+| `src/commands/switch-character.ts`            | No change to command (delegates to selector).                                                                                       |
+| `src/components/switch_character_selector.ts` | After successful switch, append nudge for `/ic`.                                                                                    |
+| `src/components/switch_game_selector.ts`      | After successful switch, append nudge for `/create-character` or `/ic` depending on character state.                                |
 
 ### Task 3: Standardize error/empty state messages
 
@@ -132,6 +132,7 @@ Audit all commands for inconsistent phrasing. Normalize to this pattern:
 Currently some commands say "Use `/join-game` to select one" inline in the warning, others just say "No games found" with no guidance. Make them all consistent.
 
 **Specific fixes:**
+
 - `list-games.ts` empty state: `📭 No games found in this server.` → append `💡 A GM can start one with \`/create-game\`.`
 - `list-characters.ts` empty state: `📭 No public characters found in your current game.` → append `💡 Create yours with \`/create-character\`.`
 - `join_game_selector.ts` empty state: already has helpful text about GM, keep it, add `💡 If you're the GM, your game might need to be published first (\`/view-game\` to check).`

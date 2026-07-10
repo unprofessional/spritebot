@@ -10,6 +10,7 @@ import {
 } from '../services/character_draft.service';
 import { setCurrentCharacter } from '../services/player.service';
 import { isActiveCharacter } from '../utils/is_active_character';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { build as buildCharacterCard } from './view_character_card';
 
 const id = 'submitNewCharacter';
@@ -72,9 +73,19 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
 
     const isSelf = await isActiveCharacter(userId, guildId!, character.id);
     const view = buildCharacterCard(fullCharacter, isSelf);
+    const nudge = buildNudge(
+      {
+        userId,
+        guildId: guildId!,
+        gameId: character.game_id,
+        hasActiveCharacter: true,
+        isInIC: false,
+      },
+      'submit-character',
+    );
 
     await interaction.update({
-      content: `✅ Character **${character.name}** created successfully!`,
+      content: appendNudge(`✅ Character **${character.name}** created successfully!`, nudge),
       embeds: view.embeds,
       components: view.components,
     });

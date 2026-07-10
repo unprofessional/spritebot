@@ -7,6 +7,7 @@ import { getCharactersByUser, getCharacterWithStats } from '../services/characte
 import { getCurrentGame, getCurrentCharacter } from '../services/player.service';
 
 import { validateGameAccess } from '../utils/validate_game_access';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { build as buildCharacterCard } from '../components/view_character_card';
 
 import type { CharacterWithStats } from '../types/character';
@@ -41,7 +42,10 @@ module.exports = {
 
       if (!allCharacters.length) {
         return await interaction.reply({
-          content: '⚠️ No character found. Use `/create-character` to start one.',
+          content: appendNudge(
+            '⚠️ No character found.',
+            buildNudge({ userId, guildId, gameId: currentGameId }, 'view-character-none'),
+          ),
           ephemeral: true,
         });
       }

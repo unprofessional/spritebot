@@ -5,6 +5,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'dis
 import { getCurrentGame } from '../services/player.service';
 import { getGame, getStatTemplates } from '../services/game.service';
 import { build as buildViewGameCard } from '../components/view_game_card';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
 
@@ -45,9 +46,21 @@ module.exports = {
 
       const statTemplates = (await getStatTemplates(currentGameId)) as StatTemplate[];
       const response = buildViewGameCard(game as Game, statTemplates, userId);
+      const nudge = buildNudge(
+        {
+          userId,
+          guildId,
+          gameId: currentGameId,
+          isGM: game.created_by === userId,
+          gameIsPublished: game.is_public,
+          hasStatTemplates: statTemplates.length > 0,
+        },
+        'view-game',
+      );
 
       return await interaction.reply({
         ...response,
+        content: appendNudge(response.content, nudge),
         ephemeral: true,
       });
     } catch (err) {
