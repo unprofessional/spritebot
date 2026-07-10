@@ -76,6 +76,38 @@ describe('onboarding_nudge', () => {
     );
   });
 
+  test('nudges zero-game servers toward game creation', () => {
+    expect(
+      buildNudge({ ...baseContext, hasGamesInServer: false }, 'create-character-no-game'),
+    ).toBe(
+      '💡 No games exist in this server yet. Start one with `/create-game`, or ask your GM to set one up.',
+    );
+    expect(buildNudge({ ...baseContext, hasGamesInServer: false }, 'join-game-empty')).toBe(
+      '💡 No games exist in this server yet. A GM can create one with `/create-game`.',
+    );
+    expect(buildNudge({ ...baseContext, hasGamesInServer: false }, 'view-game')).toBe(
+      '💡 No games exist in this server yet. Start one with `/create-game`.',
+    );
+    expect(buildNudge({ ...baseContext, hasGamesInServer: false }, 'switch-game-empty')).toBe(
+      '💡 No games exist in this server yet. Start one with `/create-game`, or ask your GM to create and publish one.',
+    );
+  });
+
+  test('nudges existing-game empty states toward selection or GM publishing', () => {
+    expect(buildNudge({ ...baseContext, hasGamesInServer: true }, 'create-character-no-game')).toBe(
+      '💡 You need to join a game first. Use `/join-game` to pick one.',
+    );
+    expect(buildNudge({ ...baseContext, hasGamesInServer: true }, 'join-game-empty')).toBe(
+      "💡 If you're the GM, your game might need to be published first. Use `/view-game` to check.",
+    );
+    expect(buildNudge({ ...baseContext, hasGamesInServer: true }, 'view-game')).toBe(
+      '💡 You need to select a game first. Use `/switch-game` to pick one.',
+    );
+    expect(buildNudge({ ...baseContext, hasGamesInServer: true }, 'switch-game-empty')).toBe(
+      '💡 No published games available. Ask your GM to publish a game so you can join.',
+    );
+  });
+
   test('returns null when no trigger branch applies', () => {
     expect(buildNudge(baseContext, 'unknown-trigger')).toBeNull();
     expect(buildNudge({ ...baseContext, gameId: 'game-1' }, 'list-games')).toBeNull();
