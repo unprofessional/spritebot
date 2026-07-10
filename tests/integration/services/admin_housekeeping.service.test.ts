@@ -7,6 +7,7 @@ import {
   getGameAudit,
   getOrphanReport,
   getPrivateCharacterAudit,
+  purgeSafeOrphans,
   userOwnsGame,
   userOwnsGameInGuild,
 } from '../../../src/services/admin_housekeeping.service';
@@ -118,6 +119,137 @@ describe('admin_housekeeping.service', () => {
         name: 'Forgotten Draft',
       }),
     );
+  });
+
+  test('purges only safe orphan categories and leaves manual-review data alone', async () => {
+    const abandonedGame = await createGame('Manual Review Draft');
+    await query(
+      `UPDATE game SET created_at = CURRENT_TIMESTAMP - INTERVAL '8 days' WHERE id = $1`,
+      [abandonedGame.id],
+    );
+
+    const emptyPublishedGame = await createGame('Manual Review Public Table', { isPublic: true });
+    await query(
+      `UPDATE game SET created_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [emptyPublishedGame.id],
+    );
+
+    const softDeletedGame = await createGame('Soft Deleted Character Game');
+    const oldDeletedCharacter = await characterDAO.create({
+      user_id: 'player-1',
+      game_id: softDeletedGame.id,
+      name: 'Gone Hero',
+    });
+    await query(
+      `UPDATE character SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [oldDeletedCharacter.id],
+    );
+
+    const recentlyDeletedCharacter = await characterDAO.create({
+      user_id: 'player-2',
+      game_id: softDeletedGame.id,
+      name: 'Recoverable Hero',
+    });
+    await query(
+      `UPDATE character SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '7 days' WHERE id = $1`,
+      [recentlyDeletedCharacter.id],
+    );
+
+    await query(
+      `
+        INSERT INTO rp_proxy_message (
+          proxy_message_id, guild_id, channel_id, user_id, webhook_id, created_at
+        )
+        VALUES (
+          'stale-proxy', 'guild-1', 'channel-1', 'player-1', 'webhook-1',
+          CURRENT_TIMESTAMP - INTERVAL '91 days'
+        ),
+        (
+          'fresh-proxy', 'guild-1', 'channel-1', 'player-1', 'webhook-1',
+          CURRENT_TIMESTAMP - INTERVAL '7 days'
+        )
+      `,
+    );
+    await query(
+      `
+        INSERT INTO rp_channel_mode (guild_id, channel_id, user_id, is_ic, updated_at)
+        VALUES (
+          'guild-1', 'stale-channel', 'player-1', true,
+          CURRENT_TIMESTAMP - INTERVAL '91 days'
+        ),
+        (
+          'guild-1', 'fresh-channel', 'player-1', true,
+          CURRENT_TIMESTAMP - INTERVAL '7 days'
+        )
+      `,
+    );
+    await query(
+      `
+        INSERT INTO gifted_guilds (guild_id, granted_by, expires_at)
+        VALUES
+          ('expired-guild', 'owner-1', CURRENT_TIMESTAMP - INTERVAL '1 day'),
+          ('fresh-guild', 'owner-1', CURRENT_TIMESTAMP + INTERVAL '7 days')
+      `,
+    );
+    await query(
+      `
+        INSERT INTO entitlements_cache (
+          entitlement_id, guild_id, sku_id, status, starts_at, updated_at
+        )
+        VALUES
+          (
+            'stale-entitlement', 'guild-1', 'sku-1', 'expired',
+            CURRENT_TIMESTAMP - INTERVAL '120 days',
+            CURRENT_TIMESTAMP - INTERVAL '91 days'
+          ),
+          (
+            'fresh-entitlement', 'guild-1', 'sku-1', 'active',
+            CURRENT_TIMESTAMP - INTERVAL '7 days',
+            CURRENT_TIMESTAMP - INTERVAL '7 days'
+          )
+      `,
+    );
+
+    const results = await purgeSafeOrphans();
+    const counts = Object.fromEntries(results.map((result) => [result.category, result.count]));
+
+    expect(counts).toEqual({
+      'soft-deleted-characters': 1,
+      'stale-proxy-messages': 1,
+      'stale-channel-modes': 1,
+      'expired-gifted-guilds': 1,
+      'stale-entitlements': 1,
+    });
+
+    await expect(
+      query<{ count: string | number }>(`SELECT COUNT(*) AS count FROM game WHERE id IN ($1, $2)`, [
+        abandonedGame.id,
+        emptyPublishedGame.id,
+      ]),
+    ).resolves.toMatchObject({ rows: [{ count: 2 }] });
+    await expect(
+      query<{ count: string | number }>(`SELECT COUNT(*) AS count FROM character WHERE id = $1`, [
+        recentlyDeletedCharacter.id,
+      ]),
+    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    await expect(
+      query<{ count: string | number }>(
+        `
+          SELECT COUNT(*) AS count
+          FROM rp_proxy_message
+          WHERE proxy_message_id = 'fresh-proxy'
+        `,
+      ),
+    ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    await expect(
+      query<{ count: string | number }>(
+        `
+          SELECT COUNT(*) AS count
+          FROM rp_proxy_message
+          WHERE proxy_message_id = 'stale-proxy'
+        `,
+      ),
+    ).resolves.toMatchObject({ rows: [{ count: 0 }] });
   });
 
   test('audits games in a guild with activity and visibility counts', async () => {

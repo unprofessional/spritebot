@@ -1,4 +1,10 @@
-import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
+import {
+  ActionRowBuilder,
+  ButtonBuilder,
+  ChatInputCommandInteraction,
+  EmbedBuilder,
+} from 'discord.js';
+import { build as buildConfirmPurgeButton } from '../components/confirm_purge_button';
 import {
   getOrphanReport,
   getThreadBumpCheckCandidates,
@@ -19,6 +25,27 @@ function formatExamples(category: HousekeepingCategory): string {
 function formatCategory(category: HousekeepingCategory): string {
   const reviewMode = category.safeToPurge ? 'safe purge candidate' : 'manual review';
   return [`**${category.count}** found · ${reviewMode}`, formatExamples(category)].join('\n');
+}
+
+function buildOrphanReportEmbed(
+  categories: HousekeepingCategory[],
+  description: string,
+): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle('SPRITEbot Orphan Report')
+    .setDescription(description)
+    .setColor(0xffbb33)
+    .setTimestamp(new Date());
+
+  for (const category of categories) {
+    embed.addFields({
+      name: category.label,
+      value: formatCategory(category).slice(0, 1024),
+      inline: false,
+    });
+  }
+
+  return embed;
 }
 
 async function buildDeadThreadBumpCategory(
@@ -60,19 +87,46 @@ export async function handleAdminOrphans(interaction: ChatInputCommandInteractio
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle('SPRITEbot Orphan Report')
-    .setDescription('Read-only audit. Manual-review categories are not safe to purge blindly.')
-    .setColor(0xffbb33)
-    .setTimestamp(new Date());
-
-  for (const category of categories) {
-    embed.addFields({
-      name: category.label,
-      value: formatCategory(category).slice(0, 1024),
-      inline: false,
-    });
-  }
+  const embed = buildOrphanReportEmbed(
+    categories,
+    'Read-only audit. Manual-review categories are not safe to purge blindly.',
+  );
 
   await interaction.editReply({ embeds: [embed] });
+}
+
+export async function handleAdminOrphansPurge(
+  interaction: ChatInputCommandInteraction,
+): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+
+  const categories = await getOrphanReport();
+  const safeCategories = categories.filter((category) => category.safeToPurge);
+  const purgeCount = safeCategories.reduce((sum, category) => sum + category.count, 0);
+
+  const embed = buildOrphanReportEmbed(
+    safeCategories,
+    [
+      'Purge preview. This permanently deletes only categories marked safe for cleanup.',
+      'This action is irreversible. Abandoned games, empty games, player links, and dead thread bumps are not purged.',
+    ].join('\n'),
+  );
+
+  if (purgeCount === 0) {
+    await interaction.editReply({
+      content: '✅ No safe orphan rows are currently eligible for purge.',
+      embeds: [embed],
+    });
+    return;
+  }
+
+  const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    buildConfirmPurgeButton(interaction.user.id),
+  );
+
+  await interaction.editReply({
+    content: `⚠️ Confirm purge will permanently delete **${purgeCount}** row(s).`,
+    embeds: [embed],
+    components: [row],
+  });
 }

@@ -3,7 +3,7 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 import { handleAdminCharacters } from '../handlers/admin_characters.handler';
 import { handleAdminGames } from '../handlers/admin_games.handler';
-import { handleAdminOrphans } from '../handlers/admin_orphans.handler';
+import { handleAdminOrphans, handleAdminOrphansPurge } from '../handlers/admin_orphans.handler';
 import { userOwnsGame, userOwnsGameInGuild } from '../services/admin_housekeeping.service';
 
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
@@ -14,6 +14,11 @@ export const data = new SlashCommandBuilder()
   .setDescription('SPRITEbot admin housekeeping tools')
   .addSubcommand((subcommand) =>
     subcommand.setName('orphans').setDescription('Show a read-only orphan and stale-data report'),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('orphans-purge')
+      .setDescription('Preview and confirm permanent cleanup of safe orphan rows'),
   )
   .addSubcommand((subcommand) =>
     subcommand.setName('games').setDescription('Audit games in this server'),
@@ -65,6 +70,22 @@ module.exports = {
       }
 
       await handleAdminOrphans(interaction);
+      return;
+    }
+
+    if (subcommand === 'orphans-purge') {
+      if (interaction.guildId !== OPS_GUILD_ID) {
+        return interaction.reply({
+          content: '⛔ Orphan purges are only available in the ops guild.',
+          ephemeral: true,
+        });
+      }
+
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+      }
+
+      await handleAdminOrphansPurge(interaction);
       return;
     }
 

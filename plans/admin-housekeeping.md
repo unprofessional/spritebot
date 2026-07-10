@@ -48,7 +48,7 @@ If everything is clean, show a single "✅ No orphans detected" message.
 **Subcommands:**
 
 - `/admin orphans` — show the full report
-- `/admin orphans purge` — actually delete the detected orphans (with
+- `/admin orphans-purge` — actually delete the detected orphans (with
   confirmation button). Only purges categories marked safe for auto-cleanup
   (soft-deleted characters, stale proxy messages, stale IC modes, expired
   gifts, expired entitlements). Abandoned/empty games require manual review
@@ -239,7 +239,7 @@ safe to purge.
 
 Includes:
 
-- `/admin orphans purge` preview mode
+- `/admin orphans-purge` preview mode
 - Confirmation button with irreversible-action copy
 - Purge execution for only safe categories:
   - soft-deleted characters older than 30 days
@@ -308,7 +308,7 @@ to Pass 2.
 
 **Files:**
 
-- `src/commands/admin.ts` — slash command with `orphans` and `orphans purge`
+- `src/commands/admin.ts` — slash command with `orphans` and `orphans-purge`
   subcommands
 - `src/handlers/admin_orphans.handler.ts` — calls service, formats embed
 
@@ -324,7 +324,7 @@ deferred to Pass 2.
 - `src/components/confirm_purge_button.ts` — confirmation button component
 - Wire into handler routing in `src/handlers/button_handlers.ts`
 
-When `/admin orphans purge` is run, show the orphan report with a
+When `/admin orphans-purge` is run, show the orphan report with a
 "⚠️ Confirm Purge" button. Button click executes the deletes and shows
 results.
 
