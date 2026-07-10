@@ -3,7 +3,7 @@
 import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'discord.js';
 
 import { getCurrentGame } from '../services/player.service';
-import { getGame, getStatTemplates } from '../services/game.service';
+import { getGame, getGamesByGuild, getStatTemplates } from '../services/game.service';
 import { build as buildViewGameCard } from '../components/view_game_card';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { Game } from '../types/game';
@@ -29,9 +29,20 @@ module.exports = {
       const currentGameId = await getCurrentGame(userId, guildId);
 
       if (!currentGameId) {
+        const games = await getGamesByGuild(guildId);
+
         return await interaction.reply({
-          content:
-            '⚠️ You do not have an active game in this server. Use `/switch-game` to select one.',
+          content: appendNudge(
+            '⚠️ You do not have an active game in this server.',
+            buildNudge(
+              {
+                userId,
+                guildId,
+                hasGamesInServer: games.length > 0,
+              },
+              'view-game',
+            ),
+          ),
           ephemeral: true,
         });
       }

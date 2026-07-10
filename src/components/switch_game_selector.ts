@@ -8,7 +8,7 @@ import {
 } from 'discord.js';
 
 import { getCharactersByUser } from '../services/character.service';
-import { getGamesByUser } from '../services/game.service';
+import { getGamesByGuild, getGamesByUser } from '../services/game.service';
 import { getCurrentCharacter, getOrCreatePlayer, setCurrentGame } from '../services/player.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { validateGameAccess } from '../utils/validate_game_access';
@@ -26,7 +26,10 @@ interface BuildResponse {
  * Builds a dropdown of accessible games in the current server
  */
 export async function build(userId: string, guildId: string): Promise<BuildResponse> {
-  const allGames = await getGamesByUser(userId, guildId);
+  const [allGames, serverGames] = await Promise.all([
+    getGamesByUser(userId, guildId),
+    getGamesByGuild(guildId),
+  ]);
   const accessibleGames: Game[] = [];
 
   for (const game of allGames) {
@@ -36,7 +39,17 @@ export async function build(userId: string, guildId: string): Promise<BuildRespo
 
   if (!accessibleGames.length) {
     return {
-      content: '⚠️ You have no accessible games in this server.',
+      content: appendNudge(
+        '⚠️ You have no accessible games in this server.',
+        buildNudge(
+          {
+            userId,
+            guildId,
+            hasGamesInServer: serverGames.length > 0,
+          },
+          'switch-game-empty',
+        ),
+      ),
       ephemeral: true,
     };
   }
