@@ -40,16 +40,6 @@ async function canAuditGames(interaction: ChatInputCommandInteraction): Promise<
   return userOwnsGameInGuild(interaction.user.id, interaction.guildId);
 }
 
-async function canAuditCharacters(interaction: ChatInputCommandInteraction): Promise<boolean> {
-  if (isOwner(interaction.user.id)) return true;
-  if (!interaction.guildId) return false;
-
-  const gameId = interaction.options.getString('game_id');
-  if (!gameId) return false;
-
-  return userOwnsGame(interaction.user.id, gameId, interaction.guildId);
-}
-
 module.exports = {
   data,
   async execute(interaction: ChatInputCommandInteraction) {
@@ -91,10 +81,24 @@ module.exports = {
     }
 
     if (subcommand === 'characters') {
-      if (!(await canAuditCharacters(interaction))) {
+      if (isOwner(interaction.user.id)) {
+        await handleAdminCharacters(interaction);
+        return;
+      }
+
+      const gameId = interaction.options.getString('game_id');
+
+      if (!gameId) {
         return interaction.reply({
           content:
-            '⛔ Not authorized. GMs must provide a game_id for one of their own games; the bot owner can audit the whole server.',
+            '⚠️ GMs must provide a game_id so the private-character audit stays scoped to one of their games.',
+          ephemeral: true,
+        });
+      }
+
+      if (!(await userOwnsGame(interaction.user.id, gameId, interaction.guildId))) {
+        return interaction.reply({
+          content: '⛔ Not authorized. You can only audit private characters for your own games.',
           ephemeral: true,
         });
       }
