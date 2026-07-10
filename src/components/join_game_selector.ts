@@ -27,14 +27,14 @@ export async function build(
   const eligibleGames = games.filter((game) => game.is_public && game.created_by !== userId);
 
   if (!eligibleGames.length) {
+    const content = [
+      '📭 There are no joinable public games in this server right now.',
+      '',
+      'If you created a game, you’re already considered a player as the **Game Master**.',
+    ].join('\n');
+
     return {
-      content: [
-        '📭 There are no joinable public games in this server right now.',
-        '',
-        'If you created a game, you’re already considered a player as the **Game Master**.',
-        '',
-        buildNudge({ userId, guildId }, 'join-game-empty'),
-      ].join('\n'),
+      content: appendNudge(content, buildNudge({ userId, guildId }, 'join-game-empty')),
       ephemeral: true,
     };
   }

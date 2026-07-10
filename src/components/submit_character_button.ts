@@ -79,6 +79,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
         guildId: guildId!,
         gameId: character.game_id,
         hasActiveCharacter: true,
+        // Submission does not currently know channel IC state, so always nudge toward /ic.
         isInIC: false,
       },
       'submit-character',
