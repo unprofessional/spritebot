@@ -1,3 +1,5 @@
+import { readFileSync } from 'fs';
+import { dirname, join } from 'path';
 import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { pgDb, pgHost, pgPass, pgPort, pgUser } from '../config/env_config';
 import { getSql } from './sql-loader';
@@ -12,6 +14,10 @@ type PgLite = {
   }>;
   exec(text: string): Promise<unknown>;
   close(): Promise<void>;
+};
+
+type PgLiteModule = {
+  PGlite: new (options?: { fsBundle?: Blob }) => PgLite;
 };
 
 export interface DbClient {
@@ -69,10 +75,15 @@ function patchTestPgliteClose(pgLite: PgLite): () => Promise<void> {
   return actualClose;
 }
 
+function loadPgLiteFsBundle(): Blob {
+  const pgLiteDistDir = dirname(require.resolve('@electric-sql/pglite'));
+  return new Blob([readFileSync(join(pgLiteDistDir, 'pglite.data'))]);
+}
+
 async function createTestDb(): Promise<void> {
   const state = getTestDbState();
-  const { PGlite } = await import('@electric-sql/pglite');
-  const pgLite = new PGlite();
+  const { PGlite } = require('@electric-sql/pglite') as PgLiteModule;
+  const pgLite = new PGlite({ fsBundle: loadPgLiteFsBundle() });
 
   if (!state.schemaApplied) {
     const schemaSql = prepareSchemaForPgLite(await getSql('tables', 'tables'));

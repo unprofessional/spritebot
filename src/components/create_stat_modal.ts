@@ -11,6 +11,7 @@ import {
 } from 'discord.js';
 
 import { addStatTemplates, getStatTemplates, getGame } from '../services/game.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 
 import type { Game } from '../types/game';
@@ -81,11 +82,22 @@ async function handle(interaction: ModalSubmitInteraction): Promise<void> {
   ]);
 
   const response = rebuildCreateGameResponse(game, statTemplates, label);
+  const nudge = buildNudge(
+    {
+      userId: interaction.user.id,
+      guildId: interaction.guildId ?? '',
+      gameId,
+      isGM: game.created_by === interaction.user.id,
+      gameIsPublished: game.is_public,
+      hasStatTemplates: statTemplates.length > 0,
+    },
+    'define-stat',
+  );
 
   // Update the existing setup message instead of sending a new ephemeral reply
   await interaction.deferUpdate();
   await interaction.editReply({
-    content: response.content,
+    content: appendNudge(response.content, nudge),
     embeds: response.embeds,
     components: response.components.map((row) =>
       row.toJSON(),

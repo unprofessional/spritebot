@@ -7,8 +7,10 @@ import {
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
 
+import { getCharactersByUser } from '../services/character.service';
 import { getGamesByUser } from '../services/game.service';
-import { getOrCreatePlayer, setCurrentGame } from '../services/player.service';
+import { getCurrentCharacter, getOrCreatePlayer, setCurrentGame } from '../services/player.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { validateGameAccess } from '../utils/validate_game_access';
 import type { Game } from '../types/game';
 
@@ -86,9 +88,24 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   try {
     await getOrCreatePlayer(user.id, guildId);
     await setCurrentGame(user.id, guildId, selected);
+    const [characters, currentCharacterId] = await Promise.all([
+      getCharactersByUser(user.id, guildId),
+      getCurrentCharacter(user.id, guildId),
+    ]);
+    const hasActiveCharacter = characters.some((character) => character.id === currentCharacterId);
+    const nudge = buildNudge(
+      {
+        userId: user.id,
+        guildId,
+        gameId: selected,
+        hasCharacters: characters.length > 0,
+        hasActiveCharacter,
+      },
+      'switch-game',
+    );
 
     await interaction.update({
-      content: `✅ You have switched to the selected game.`,
+      content: appendNudge(`✅ You have switched to the selected game.`, nudge),
       components: [],
     });
   } catch (err) {

@@ -14,6 +14,7 @@ import {
 import { validateGameAccess } from '../utils/validate_game_access';
 import { formatTimeAgo } from '../utils/time_ago';
 import { isActiveCharacter } from '../utils/is_active_character';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { build as buildCharacterCard } from './view_character_card';
 
 export const id = 'switchCharacterDropdown';
@@ -198,10 +199,19 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
 
     const isSelf = await isActiveCharacter(user.id, guildId, character.id);
     const view = buildCharacterCard(character, isSelf);
+    const nudge = buildNudge(
+      {
+        userId: user.id,
+        guildId,
+        gameId: character.game_id,
+        hasActiveCharacter: true,
+      },
+      'switch-character',
+    );
 
     await interaction.update({
-      content: `✅ Switched to **${character.name}**!`,
       ...view,
+      content: appendNudge(`✅ Switched to **${character.name}**!`, nudge),
     });
   } catch (err) {
     console.error('Error switching character:', err);
