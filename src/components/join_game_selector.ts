@@ -34,7 +34,10 @@ export async function build(
     ].join('\n');
 
     return {
-      content: appendNudge(content, buildNudge({ userId, guildId }, 'join-game-empty')),
+      content: appendNudge(
+        content,
+        buildNudge({ userId, guildId, hasGamesInServer: games.length > 0 }, 'join-game-empty'),
+      ),
       ephemeral: true,
     };
   }
