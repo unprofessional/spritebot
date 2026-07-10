@@ -4,6 +4,7 @@ import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 import { handleAdminCharacters } from '../handlers/admin_characters.handler';
 import { handleAdminGames } from '../handlers/admin_games.handler';
 import { handleAdminOrphans, handleAdminOrphansPurge } from '../handlers/admin_orphans.handler';
+import { handleAdminRestoreCharacter } from '../handlers/admin_restore.handler';
 import { userOwnsGame, userOwnsGameInGuild } from '../services/admin_housekeeping.service';
 
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
@@ -32,6 +33,17 @@ export const data = new SlashCommandBuilder()
           .setName('game_id')
           .setDescription('Restrict the audit to a specific game id')
           .setRequired(false),
+      ),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand
+      .setName('restore-character')
+      .setDescription('Restore any soft-deleted character by id')
+      .addStringOption((option) =>
+        option
+          .setName('character_id')
+          .setDescription('Soft-deleted character id')
+          .setRequired(true),
       ),
   );
 
@@ -125,6 +137,15 @@ module.exports = {
       }
 
       await handleAdminCharacters(interaction);
+      return;
+    }
+
+    if (subcommand === 'restore-character') {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+      }
+
+      await handleAdminRestoreCharacter(interaction);
     }
   },
 };

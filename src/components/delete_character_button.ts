@@ -38,7 +38,10 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     );
 
     await interaction.update({
-      content: `🗑️ Are you sure you want to permanently delete **${character.name}**?`,
+      content: [
+        `🗑️ Are you sure you want to delete **${character.name}**?`,
+        '⚠️ You will have **30 days** to restore this character before it is permanently removed. Use `/restore-character` to recover it.',
+      ].join('\n'),
       embeds: [],
       components: [confirmRow],
     });

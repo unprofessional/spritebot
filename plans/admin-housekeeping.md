@@ -126,9 +126,9 @@ future delete operations.
 
 **File:** `src/handlers/admin_restore.handler.ts` (admin-facing)
 
-- `/admin restore character <id>` — admin override to restore any character
+- `/admin restore-character <id>` — admin override to restore any character
   regardless of ownership
-- `/admin restore game <id>` — if we ever add game soft-delete
+- `/admin restore-game <id>` — if we ever add game soft-delete
 
 ### Files to Update (Existing)
 
