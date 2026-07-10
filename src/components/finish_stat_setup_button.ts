@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 
 import { getGame, getStatTemplates } from '../services/game.service';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 
 import type { Game } from '../types/game';
@@ -45,9 +46,20 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     await interaction.deferUpdate();
 
     const result = rebuildCreateGameResponse(game, stats);
+    const nudge = buildNudge(
+      {
+        userId: interaction.user.id,
+        guildId: interaction.guildId ?? '',
+        gameId,
+        isGM: game.created_by === interaction.user.id,
+        gameIsPublished: game.is_public,
+        hasStatTemplates: stats.length > 0,
+      },
+      'finish-stat-setup',
+    );
 
     await interaction.editReply({
-      content: result.content,
+      content: appendNudge(result.content, nudge),
       embeds: result.embeds,
       components: result.components.map((row) =>
         row.toJSON(),
