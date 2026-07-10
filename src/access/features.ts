@@ -30,6 +30,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
 export const CommandPolicy: Record<string, FeatureKey> = {
   // Creation / Editing
   'create-character': 'rpg:characters',
+  'restore-character': 'rpg:characters',
   'create-game': 'rpg:game-admin',
   inventory: 'rpg:inventory',
 

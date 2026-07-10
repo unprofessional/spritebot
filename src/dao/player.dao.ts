@@ -121,6 +121,18 @@ export class PlayerDAO {
     return link?.current_character_id || null;
   }
 
+  async clearCurrentCharacter(characterId: string): Promise<void> {
+    await query(
+      `
+        UPDATE player_server_link
+        SET current_character_id = NULL,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE current_character_id = $1
+      `,
+      [characterId],
+    );
+  }
+
   async delete(discordId: string): Promise<void> {
     const player = await this.findByDiscordId(discordId);
     if (!player) return;
