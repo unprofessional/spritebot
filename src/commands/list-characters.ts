@@ -5,6 +5,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'dis
 import { getCharactersByGame } from '../services/character.service';
 import { getCurrentGame } from '../services/player.service';
 import { rebuildListCharactersResponse } from '../components/rebuild_list_characters_response';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { Character } from '../types/character';
 
 module.exports = {
@@ -29,7 +30,10 @@ module.exports = {
 
       if (!gameId) {
         return await interaction.reply({
-          content: '🎲 You must join or create a game first using `/create-game`.',
+          content: appendNudge(
+            '⚠️ You must join or create a game first.',
+            buildNudge({ userId, guildId }, 'create-character-no-game'),
+          ),
           ephemeral: true,
         });
       }
@@ -57,7 +61,10 @@ module.exports = {
 
       if (!publicCharacters.length) {
         return await interaction.reply({
-          content: '📭 No public characters found in your current game.',
+          content: appendNudge(
+            '📭 No public characters found in your current game.',
+            buildNudge({ userId, guildId, gameId }, 'list-characters-empty'),
+          ),
           ephemeral: true,
         });
       }

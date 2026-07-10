@@ -11,6 +11,7 @@ import { createGame } from '../services/game.service';
 import { getOrCreatePlayer, setCurrentGame } from '../services/player.service';
 import { build as buildDefineStatsButton } from '../components/define_stats_button';
 import { build as buildTogglePublishButton } from '../components/toggle_publish_button';
+import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -55,23 +56,36 @@ module.exports = {
 
       const row = new ActionRowBuilder().addComponents(defineStatsBtn, publishBtn);
 
+      const content = [
+        `# **${game.name}**`,
+        `✅ Created game and set it as your active campaign.`,
+        ``,
+        `**Character Stat Fields:**`,
+        ` - 🟦 **System Fields** (always included):`,
+        `  - Name`,
+        `  - Avatar URL`,
+        `  - Bio`,
+        ``,
+        ` - 🟨 **Game Fields** (you define these)`,
+        `  - Ex: HP, Strength, Skills, etc.`,
+        ``,
+        `Use the buttons below to define your required game-specific stat fields or to publish the game.`,
+        `_You do **not** need to redefine system fields._`,
+      ].join('\n');
+      const nudge = buildNudge(
+        {
+          userId,
+          guildId,
+          gameId: game.id,
+          isGM: true,
+          gameIsPublished: game.is_public,
+          hasStatTemplates: false,
+        },
+        'create-game',
+      );
+
       await interaction.reply({
-        content: [
-          `# **${game.name}**`,
-          `✅ Created game and set it as your active campaign.`,
-          ``,
-          `**Character Stat Fields:**`,
-          ` - 🟦 **System Fields** (always included):`,
-          `  - Name`,
-          `  - Avatar URL`,
-          `  - Bio`,
-          ``,
-          ` - 🟨 **Game Fields** (you define these)`,
-          `  - Ex: HP, Strength, Skills, etc.`,
-          ``,
-          `Use the buttons below to define your required game-specific stat fields or to publish the game.`,
-          `_You do **not** need to redefine system fields._`,
-        ].join('\n'),
+        content: appendNudge(content, nudge),
         components: [row.toJSON()],
         ephemeral: true,
       });
