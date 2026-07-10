@@ -209,6 +209,88 @@ Postgres instance:
 
 ---
 
+## Delivery Plan
+
+This is intentionally split into multiple passes. The full plan mixes
+read-only reporting, irreversible hard deletes, recovery UX, and a background
+scheduler; bundling those into one PR makes review riskier than the feature
+needs to be.
+
+### Pass 1: Read-only admin audits
+
+**Goal:** Ship useful visibility with no destructive actions.
+
+Includes:
+
+- `/admin orphans` read-only report
+- `/admin games` per-server game audit
+- `/admin characters` private-character audit
+- Owner/ops-guild gate for orphan reports
+- Owner/GM scope checks for game and character audits
+- Integration coverage for audit SQL
+
+Does **not** include purge buttons, hard deletes, restore commands, or
+background cleanup.
+
+### Pass 2: Purge preview and confirmation
+
+**Goal:** Add explicit, reviewed destructive cleanup for categories that are
+safe to purge.
+
+Includes:
+
+- `/admin orphans purge` preview mode
+- Confirmation button with irreversible-action copy
+- Purge execution for only safe categories:
+  - soft-deleted characters older than 30 days
+  - stale proxy messages
+  - stale IC channel modes
+  - expired gift entries
+  - stale entitlement cache rows
+- Post-purge results summary
+- Integration tests proving unsafe categories are not purged
+
+Does **not** include background automation.
+
+### Pass 3: Character restore and retention messaging
+
+**Goal:** Make soft-delete user communication honest before any automated
+hard-delete exists.
+
+Includes:
+
+- Update character delete confirmation/success copy with the 30-day recovery
+  window
+- `/restore-character` user-facing recovery flow for the original owner
+- Admin override restore command for characters
+- Tests around ownership, retention windows, and restored visibility
+
+### Pass 4: Background cleanup scheduler
+
+**Goal:** Automate only the cleanup already proven safe and recoverable.
+
+Includes:
+
+- `cleanup_scheduler.ts`
+- `CLEANUP_INTERVAL_HOURS`
+- Daily cleanup transaction
+- Console logging of counts
+- Registration from `src/index.ts`
+- Tests for scheduler/service behavior
+
+### Pass 5: Legacy table audit
+
+**Goal:** Document or hand off cross-system cleanup to SPRITE-Integrations
+without touching those tables from SPRITEbot.
+
+Includes:
+
+- Verify whether `lifecycle_notification_channels` plural is still used
+- Verify whether `webhook_events` is still written
+- Create a follow-up plan or issue in the owning repo
+
+---
+
 ## Task Breakdown
 
 ### Task 1: Orphan detection service
@@ -219,6 +301,9 @@ Pure service that runs the orphan detection queries and returns structured
 results. No Discord awareness. Each check is a separate function that
 returns `{ category: string, count: number, examples: Array<{ id, name, detail }> }`.
 
+**Delivery pass:** Pass 1 for read-only detection. Delete methods are deferred
+to Pass 2.
+
 ### Task 2: `/admin orphans` command + handler
 
 **Files:**
@@ -228,6 +313,9 @@ returns `{ category: string, count: number, examples: Array<{ id, name, detail }
 - `src/handlers/admin_orphans.handler.ts` — calls service, formats embed
 
 Gate to owner only + ops guild (same as `/gift`).
+
+**Delivery pass:** Pass 1 for read-only report. The `purge` subcommand is
+deferred to Pass 2.
 
 ### Task 3: Purge confirmation flow
 
@@ -240,6 +328,8 @@ When `/admin orphans purge` is run, show the orphan report with a
 "⚠️ Confirm Purge" button. Button click executes the deletes and shows
 results.
 
+**Delivery pass:** Pass 2.
+
 ### Task 4: `/admin games` command
 
 **Files:**
@@ -251,6 +341,8 @@ Uses existing game/character services where possible, adds a
 `getGameAudit(guildId)` function to the housekeeping service for the
 aggregated view.
 
+**Delivery pass:** Pass 1.
+
 ### Task 5: `/admin characters` command
 
 **Files:**
@@ -261,6 +353,8 @@ aggregated view.
 Add `getPrivateCharacterAudit(guildId, gameId?)` to the housekeeping
 service.
 
+**Delivery pass:** Pass 1.
+
 ### Task 6: Cleanup scheduler
 
 **File:** `src/schedulers/cleanup_scheduler.ts`
@@ -268,11 +362,18 @@ service.
 Register in `src/index.ts`. Daily interval, single transaction, console
 logging only.
 
+**Delivery pass:** Pass 4, after Pass 2 and Pass 3 establish safe purge and
+restore semantics.
+
 ### Task 7: Tests
 
 - Unit tests for the housekeeping service (mock DB responses)
 - Integration tests for orphan detection queries against PGlite
 - Unit tests for the cleanup scheduler logic (mock service calls)
+
+**Delivery pass:** Added incrementally per pass. Pass 1 emphasizes integration
+tests for read-only SQL; Pass 2 adds purge safety tests; Pass 3 adds restore
+authorization/retention tests; Pass 4 adds scheduler tests.
 
 ---
 
