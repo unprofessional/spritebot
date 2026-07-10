@@ -6,6 +6,7 @@ import { handle as handleCalculateStatsButton } from '../../components/calculate
 import { handle as handleCharPageButton } from '../../components/character_page_buttons';
 import { handle as handleConfirmDeleteCharacterButton } from '../../components/confirm_delete_character_button';
 import { handle as handleConfirmDeleteStat } from '../../components/confirm_delete_stat_button';
+import { handle as handleConfirmPurgeButton } from '../../components/confirm_purge_button';
 import { handle as handleDefineStats } from '../../components/define_stats_button';
 import { handle as handleDeleteCharacter } from '../../components/delete_character_button';
 import { handle as handleDeleteStats } from '../../components/delete_stat_button';
@@ -28,6 +29,7 @@ const directRoutes: [RegExp, (i: ButtonInteraction) => Promise<void>][] = [
   [/^finishStatSetup:/, handleFinishStatSetup],
   [/^togglePublishGame:/, handleTogglePublishButton],
   [/^confirmDeleteStat:/, handleConfirmDeleteStat],
+  [/^confirmPurgeOrphans:/, handleConfirmPurgeButton],
   [/^submitNewCharacter/, handleSubmitCharacter],
   [/^deleteCharacter/, handleDeleteCharacter],
   [/^confirmDeleteCharacter/, handleConfirmDeleteCharacterButton],

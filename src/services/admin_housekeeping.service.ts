@@ -14,6 +14,12 @@ export interface HousekeepingCategory {
   safeToPurge: boolean;
 }
 
+export interface HousekeepingPurgeResult {
+  category: string;
+  label: string;
+  count: number;
+}
+
 export interface ThreadBumpCheckCandidate {
   threadId: string;
   guildId: string;
@@ -61,6 +67,13 @@ interface CategoryDefinition {
 
 type CountRow = { count: string | number };
 type ExampleRow = { id: string; name: string | null; detail: string | null };
+type PurgeRow = {
+  soft_deleted_characters: string | number;
+  stale_proxy_messages: string | number;
+  stale_channel_modes: string | number;
+  expired_gifted_guilds: string | number;
+  stale_entitlements: string | number;
+};
 
 const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
   {
@@ -286,6 +299,84 @@ export async function getOrphanReport(
   client: QueryClient = DEFAULT_CLIENT,
 ): Promise<HousekeepingCategory[]> {
   return Promise.all(CATEGORY_DEFINITIONS.map((definition) => runCategory(definition, client)));
+}
+
+function labelForCategory(category: string): string {
+  return (
+    CATEGORY_DEFINITIONS.find((definition) => definition.category === category)?.label ?? category
+  );
+}
+
+export async function purgeSafeOrphans(
+  client: QueryClient = DEFAULT_CLIENT,
+): Promise<HousekeepingPurgeResult[]> {
+  const result = await client.query<PurgeRow>(`
+    WITH deleted_characters AS (
+      DELETE FROM character c
+      WHERE c.deleted_at IS NOT NULL
+        AND c.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+      RETURNING 1
+    ),
+    deleted_proxy_messages AS (
+      DELETE FROM rp_proxy_message rpm
+      WHERE rpm.created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'
+      RETURNING 1
+    ),
+    deleted_channel_modes AS (
+      DELETE FROM rp_channel_mode rcm
+      WHERE rcm.updated_at < CURRENT_TIMESTAMP - INTERVAL '90 days'
+      RETURNING 1
+    ),
+    deleted_gifted_guilds AS (
+      DELETE FROM gifted_guilds gg
+      WHERE gg.expires_at IS NOT NULL
+        AND gg.expires_at < CURRENT_TIMESTAMP
+      RETURNING 1
+    ),
+    deleted_entitlements AS (
+      DELETE FROM entitlements_cache ec
+      WHERE ec.status IN ('expired', 'canceled')
+        AND ec.updated_at < CURRENT_TIMESTAMP - INTERVAL '90 days'
+      RETURNING 1
+    )
+    SELECT
+      (SELECT COUNT(*) FROM deleted_characters) AS soft_deleted_characters,
+      (SELECT COUNT(*) FROM deleted_proxy_messages) AS stale_proxy_messages,
+      (SELECT COUNT(*) FROM deleted_channel_modes) AS stale_channel_modes,
+      (SELECT COUNT(*) FROM deleted_gifted_guilds) AS expired_gifted_guilds,
+      (SELECT COUNT(*) FROM deleted_entitlements) AS stale_entitlements
+  `);
+  const row = result.rows[0];
+
+  if (!row) return [];
+
+  return [
+    {
+      category: 'soft-deleted-characters',
+      label: labelForCategory('soft-deleted-characters'),
+      count: toCount(row.soft_deleted_characters),
+    },
+    {
+      category: 'stale-proxy-messages',
+      label: labelForCategory('stale-proxy-messages'),
+      count: toCount(row.stale_proxy_messages),
+    },
+    {
+      category: 'stale-channel-modes',
+      label: labelForCategory('stale-channel-modes'),
+      count: toCount(row.stale_channel_modes),
+    },
+    {
+      category: 'expired-gifted-guilds',
+      label: labelForCategory('expired-gifted-guilds'),
+      count: toCount(row.expired_gifted_guilds),
+    },
+    {
+      category: 'stale-entitlements',
+      label: labelForCategory('stale-entitlements'),
+      count: toCount(row.stale_entitlements),
+    },
+  ];
 }
 
 export async function getThreadBumpCheckCandidates(
