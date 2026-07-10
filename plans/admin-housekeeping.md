@@ -1,0 +1,227 @@
+# SPRITEbot Admin Housekeeping — Implementation Plan
+
+> **Status:** Planning
+> **Target:** SPRITEbot (TypeScript/Node, discord.js 14)
+
+---
+
+## Overview
+
+Add admin-facing commands for database hygiene: detecting orphaned entities,
+reviewing stale data, and performing cleanup. This covers both interactive
+slash commands for on-demand inspection and automated background cleanup for
+data that accumulates silently.
+
+The spritebot database also shares space with SPRITE-Integrations tables
+(`campaigns`, `characters` (plural), `character_stats`, `campaign_creatures`,
+`stat_template_mapping`, `webhook_events`, `lifecycle_notification_channels`).
+These are out of scope for SPRITEbot commands but noted here so we don't
+accidentally miss cross-system orphans in future work.
+
+---
+
+## Commands
+
+### `/admin orphans` — Orphan Detection
+
+**Who:** Bot owner only (ops guild gated, same pattern as `/toggle-bypass`
+and `/gift`).
+
+**What it reports:**
+
+| Category                         | Query Logic                                                                                                                                                                      | Label                                                       |
+| -------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------- |
+| **Abandoned games**              | Games with `is_public = false`, no stat templates, and no characters. Stale if `created_at` > 7 days ago.                                                                        | `🎲 Abandoned games (unpublished, no stats, no characters)` |
+| **Empty published games**        | Games with `is_public = true` but zero characters (no one joined). Stale if `created_at` > 30 days ago.                                                                          | `📢 Published games with no players`                        |
+| **Orphaned player_server_links** | Links where `current_game_id` or `current_character_id` point to non-existent entities (shouldn't happen with FK SET NULL, but belt-and-suspenders).                             | `🔗 Orphaned player links`                                  |
+| **Soft-deleted characters**      | Characters where `deleted_at IS NOT NULL` and older than 30 days. These are safe to hard-delete.                                                                                 | `🪦 Soft-deleted characters (>30 days)`                     |
+| **Stale rp_proxy_messages**      | Proxy message mappings older than 90 days. These grow unbounded and are only needed for `/ic-edit` and `/ic-delete` lookups.                                                     | `📨 Stale proxy message mappings (>90 days)`                |
+| **Stale rp_channel_modes**       | IC mode flags where `updated_at` is older than 90 days. Users likely forgot they toggled IC in a channel months ago.                                                             | `🎭 Stale IC channel modes (>90 days)`                      |
+| **Expired gifted guilds**        | Rows in `gifted_guilds` where `expires_at < now()`.                                                                                                                              | `🎁 Expired gift entries`                                   |
+| **Expired entitlements**         | Rows in `entitlements_cache` with `status = 'expired'` or `status = 'canceled'` older than 90 days.                                                                              | `💳 Stale entitlement cache entries`                        |
+| **Dead thread bumps**            | Thread bumps where the bot can no longer see the thread (thread deleted or bot removed from channel). Requires a Discord API check per thread — cap at 25 checks per invocation. | `📌 Dead thread bumps`                                      |
+
+**Response format:** Ephemeral embed with each category as a field. Show
+count + up to 3 example rows (game name, character name, etc.) per category.
+If everything is clean, show a single "✅ No orphans detected" message.
+
+**Subcommands:**
+
+- `/admin orphans` — show the full report
+- `/admin orphans purge` — actually delete the detected orphans (with
+  confirmation button). Only purges categories marked safe for auto-cleanup
+  (soft-deleted characters, stale proxy messages, stale IC modes, expired
+  gifts, expired entitlements). Abandoned/empty games require manual review
+  since a GM might just be slow to set up.
+
+### `/admin games` — Game Audit (Per-Server)
+
+**Who:** Bot owner (any guild) or GM (own guild only).
+
+**What it shows:**
+
+- All games in the current guild with:
+  - Name, publish status, created_by, created_at
+  - Stat template count
+  - Character count (total / public / private)
+  - Last activity (most recent `character.last_updated_at` or
+    `game.updated_at`)
+- Highlights games with no activity in 60+ days
+
+This gives GMs visibility into their own server's health and lets the bot
+owner audit any server.
+
+### `/admin characters` — Private Character Audit
+
+**Who:** Bot owner (all guilds) or GM (own game only).
+
+**What it shows:**
+
+- Characters with `visibility = 'private'` in the target game/guild
+- Grouped by game, showing: character name, owner (Discord user), created_at,
+  whether any stats have been filled in
+- Highlights characters that are private with zero stat fields filled
+  (likely abandoned during creation)
+
+This lets GMs nudge players to publish their characters or clean up
+incomplete drafts.
+
+---
+
+## Background Cleanup (Automated)
+
+### Scheduled Purge Task
+
+A lightweight scheduled task (same pattern as `bump_scheduler.ts`) that runs
+daily and automatically cleans up data that is unambiguously stale:
+
+| What                       | Condition                                                               | Action                                                              |
+| -------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Soft-deleted characters    | `deleted_at` older than 30 days                                         | Hard delete (CASCADE handles stat_fields, inventory, custom_fields) |
+| Stale rp_proxy_messages    | `created_at` older than 90 days                                         | Delete                                                              |
+| Stale rp_channel_modes     | `updated_at` older than 90 days                                         | Delete                                                              |
+| Expired entitlements cache | `status IN ('expired', 'canceled')` AND `updated_at` older than 90 days | Delete                                                              |
+| Expired gifted guilds      | `expires_at < now()`                                                    | Delete                                                              |
+
+**What it does NOT auto-delete:**
+
+- Games (even abandoned ones) — always require manual review
+- Characters that are private but not soft-deleted — GMs should decide
+- Player/player_server_link rows — harmless and needed for returning users
+- Thread bumps — need Discord API check, not suited for background batch
+
+### Implementation
+
+**File:** `src/schedulers/cleanup_scheduler.ts`
+
+```ts
+// Runs once daily (configurable via CLEANUP_INTERVAL_HOURS env var)
+// Logs counts to console, no Discord notifications
+// Uses a single transaction for all deletes
+```
+
+Register in `src/index.ts` alongside the existing bump scheduler.
+
+---
+
+## Legacy Table Audit
+
+The database contains tables from SPRITE-Integrations that share the same
+Postgres instance:
+
+| Table                             | Owner               | Notes                                                    |
+| --------------------------------- | ------------------- | -------------------------------------------------------- |
+| `campaigns`                       | SPRITE-Integrations | TaleSpire campaign config                                |
+| `characters` (plural)             | SPRITE-Integrations | TaleSpire creature-to-Discord mappings                   |
+| `character_stats`                 | SPRITE-Integrations | TaleSpire stat snapshots                                 |
+| `campaign_creatures`              | SPRITE-Integrations | Auto-discovered TaleSpire creatures                      |
+| `stat_template_mapping`           | SPRITE-Integrations | TaleSpire → SPRITEbot stat mapping rules                 |
+| `webhook_events`                  | SPRITE-Integrations | Inbound webhook event log                                |
+| `lifecycle_notification_channels` | SPRITE-Integrations | Duplicate of `lifecycle_notification_channel` (singular) |
+
+**Recommendations:**
+
+- `lifecycle_notification_channels` (plural) appears to be a legacy duplicate
+  of `lifecycle_notification_channel` (singular). Verify which one is
+  actively used and drop the other.
+- `webhook_events` has 0 rows — confirm if it's still being written to or
+  can be dropped.
+- These tables should NOT be touched by SPRITEbot's cleanup scheduler.
+  SPRITE-Integrations should own its own housekeeping.
+
+---
+
+## Task Breakdown
+
+### Task 1: Orphan detection service
+
+**File:** `src/services/admin_housekeeping.service.ts`
+
+Pure service that runs the orphan detection queries and returns structured
+results. No Discord awareness. Each check is a separate function that
+returns `{ category: string, count: number, examples: Array<{ id, name, detail }> }`.
+
+### Task 2: `/admin orphans` command + handler
+
+**Files:**
+
+- `src/commands/admin.ts` — slash command with `orphans` and `orphans purge`
+  subcommands
+- `src/handlers/admin_orphans.handler.ts` — calls service, formats embed
+
+Gate to owner only + ops guild (same as `/gift`).
+
+### Task 3: Purge confirmation flow
+
+**Files:**
+
+- `src/components/confirm_purge_button.ts` — confirmation button component
+- Wire into handler routing in `src/handlers/button_handlers.ts`
+
+When `/admin orphans purge` is run, show the orphan report with a
+"⚠️ Confirm Purge" button. Button click executes the deletes and shows
+results.
+
+### Task 4: `/admin games` command
+
+**Files:**
+
+- `src/commands/admin.ts` — add `games` subcommand
+- `src/handlers/admin_games.handler.ts`
+
+Uses existing game/character services where possible, adds a
+`getGameAudit(guildId)` function to the housekeeping service for the
+aggregated view.
+
+### Task 5: `/admin characters` command
+
+**Files:**
+
+- `src/commands/admin.ts` — add `characters` subcommand
+- `src/handlers/admin_characters.handler.ts`
+
+Add `getPrivateCharacterAudit(guildId, gameId?)` to the housekeeping
+service.
+
+### Task 6: Cleanup scheduler
+
+**File:** `src/schedulers/cleanup_scheduler.ts`
+
+Register in `src/index.ts`. Daily interval, single transaction, console
+logging only.
+
+### Task 7: Tests
+
+- Unit tests for the housekeeping service (mock DB responses)
+- Integration tests for orphan detection queries against PGlite
+- Unit tests for the cleanup scheduler logic (mock service calls)
+
+---
+
+## Out of Scope
+
+- **Cross-bot cleanup** — SPRITE-Integrations tables are not touched
+- **User-facing commands** — these are admin/GM only
+- **Data export** — no CSV/JSON dump of orphaned data (just view + purge)
+- **Notifications** — cleanup scheduler logs to console, doesn't DM or
+  post to channels
