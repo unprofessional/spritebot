@@ -14,6 +14,10 @@ type PgLite = {
   close(): Promise<void>;
 };
 
+type PgLiteModule = {
+  PGlite: new () => PgLite;
+};
+
 export interface DbClient {
   query<T extends QueryResultRow = QueryResultRow>(
     text: string,
@@ -71,7 +75,7 @@ function patchTestPgliteClose(pgLite: PgLite): () => Promise<void> {
 
 async function createTestDb(): Promise<void> {
   const state = getTestDbState();
-  const { PGlite } = await import('@electric-sql/pglite');
+  const { PGlite } = require('@electric-sql/pglite') as PgLiteModule;
   const pgLite = new PGlite();
 
   if (!state.schemaApplied) {
