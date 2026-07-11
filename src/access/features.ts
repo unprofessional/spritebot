@@ -9,7 +9,8 @@ export type FeatureKey =
   | 'rpg:characters' // create/edit characters & stats
   | 'rpg:inventory' // inventory management (view/edit)
   | 'rpg:game-admin' // game/stat template admin
-  | 'automation:thread-bump'; // auto-bump threads
+  | 'automation:thread-bump' // auto-bump threads
+  | 'pro:transcription'; // voice transcription
 
 /** Optional pretty labels for UI/receipts/logs */
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
@@ -18,6 +19,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   'rpg:inventory': 'Inventory',
   'rpg:game-admin': 'Game Admin',
   'automation:thread-bump': 'Thread Bumping',
+  'pro:transcription': 'Voice Transcription',
 };
 
 /**
@@ -28,16 +30,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
  * Tweak as your packaging evolves. This is a safe, user-friendly default.
  */
 export const CommandPolicy: Record<string, FeatureKey> = {
-  // Creation / Editing
-  'create-character': 'rpg:characters',
-  'restore-character': 'rpg:characters',
-  'create-game': 'rpg:game-admin',
-  inventory: 'rpg:inventory',
-
-  // Automation
-  'bump-thread': 'automation:thread-bump',
-
-  // Navigation / Viewing (free baseline)
+  // === Free (core) ===
   'view-character': 'core',
   'list-characters': 'core',
   'switch-character': 'core',
@@ -45,4 +38,21 @@ export const CommandPolicy: Record<string, FeatureKey> = {
   'list-games': 'core',
   'join-game': 'core',
   'switch-game': 'core',
+  roll: 'core',
+
+  // === Premium (stateful) ===
+  'create-character': 'rpg:characters',
+  'restore-character': 'rpg:characters',
+  ic: 'rpg:characters',
+  ooc: 'rpg:characters',
+  'ic-edit': 'rpg:characters',
+  'Edit IC Message': 'rpg:characters',
+  'ic-delete': 'rpg:characters',
+  'create-game': 'rpg:game-admin',
+  'bot-announcements': 'rpg:game-admin',
+  inventory: 'rpg:inventory',
+  'bump-thread': 'automation:thread-bump',
+
+  // === Pro ===
+  transcribe: 'pro:transcription',
 };
