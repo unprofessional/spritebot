@@ -5,6 +5,7 @@ import dotenv = require('dotenv');
 
 import { startBumpScheduler } from './schedulers/bump_scheduler';
 import { startCleanupScheduler } from './schedulers/cleanup_scheduler';
+import { initializeEntitlementEvents } from './client/entitlement_events';
 import { initializeCommands } from './client/initial_commands';
 import { initializeRoleplayProxy } from './client/rp_proxy_events';
 import { initializeDB, testPgConnection } from './db/db';
@@ -28,6 +29,7 @@ const client = new Client({
 async function main(): Promise<void> {
   try {
     await initializeCommands(client);
+    initializeEntitlementEvents(client);
     initializeRoleplayProxy(client);
     initializeVoiceTranscription(client);
     installShutdownNotifications(client);
