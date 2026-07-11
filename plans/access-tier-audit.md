@@ -28,16 +28,16 @@ Anything read-only or stateless is free.**
 Read-only browsing, navigation, and stateless utilities. The "try before
 you buy" experience.
 
-| Command              | Rationale                          |
-| -------------------- | ---------------------------------- |
-| `/view-game`         | Read-only                          |
-| `/list-games`        | Read-only                          |
-| `/view-character`    | Read-only                          |
-| `/list-characters`   | Read-only                          |
-| `/join-game`         | Navigation (no state created)      |
-| `/switch-game`       | Navigation                         |
-| `/switch-character`  | Navigation                         |
-| `/roll`              | Stateless, good free hook          |
+| Command             | Rationale                     |
+| ------------------- | ----------------------------- |
+| `/view-game`        | Read-only                     |
+| `/list-games`       | Read-only                     |
+| `/view-character`   | Read-only                     |
+| `/list-characters`  | Read-only                     |
+| `/join-game`        | Navigation (no state created) |
+| `/switch-game`      | Navigation                    |
+| `/switch-character` | Navigation                    |
+| `/roll`             | Stateless, good free hook     |
 
 Components: all view/paginate/cancel/navigate interactions stay `core`.
 
@@ -46,19 +46,19 @@ Components: all view/paginate/cancel/navigate interactions stay `core`.
 Everything that creates or mutates state. One subscription unlocks all
 premium features for the entire server.
 
-| Command              | Feature Key            | Rationale                              |
-| -------------------- | ---------------------- | -------------------------------------- |
-| `/create-game`       | `rpg:game-admin`       | Creates game state                     |
-| `/create-character`  | `rpg:characters`       | Creates character state                |
-| `/restore-character` | `rpg:characters`       | Mutates character state                |
-| `/ic`                | `rpg:characters`       | Creates channel mode + webhook state   |
-| `/ooc`               | `rpg:characters`       | Mutates channel mode state             |
-| `/ic-edit`           | `rpg:characters`       | Mutates proxied message                |
-| `Edit IC Message`    | `rpg:characters`       | Context menu, same as `/ic-edit`       |
-| `/ic-delete`         | `rpg:characters`       | Deletes proxied message                |
-| `/inventory`         | `rpg:inventory`        | Creates/mutates inventory state        |
-| `/bump-thread`       | `automation:thread-bump` | Creates scheduled state              |
-| `/bot-announcements` | `rpg:game-admin`       | Configures server-level notification state |
+| Command              | Feature Key              | Rationale                                  |
+| -------------------- | ------------------------ | ------------------------------------------ |
+| `/create-game`       | `rpg:game-admin`         | Creates game state                         |
+| `/create-character`  | `rpg:characters`         | Creates character state                    |
+| `/restore-character` | `rpg:characters`         | Mutates character state                    |
+| `/ic`                | `rpg:characters`         | Creates channel mode + webhook state       |
+| `/ooc`               | `rpg:characters`         | Mutates channel mode state                 |
+| `/ic-edit`           | `rpg:characters`         | Mutates proxied message                    |
+| `Edit IC Message`    | `rpg:characters`         | Context menu, same as `/ic-edit`           |
+| `/ic-delete`         | `rpg:characters`         | Deletes proxied message                    |
+| `/inventory`         | `rpg:inventory`          | Creates/mutates inventory state            |
+| `/bump-thread`       | `automation:thread-bump` | Creates scheduled state                    |
+| `/bot-announcements` | `rpg:game-admin`         | Configures server-level notification state |
 
 ### Pro (`pro:transcription`)
 
@@ -75,11 +75,11 @@ These commands have their own internal owner/ops-guild checks and should
 NOT be added to `CommandPolicy`. Adding them would be redundant and could
 interfere with their existing permission logic.
 
-| Command          | Gate Mechanism                    |
-| ---------------- | --------------------------------- |
-| `/admin`         | `OWNER_IDS` + `DEV_GUILD_ID`     |
-| `/gift`          | `OWNER_IDS` + `DEV_GUILD_ID`     |
-| `/toggle-bypass` | `OWNER_IDS` + `DEV_GUILD_ID`     |
+| Command          | Gate Mechanism               |
+| ---------------- | ---------------------------- |
+| `/admin`         | `OWNER_IDS` + `DEV_GUILD_ID` |
+| `/gift`          | `OWNER_IDS` + `DEV_GUILD_ID` |
+| `/toggle-bypass` | `OWNER_IDS` + `DEV_GUILD_ID` |
 
 ---
 
@@ -96,7 +96,7 @@ export type FeatureKey =
   | 'rpg:inventory'
   | 'rpg:game-admin'
   | 'automation:thread-bump'
-  | 'pro:transcription';       // ← new
+  | 'pro:transcription'; // ← new
 
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   core: 'Core',
@@ -104,7 +104,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   'rpg:inventory': 'Inventory',
   'rpg:game-admin': 'Game Admin',
   'automation:thread-bump': 'Thread Bumping',
-  'pro:transcription': 'Voice Transcription',  // ← new
+  'pro:transcription': 'Voice Transcription', // ← new
 };
 
 export const CommandPolicy: Record<string, FeatureKey> = {
@@ -116,17 +116,17 @@ export const CommandPolicy: Record<string, FeatureKey> = {
   'list-games': 'core',
   'join-game': 'core',
   'switch-game': 'core',
-  roll: 'core',                    // ← new (explicit)
+  roll: 'core', // ← new (explicit)
 
   // === Premium (stateful) ===
   'create-character': 'rpg:characters',
   'restore-character': 'rpg:characters',
-  ic: 'rpg:characters',           // ← new
-  ooc: 'rpg:characters',          // ← new
-  'ic-edit': 'rpg:characters',    // ← new
-  'ic-delete': 'rpg:characters',  // ← new
+  ic: 'rpg:characters', // ← new
+  ooc: 'rpg:characters', // ← new
+  'ic-edit': 'rpg:characters', // ← new
+  'ic-delete': 'rpg:characters', // ← new
   'create-game': 'rpg:game-admin',
-  'bot-announcements': 'rpg:game-admin',  // ← new
+  'bot-announcements': 'rpg:game-admin', // ← new
   inventory: 'rpg:inventory',
   'bump-thread': 'automation:thread-bump',
 
@@ -154,11 +154,11 @@ that to `CommandPolicy` as `rpg:characters`.
 
 Update `plans/stripe-subscriptions.md` Step 0 to include Pro tier:
 
-| Tier         | Price     | Billing  | Features                                |
-| ------------ | --------- | -------- | --------------------------------------- |
-| **Free**     | $0        | —        | `core` only                             |
-| **Premium**  | $3-28/yr  | Monthly/Quarterly/Annual | All `rpg:*` + `automation:*` |
-| **Pro**      | TBD       | TBD      | Everything in Premium + `pro:*`         |
+| Tier        | Price    | Billing                  | Features                        |
+| ----------- | -------- | ------------------------ | ------------------------------- |
+| **Free**    | $0       | —                        | `core` only                     |
+| **Premium** | $3-28/yr | Monthly/Quarterly/Annual | All `rpg:*` + `automation:*`    |
+| **Pro**     | TBD      | TBD                      | Everything in Premium + `pro:*` |
 
 Pro tier pricing is deferred until transcription costs are better
 understood. The feature key and gate should ship now so the access
