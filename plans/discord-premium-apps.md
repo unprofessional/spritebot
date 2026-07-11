@@ -40,9 +40,9 @@ Standard Tier (after $1M): 30% platform fee + processing.
 
 ### Pricing Structure
 
-| Plan | Price | After Fees (~21%) | Net Monthly |
-|------|-------|-------------------|-------------|
-| **Premium Monthly** | $4.00/mo | ~$3.16 | $3.16 |
+| Plan                | Price    | After Fees (~21%) | Net Monthly |
+| ------------------- | -------- | ----------------- | ----------- |
+| **Premium Monthly** | $4.00/mo | ~$3.16            | $3.16       |
 
 > Note: Discord currently supports monthly subscriptions. Annual/quarterly
 > billing may be added later when Discord supports those SKU types.
@@ -54,18 +54,18 @@ All plans are **per server (guild)**, not per user.
 
 ## What's Already Built
 
-| Component | File | Status |
-|-----------|------|--------|
-| Feature keys + CommandPolicy | `src/access/features.ts` | ✅ Complete (including `pro:transcription`) |
-| Component policy | `src/access/components_policy.ts` | ✅ Complete |
-| Authorization pipeline | `src/access/authorize.ts` | ✅ Complete (checks entitlements → gifted → deny) |
-| Command + component guards | `src/access/guards.ts` | ✅ Complete |
-| Entitlements service | `src/services/entitlements.service.ts` | ✅ Complete (cache + lazy Discord API pull) |
-| Discord entitlements API | `src/services/discord_entitlements_api.ts` | ✅ Complete |
-| Entitlements cache DAO | `src/dao/entitlements_cache.dao.ts` | ✅ Complete |
-| Plan → feature mapping | `src/services/plans.ts` | ⚠️ Stubbed (needs real SKU IDs) |
-| Gifted guilds (manual grants) | gifted_guilds table + DAO | ✅ Complete |
-| Entitlement event listeners | `src/index.ts` or `src/client/` | ❌ Not wired |
+| Component                     | File                                       | Status                                            |
+| ----------------------------- | ------------------------------------------ | ------------------------------------------------- |
+| Feature keys + CommandPolicy  | `src/access/features.ts`                   | ✅ Complete (including `pro:transcription`)       |
+| Component policy              | `src/access/components_policy.ts`          | ✅ Complete                                       |
+| Authorization pipeline        | `src/access/authorize.ts`                  | ✅ Complete (checks entitlements → gifted → deny) |
+| Command + component guards    | `src/access/guards.ts`                     | ✅ Complete                                       |
+| Entitlements service          | `src/services/entitlements.service.ts`     | ✅ Complete (cache + lazy Discord API pull)       |
+| Discord entitlements API      | `src/services/discord_entitlements_api.ts` | ✅ Complete                                       |
+| Entitlements cache DAO        | `src/dao/entitlements_cache.dao.ts`        | ✅ Complete                                       |
+| Plan → feature mapping        | `src/services/plans.ts`                    | ⚠️ Stubbed (needs real SKU IDs)                   |
+| Gifted guilds (manual grants) | gifted_guilds table + DAO                  | ✅ Complete                                       |
+| Entitlement event listeners   | `src/index.ts` or `src/client/`            | ❌ Not wired                                      |
 
 ---
 
@@ -75,7 +75,7 @@ All plans are **per server (guild)**, not per user.
 
 - [ ] **Enable monetization** in the Discord Developer Portal for SPRITEbot
 - [ ] **Complete team verification** (if not already done — Discord requires
-  identity verification for monetized apps)
+      identity verification for monetized apps)
 - [ ] **Create SKU:** "SPRITEbot Premium" — guild subscription, $4.00/mo
   - Note the SKU ID
 - [ ] **Set up Store page** with description, icon, and feature list
@@ -90,7 +90,7 @@ Update `src/services/plans.ts` with real SKU ID:
 
 ```typescript
 export const PLAN_FEATURES: Record<string, FeatureKey[]> = {
-  'SKU_ID_HERE': [
+  SKU_ID_HERE: [
     'core',
     'rpg:characters',
     'rpg:inventory',
@@ -181,14 +181,14 @@ but deprioritized. If/when it makes sense to offer direct billing:
 
 ## Implementation Order
 
-| Phase | What | Owner | Depends On |
-|-------|------|-------|------------|
-| **D0** | Developer Portal: enable monetization, create SKU, store page | mads | Privacy/ToS URLs (done) |
-| **D1** | Populate `plans.ts` with SKU ID | Codex | D0 |
-| **D2** | Wire entitlement gateway events | Codex | Nothing |
-| **D3** | `/subscribe` command | Codex | D1 |
-| **D4** | Update spriteweb pricing page | Codex | D0 (price confirmed) |
-| **D5** | End-to-end testing | mads + Moldy | All above |
+| Phase  | What                                                          | Owner        | Depends On              |
+| ------ | ------------------------------------------------------------- | ------------ | ----------------------- |
+| **D0** | Developer Portal: enable monetization, create SKU, store page | mads         | Privacy/ToS URLs (done) |
+| **D1** | Populate `plans.ts` with SKU ID                               | Codex        | D0                      |
+| **D2** | Wire entitlement gateway events                               | Codex        | Nothing                 |
+| **D3** | `/subscribe` command                                          | Codex        | D1                      |
+| **D4** | Update spriteweb pricing page                                 | Codex        | D0 (price confirmed)    |
+| **D5** | End-to-end testing                                            | mads + Moldy | All above               |
 
 D1 and D3 are tiny. D2 is small but important. Total estimated effort:
 one focused Codex session for D1-D3, maybe an hour of mads's time for D0.
