@@ -3,7 +3,7 @@ import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'dis
 import { deleteRoleplayProxyMessage } from '../services/rp_message_proxy.service';
 import { parseDiscordMessageReference } from '../utils/discord_message_reference';
 
-function resultMessage(status: string, reason?: string): string {
+export function resultMessage(status: string, reason?: string): string {
   if (status === 'deleted') return '🗑️ Deleted your proxied RP message.';
   if (status === 'forbidden') return '⛔ You can only delete your own proxied RP messages.';
   if (status === 'not_found') {
@@ -17,6 +17,10 @@ function resultMessage(status: string, reason?: string): string {
   }
 
   return '❌ Failed to delete that proxied RP message.';
+}
+
+export function resultReason(result: Awaited<ReturnType<typeof deleteRoleplayProxyMessage>>) {
+  return 'reason' in result ? result.reason : undefined;
 }
 
 module.exports = {
@@ -60,8 +64,10 @@ module.exports = {
     });
 
     return interaction.reply({
-      content: resultMessage(result.status, 'reason' in result ? result.reason : undefined),
+      content: resultMessage(result.status, resultReason(result)),
       ephemeral: true,
     });
   },
+  resultMessage,
+  resultReason,
 };

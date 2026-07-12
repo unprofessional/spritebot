@@ -48,6 +48,7 @@ export const CommandPolicy: Record<string, FeatureKey> = {
   'ic-edit': 'rpg:characters',
   'Edit IC Message': 'rpg:characters',
   'ic-delete': 'rpg:characters',
+  'Delete IC Message': 'rpg:characters',
   'create-game': 'rpg:game-admin',
   'bot-announcements': 'rpg:game-admin',
   inventory: 'rpg:inventory',
