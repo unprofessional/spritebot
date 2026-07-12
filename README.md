@@ -365,10 +365,11 @@ The repo includes a multistage [Dockerfile](Dockerfile) and a [docker-compose.ym
 
 ## Jenkins Pipeline Deployment
 
-Pull requests are checked by [GitHub Actions](.github/workflows/pr-checks.yml). The workflow
+Pull requests are checked by [GitHub Actions](.github/workflows/pr-checks.yml). The PR-only workflow
 classifies changed files before running checks: docs and immaterial config changes run dependency
 install plus Prettier, while source-impacting changes selectively add ESLint, Jest, TypeScript
-build, and Docker smoke build steps. Unknown paths fall back to the full profile.
+build, and Docker smoke build steps. Unknown paths fall back to the full profile. Push-triggered
+CI/CD is handled by Jenkins so a `develop` -> `master` PR does not run the same Actions suite twice.
 
 The repo includes a [Jenkinsfile](Jenkinsfile) for a pipeline-style Jenkins job. This replaces manual
 click-created Jenkins job config with source-controlled build and deploy behavior.
