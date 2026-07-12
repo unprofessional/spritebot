@@ -1,0 +1,207 @@
+name: PR Checks
+
+on:
+  pull_request:
+  push:
+    branches:
+      - develop
+      - main
+      - master
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pr-checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Selective Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Classify changes
+        id: changes
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            base_ref="${{ github.base_ref }}"
+            git fetch --no-tags origin "+refs/heads/${base_ref}:refs/remotes/origin/${base_ref}"
+            mapfile -t changed_files < <(git diff --name-only "origin/${base_ref}"...HEAD)
+          elif [[ -n "${{ github.event.before }}" && "${{ github.event.before }}" != "0000000000000000000000000000000000000000" ]]; then
+            mapfile -t changed_files < <(git diff --name-only "${{ github.event.before }}" HEAD)
+          elif git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+            mapfile -t changed_files < <(git diff --name-only HEAD~1 HEAD)
+          else
+            mapfile -t changed_files < <(git ls-files)
+          fi
+
+          printf 'Changed files:\n'
+          printf '%s\n' "${changed_files[@]}"
+
+          is_prettier_only_path() {
+            local path="$1"
+            [[ "$path" == "README.md" ]] ||
+              [[ "$path" == "INSTRUCTIONS.md" ]] ||
+              [[ "$path" == "AGENTS.md" ]] ||
+              [[ "$path" == "LICENSE" ]] ||
+              [[ "$path" == ".env.example" ]] ||
+              [[ "$path" == ".gitignore" ]] ||
+              [[ "$path" == ".prettierignore" ]] ||
+              [[ "$path" == ".dockerignore" ]] ||
+              [[ "$path" == docs/* ]] ||
+              [[ "$path" == plans/* ]] ||
+              [[ "$path" == *.md ]]
+          }
+
+          is_ci_config_only_path() {
+            local path="$1"
+            [[ "$path" == "Jenkinsfile" ]] ||
+              [[ "$path" == .github/* ]]
+          }
+
+          is_source_lint_path() {
+            local path="$1"
+            [[ "$path" == src/* ]] ||
+              [[ "$path" == "eslint.config.js" ]] ||
+              [[ "$path" == "tsconfig.json" ]] ||
+              [[ "$path" == "package.json" ]] ||
+              [[ "$path" == "package-lock.json" ]]
+          }
+
+          is_test_impacting_path() {
+            local path="$1"
+            [[ "$path" == src/* ]] ||
+              [[ "$path" == tests/* ]] ||
+              [[ "$path" == "jest.config.js" ]] ||
+              [[ "$path" == "tsconfig.json" ]] ||
+              [[ "$path" == "package.json" ]] ||
+              [[ "$path" == "package-lock.json" ]]
+          }
+
+          is_build_impacting_path() {
+            local path="$1"
+            [[ "$path" == src/* ]] ||
+              [[ "$path" == "tsconfig.json" ]] ||
+              [[ "$path" == "package.json" ]] ||
+              [[ "$path" == "package-lock.json" ]]
+          }
+
+          is_docker_impacting_path() {
+            local path="$1"
+            is_build_impacting_path "$path" ||
+              [[ "$path" == "Dockerfile" ]] ||
+              [[ "$path" == "docker-compose.yml" ]] ||
+              [[ "$path" == "entrypoint.sh" ]]
+          }
+
+          is_known_path() {
+            local path="$1"
+            is_prettier_only_path "$path" ||
+              is_ci_config_only_path "$path" ||
+              is_source_lint_path "$path" ||
+              is_test_impacting_path "$path" ||
+              is_build_impacting_path "$path" ||
+              is_docker_impacting_path "$path"
+          }
+
+          profile="full"
+          run_eslint="true"
+          run_tests="true"
+          run_build="true"
+          run_docker_build="true"
+
+          if [[ "${#changed_files[@]}" -gt 0 ]]; then
+            lightweight_only="true"
+            has_unknown_paths="false"
+            run_eslint="false"
+            run_tests="false"
+            run_build="false"
+            run_docker_build="false"
+
+            for path in "${changed_files[@]}"; do
+              if ! is_prettier_only_path "$path" && ! is_ci_config_only_path "$path"; then
+                lightweight_only="false"
+              fi
+
+              if ! is_known_path "$path"; then
+                has_unknown_paths="true"
+              fi
+
+              if is_source_lint_path "$path"; then
+                run_eslint="true"
+              fi
+
+              if is_test_impacting_path "$path"; then
+                run_tests="true"
+              fi
+
+              if is_build_impacting_path "$path"; then
+                run_build="true"
+              fi
+
+              if is_docker_impacting_path "$path"; then
+                run_docker_build="true"
+              fi
+            done
+
+            if [[ "$lightweight_only" == "true" ]]; then
+              profile="prettier-only"
+            elif [[ "$has_unknown_paths" == "true" ]]; then
+              profile="full"
+              run_eslint="true"
+              run_tests="true"
+              run_build="true"
+              run_docker_build="true"
+            else
+              profile="selective"
+            fi
+          fi
+
+          {
+            echo "profile=$profile"
+            echo "run_eslint=$run_eslint"
+            echo "run_tests=$run_tests"
+            echo "run_build=$run_build"
+            echo "run_docker_build=$run_docker_build"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'CI profile: %s\n' "$profile"
+          printf 'run_eslint=%s run_tests=%s run_build=%s run_docker_build=%s\n' \
+            "$run_eslint" "$run_tests" "$run_build" "$run_docker_build"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Check formatting
+        run: npm run lint:prettier
+
+      - name: Run ESLint
+        if: steps.changes.outputs.run_eslint == 'true'
+        run: npm run lint:eslint
+
+      - name: Run tests
+        if: steps.changes.outputs.run_tests == 'true'
+        run: npm test -- --runInBand
+
+      - name: Build
+        if: steps.changes.outputs.run_build == 'true'
+        run: npm run build
+
+      - name: Build Docker image
+        if: steps.changes.outputs.run_docker_build == 'true'
+        run: docker build --progress=plain -t spritebot-ci .
