@@ -14,16 +14,20 @@ interactions and a pgLite-backed database. These should cover player-visible flo
 - creating, viewing, and switching characters
 - inventory lifecycle
 - thread bump registration and updates
+- IC message edit/delete interactions
 
 ## Integration
 
 Integration tests live in `tests/integration`. They use real DAOs/services with pgLite and focus on
 database behavior, constraints, hydration, and cross-table side effects.
 
+Current integration coverage includes character lifecycle and restore behavior, inventory, RP proxy
+message tracking, admin housekeeping audits, orphan purge previews, and lifecycle notifications.
+
 ## Unit
 
 Unit tests live in `tests/unit`. They should stay fast and narrow: pure utilities, access-policy
-branches, Discord component builders, and response builders.
+branches, scheduler decisions, Discord component builders, and response builders.
 
 ## Database
 
