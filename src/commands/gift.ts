@@ -79,9 +79,12 @@ module.exports = {
         return interaction.reply({ content: 'No gifted guilds.', ephemeral: true });
       }
       const lines = rows.map((r) => {
+        const guild = interaction.client.guilds.cache.get(r.guild_id);
+        const name = guild ? `**${guild.name}**` : r.guild_id;
+        const id = guild ? ` (${r.guild_id})` : '';
         const exp = r.expires_at ? `, expires: ${r.expires_at}` : '';
         const n = r.note ? ` — ${r.note}` : '';
-        return `• ${r.guild_id}${exp}${n}`;
+        return `• ${name}${id}${exp}${n}`;
       });
       return interaction.reply({ content: lines.join('\n'), ephemeral: true });
     }
