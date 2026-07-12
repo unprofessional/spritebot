@@ -6,7 +6,13 @@ import type { FeatureKey } from '../access/features';
  * Fill these with your real SKU IDs from your Discord app.
  */
 export const PLAN_FEATURES: Record<string /* sku_id */, FeatureKey[]> = {
-  // 'sku_123456789012345678': ['core','rpg:characters','rpg:inventory','rpg:game-admin','automation:thread-bump'],
+  '1405308360818954322': [
+    'core',
+    'rpg:characters',
+    'rpg:inventory',
+    'rpg:game-admin',
+    'automation:thread-bump',
+  ],
 };
 
 export function featuresForSkus(skuIds: string[]): Set<FeatureKey> {
