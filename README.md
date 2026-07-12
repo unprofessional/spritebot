@@ -2,10 +2,11 @@
 
 `Spritebot` is a Discord bot for running lightweight RPG campaigns inside a server. It combines campaign setup, character management, inventory tracking, and Discord-native interaction flows with a PostgreSQL backend.
 
-The project also includes two platform-style features beyond the RPG core:
+The project also includes platform-style features beyond the RPG core:
 
 - Discord entitlement-based feature gating for premium capabilities
 - Automatic thread bumping to keep selected threads alive before they archive
+- Admin housekeeping tools and automated stale-row cleanup
 
 ## What It Does
 
@@ -19,11 +20,12 @@ At a high level, the bot supports:
 - Managing character inventory
 - Letting players proxy in-character posts through webhooks with `/ic` and `/ooc`
 - Auto-bumping registered Discord threads on a schedule
+- Cleaning up stale operational data through reviewed admin tools and a background scheduler
 - Restricting certain commands behind subscription/entitlement checks
 
 ## Command Overview
 
-The repo currently defines these slash commands:
+The repo currently defines these slash and context-menu commands:
 
 - `/create-game` - Create a campaign for the current server
 - `/view-game` - View the current active game
@@ -34,15 +36,19 @@ The repo currently defines these slash commands:
 - `/view-character` - View your active character
 - `/list-characters` - List public characters in the active game
 - `/switch-character` - Switch your active character
+- `/restore-character` - Restore one of your recently deleted characters in your current game
 - `/roll` - Roll dice from `1d2` through `15d999`
 - `/ic` - Set your messages in the current channel to in-character proxy mode
 - `/ooc` - Set your messages in the current channel to out-of-character mode
 - `/ic-edit` - Edit one of your tracked proxied in-character messages
 - `Edit IC Message` - Right-click a proxied message to edit it
 - `/ic-delete` - Delete one of your tracked proxied in-character messages
+- `Delete IC Message` - Right-click a proxied message to delete it
 - `/inventory` - View and manage inventory for your active character
 - `/bump-thread` - Register and manage auto-bumped threads
 - `/bot-announcements` - Configure lifecycle announcement channels for this server
+- `/subscribe` - View or manage the server's Discord Premium App subscription
+- `/admin` - Admin and GM housekeeping audits, purge previews, and restore tools
 - `/gift` - Ops-only gifted access management
 - `/toggle-bypass` - Ops-only entitlement bypass toggle
 
@@ -79,6 +85,10 @@ Characters include built-in fields like:
 
 They also include game-defined stat fields and optional custom fields.
 
+Character deletion is a soft-delete. Players have 30 days to restore their own deleted characters
+with `/restore-character`; restored characters return as private. The bot owner can use
+`/admin restore-character` to restore a soft-deleted character by ID while the row still exists.
+
 ### Inventory
 
 Each character can have inventory entries with a text name, optional type/category, optional
@@ -108,8 +118,9 @@ If those fields are blank, it falls back to the character's normal name and avat
 Spritebot tracks the ownership of every proxied webhook message. Players can pass a proxied message
 ID or Discord message link to `/ic-edit`, which opens a multi-line editor pre-filled from the
 current Discord message. They can also right-click a message and choose `Apps` →
-`Edit IC Message`. `/ic-delete` accepts the same ID or link format, and the bot only updates or
-deletes messages originally proxied by that same Discord user.
+`Edit IC Message`. `/ic-delete` accepts the same ID or link format, and players can also
+right-click a message and choose `Apps` → `Delete IC Message`. The bot only updates or deletes
+messages originally proxied by that same Discord user.
 
 For split RP posts, each chunk is a separate proxied Discord message and can be edited or deleted by its own message ID/link.
 
@@ -117,9 +128,23 @@ For split RP posts, each chunk is a separate proxied Discord message and can be 
 
 The bot can register a Discord thread and periodically post a bump message to prevent it from auto-archiving. The scheduler is archive-aware and tries to bump before Discord’s archive threshold is reached.
 
+### Admin Housekeeping
+
+The `/admin` command provides read-only audits and carefully gated cleanup tools:
+
+- `/admin orphans` - owner-only, ops-guild report of stale or orphaned rows
+- `/admin orphans-purge` - owner-only preview and confirmation flow for safe hard deletes
+- `/admin games` - game audit for the bot owner or a GM in the current server
+- `/admin characters` - private-character audit for the bot owner or a GM-scoped game
+- `/admin restore-character` - owner-only restore of a soft-deleted character by ID
+
+Automated cleanup runs on startup and then on a configurable interval. It reuses the same safe
+purge logic as `/admin orphans-purge` and does not touch games, private non-deleted characters,
+player links, thread bump rows, or SPRITE-Integrations-owned tables.
+
 ### Entitlements and Feature Gates
 
-The codebase supports guild-scoped premium access. Features are granted by Discord entitlements and cached in Postgres for quicker checks. If no premium entitlements are active, the bot still grants the baseline `core` feature set.
+The codebase supports guild-scoped premium access. Features are granted by Discord entitlements and cached in Postgres for quicker checks. If no premium entitlements are active, the bot still grants the baseline `core` feature set. `/subscribe` exposes Discord Premium App subscription status and upgrade UI in Discord.
 
 ## Project Structure
 
@@ -134,7 +159,7 @@ The code follows a fairly clean layered structure:
 - `src/dao/` - PostgreSQL data access objects
 - `src/db/` - DB bootstrap and SQL loader
 - `src/access/` - feature gating and authorization logic
-- `src/schedulers/` - background scheduling for thread bumping
+- `src/schedulers/` - background scheduling for thread bumping and housekeeping cleanup
 - `src/config/` - environment and feature config
 - `src/types/` - shared TypeScript types
 - `docs/` - privacy policy and terms of service pages
@@ -163,6 +188,7 @@ Primary tables include:
 - `thread_bumps`
 - `entitlements_cache`
 - `gifted_guilds`
+- `lifecycle_notification_channel`
 
 The app can initialize its schema automatically on startup in non-production environments if the tracked tables do not already exist.
 
@@ -174,7 +200,7 @@ The app can initialize its schema automatically on startup in non-production env
 - PostgreSQL
 - Docker
 - ESLint
-- Jest (script exists, but the repo currently appears to have little or no test coverage)
+- Jest with pgLite-backed integration tests
 
 ## Local Development
 
@@ -182,7 +208,7 @@ The app can initialize its schema automatically on startup in non-production env
 
 - Node.js 22.22.0
 - npm
-- PostgreSQL 16 recommended
+- PostgreSQL 18 recommended
 - A Discord application and bot token
 
 ### 1. Install dependencies
@@ -227,14 +253,18 @@ BUMP_JITTER_MS=15000
 BUMP_POLLER_INTERVAL_MS=30000
 BUMP_POLLER_COOLDOWN_MS=300000
 BUMP_MAX_CONCURRENCY=3
+
+# Housekeeping cleanup tuning
+CLEANUP_INTERVAL_HOURS=24
 ```
 
 Notes:
 
 - `DEV_GUILD_ID` is used for registering ops-only commands
-- `OWNER_DISCORD_ID` is used by `/gift` and `/toggle-bypass`
+- `OWNER_DISCORD_ID` is used by `/gift`, `/toggle-bypass`, and owner-only `/admin` subcommands
 - `/bot-announcements set` controls where startup/shutdown status messages are posted per server
 - `LIFECYCLE_NOTIFY_GUILD_ID` and `LIFECYCLE_NOTIFY_CHANNEL_ID` can provide one optional fallback startup/shutdown status channel
+- `CLEANUP_INTERVAL_HOURS` controls how often the housekeeping scheduler runs after startup
 - production DB auto-init is disabled unless `ALLOW_DB_INIT=true`
 
 ### 3. Discord application setup
@@ -320,6 +350,7 @@ On startup, the app will:
 - initialize the schema if needed
 - log in the bot client
 - start the thread bump scheduler
+- run and schedule housekeeping cleanup
 
 ### 6. Build for production
 
@@ -334,16 +365,21 @@ The repo includes a multistage [Dockerfile](Dockerfile) and a [docker-compose.ym
 
 ## Jenkins Pipeline Deployment
 
+Pull requests are checked by [GitHub Actions](.github/workflows/pr-checks.yml). The workflow
+classifies changed files before running checks: docs and immaterial config changes run dependency
+install plus Prettier, while source-impacting changes selectively add ESLint, Jest, TypeScript
+build, and Docker smoke build steps. Unknown paths fall back to the full profile.
+
 The repo includes a [Jenkinsfile](Jenkinsfile) for a pipeline-style Jenkins job. This replaces manual
 click-created Jenkins job config with source-controlled build and deploy behavior.
 
 The pipeline:
 
 - reports pending/success/failure status back to GitHub under `ci/jenkins/spritebot`
+- classifies changed files so docs and immaterial config changes run only dependency install plus Prettier
+- runs source-impacting checks selectively: ESLint, Jest, TypeScript build, Docker smoke build, and deploy packaging only when relevant paths changed
 - runs `npm ci`
-- runs `npm run lint`
-- runs `npm test -- --runInBand`
-- runs `npm run build`
+- runs Prettier for every change
 - builds the Docker image as an optional CI smoke check when Docker is available on the Jenkins agent
 - packages the repo into `spritebot-deploy.tar.gz`
 - deploys from `main` or `master` to `shinralabs`
@@ -402,6 +438,7 @@ Feature gating is organized around stable feature keys:
 - `rpg:inventory`
 - `rpg:game-admin`
 - `automation:thread-bump`
+- `pro:transcription`
 
 Command-to-feature mapping is defined in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts), and entitlement resolution happens in [src/services/entitlements.service.ts](/Users/power/dev/devcru/spritebot/src/services/entitlements.service.ts).
 
@@ -413,14 +450,13 @@ The SKU-to-feature mapping file is present in [src/services/plans.ts](/Users/pow
 - Discord UI is built heavily with ephemeral responses, embeds, buttons, modals, and select menus
 - Character creation uses an in-memory draft system before final persistence
 - Thread bump scheduling has both a per-thread scheduler and a polling backstop
+- Housekeeping cleanup runs through `src/schedulers/cleanup_scheduler.ts` and reuses the reviewed safe purge service
 - The bot separates read/view flows from create/edit/admin flows for premium gating
 
 ## Current Caveats
 
 Based on the current codebase:
 
-- The README was previously empty, so some operational knowledge is only encoded in source
-- Tests do not appear to be fleshed out yet
 - Character drafts are stored in memory, so they will not survive a process restart
 - Some implementation areas still look mid-iteration, including plan mapping and a few rough TODO/FIXME comments
 - The app appears to assume a small-scale, single-process deployment model in several places
