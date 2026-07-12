@@ -44,6 +44,10 @@ Use `/switch-character` to choose a different active character.
 
 Use `/list-characters` to browse public characters in the current game.
 
+If you delete a character by mistake, use `/restore-character` within 30 days to restore one of
+your soft-deleted characters in your current game. Restored characters come back as private, so you
+can review them before making them public again.
+
 ## RP Display Fields
 
 The RP display fields control how your proxied roleplay posts appear.
@@ -132,6 +136,9 @@ You can provide either:
 - A Discord message link
 
 Spritebot only lets you delete messages that were proxied by your own Discord account.
+
+You can also right-click one of your proxied messages and choose
+`Apps` → `Delete IC Message` to delete it without copying a message link.
 
 For split RP posts, delete each chunk separately.
 
@@ -254,6 +261,10 @@ If your proxied post has the wrong name or avatar, update `RP Display Name` and 
 If `/ic-edit` or `/ic-delete` says it cannot find the message, make sure you copied the webhook message that Spritebot posted, not your original message.
 
 If `/ic-edit` or `/ic-delete` says the message is not yours, that message was proxied by a different Discord account.
+
+If `/restore-character` does not list the character you expected, make sure you are in the same server
+and active game where the character was created. Player self-restore is available for 30 days after
+deletion.
 
 ## GM Quick Start
 
