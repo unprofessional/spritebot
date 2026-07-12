@@ -371,10 +371,10 @@ click-created Jenkins job config with source-controlled build and deploy behavio
 The pipeline:
 
 - reports pending/success/failure status back to GitHub under `ci/jenkins/spritebot`
+- classifies changed files so docs and immaterial config changes run only dependency install plus Prettier
+- runs source-impacting checks selectively: ESLint, Jest, TypeScript build, Docker smoke build, and deploy packaging only when relevant paths changed
 - runs `npm ci`
-- runs `npm run lint`
-- runs `npm test -- --runInBand`
-- runs `npm run build`
+- runs Prettier for every change
 - builds the Docker image as an optional CI smoke check when Docker is available on the Jenkins agent
 - packages the repo into `spritebot-deploy.tar.gz`
 - deploys from `main` or `master` to `shinralabs`
