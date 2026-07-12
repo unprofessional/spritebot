@@ -1,6 +1,6 @@
 # SPRITEbot Access Tier Audit & Restructuring
 
-> **Status:** Planning
+> **Status:** Implemented
 > **Target:** `src/access/features.ts`, `src/access/components_policy.ts`
 > **Related:** `plans/stripe-subscriptions.md` (payment integration)
 
@@ -56,6 +56,7 @@ premium features for the entire server.
 | `/ic-edit`           | `rpg:characters`         | Mutates proxied message                    |
 | `Edit IC Message`    | `rpg:characters`         | Context menu, same as `/ic-edit`           |
 | `/ic-delete`         | `rpg:characters`         | Deletes proxied message                    |
+| `Delete IC Message`  | `rpg:characters`         | Context menu, same as `/ic-delete`         |
 | `/inventory`         | `rpg:inventory`          | Creates/mutates inventory state            |
 | `/bump-thread`       | `automation:thread-bump` | Creates scheduled state                    |
 | `/bot-announcements` | `rpg:game-admin`         | Configures server-level notification state |
@@ -83,11 +84,11 @@ interfere with their existing permission logic.
 
 ---
 
-## Code Changes
+## Implemented Changes
 
 ### `src/access/features.ts`
 
-Add new feature key and fill in command policy gaps:
+The access policy now includes the Pro feature key and explicit mappings for stateful commands:
 
 ```typescript
 export type FeatureKey =
@@ -124,7 +125,9 @@ export const CommandPolicy: Record<string, FeatureKey> = {
   ic: 'rpg:characters', // ← new
   ooc: 'rpg:characters', // ← new
   'ic-edit': 'rpg:characters', // ← new
+  'Edit IC Message': 'rpg:characters', // ← new
   'ic-delete': 'rpg:characters', // ← new
+  'Delete IC Message': 'rpg:characters', // ← new
   'create-game': 'rpg:game-admin',
   'bot-announcements': 'rpg:game-admin', // ← new
   inventory: 'rpg:inventory',
@@ -135,18 +138,20 @@ export const CommandPolicy: Record<string, FeatureKey> = {
 };
 ```
 
+`/subscribe` intentionally stays outside `CommandPolicy` so servers without an active entitlement
+can still open Discord's Premium App subscription UI.
+
 ### `src/access/components_policy.ts`
 
-Add the `restoreCharacterDropdown` entry (already present on develop).
-No other component changes needed — the existing component gates already
-cover all interactive flows correctly.
+`restoreCharacterDropdown` is mapped through the component policy. No other component changes were
+needed because the existing component gates already cover the interactive flows.
 
-### Context menu (`ic-edit-context`)
+### Context menus (`ic-edit-context`, `ic-delete-context`)
 
-The `Edit IC Message` context menu command registers with a different
-command name than the slash command. Verify how it registers and ensure
-the guard matches. If it registers as `ic-edit-context` or similar, add
-that to `CommandPolicy` as `rpg:characters`.
+The `Edit IC Message` and `Delete IC Message` context menu commands register by their Discord
+command names, not by their filenames. `CommandPolicy` should include both human-facing command
+names so the shared interaction guard applies the same `rpg:characters` gate as `/ic-edit` and
+`/ic-delete`.
 
 ---
 
@@ -174,15 +179,13 @@ for pricing" messaging until the price point is decided.
 
 ---
 
-## Implementation
+## Implementation Record
 
-Single pass — this is a small diff to `features.ts` and one context menu
-verification. No new files, no DB changes, no service changes.
+This shipped as a small access-policy change with no new files, DB changes, or service changes.
 
-1. Update `features.ts` with new feature key and all command mappings
-2. Verify context menu command name for `Edit IC Message`, add to policy
-3. Run `npm run build` + `npm run precommit`
-4. Update spriteweb pricing page (separate PR)
+1. Updated `features.ts` with the Pro feature key and command mappings
+2. Verified context menu command names for IC edit/delete and added them to policy
+3. Left spriteweb pricing updates for a separate PR
 
 ---
 
@@ -192,6 +195,7 @@ After merge, confirm:
 
 - `/roll` works in a free (ungifted, no entitlement) server
 - `/ic` is denied in a free server with "requires subscription" message
+- `Edit IC Message` and `Delete IC Message` are denied in a free server with the same message
 - `/transcribe` is denied even in a premium server (unless Pro is granted)
 - All existing gated commands still work in gifted/entitled servers
 - `/admin`, `/gift`, `/toggle-bypass` still work for owner in ops guild
