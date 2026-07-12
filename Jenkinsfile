@@ -31,6 +31,68 @@ boolean isDeployBranch() {
     ['main', 'master'].contains(env.BRANCH_NAME)
 }
 
+boolean isPrettierOnlyPath(String path) {
+  return path == 'README.md' ||
+    path == 'INSTRUCTIONS.md' ||
+    path == 'AGENTS.md' ||
+    path == 'LICENSE' ||
+    path == '.env.example' ||
+    path == '.gitignore' ||
+    path == '.prettierignore' ||
+    path == '.dockerignore' ||
+    path.startsWith('docs/') ||
+    path.startsWith('plans/') ||
+    path.endsWith('.md')
+}
+
+boolean isCiConfigOnlyPath(String path) {
+  return path == 'Jenkinsfile' || path.startsWith('.github/')
+}
+
+boolean isSourceLintPath(String path) {
+  return path.startsWith('src/') ||
+    path == 'eslint.config.js' ||
+    path == 'tsconfig.json' ||
+    path == 'package.json' ||
+    path == 'package-lock.json'
+}
+
+boolean isTestImpactingPath(String path) {
+  return path.startsWith('src/') ||
+    path.startsWith('tests/') ||
+    path == 'jest.config.js' ||
+    path == 'tsconfig.json' ||
+    path == 'package.json' ||
+    path == 'package-lock.json'
+}
+
+boolean isBuildImpactingPath(String path) {
+  return path.startsWith('src/') ||
+    path == 'tsconfig.json' ||
+    path == 'package.json' ||
+    path == 'package-lock.json'
+}
+
+boolean isDockerImpactingPath(String path) {
+  return isBuildImpactingPath(path) ||
+    path == 'Dockerfile' ||
+    path == 'docker-compose.yml' ||
+    path == 'entrypoint.sh'
+}
+
+boolean isDeployImpactingPath(String path) {
+  return isDockerImpactingPath(path)
+}
+
+boolean isKnownCiPath(String path) {
+  return isPrettierOnlyPath(path) ||
+    isCiConfigOnlyPath(path) ||
+    isSourceLintPath(path) ||
+    isTestImpactingPath(path) ||
+    isBuildImpactingPath(path) ||
+    isDockerImpactingPath(path)
+}
+
 pipeline {
   agent any
 
@@ -51,6 +113,12 @@ pipeline {
     DEPLOY_HOST = 'shinralabs'
     DEPLOY_REMOTE_DIR = 'dev/spritebot'
     DEPLOY_ARCHIVE = 'spritebot-deploy.tar.gz'
+    CI_CHECK_PROFILE = 'full'
+    RUN_ESLINT = 'true'
+    RUN_TESTS = 'true'
+    RUN_BUILD = 'true'
+    RUN_DOCKER_BUILD = 'true'
+    RUN_PACKAGE_DEPLOY = 'true'
   }
 
   stages {
@@ -68,31 +136,123 @@ pipeline {
       }
     }
 
+    stage('Classify Changes') {
+      steps {
+        script {
+          String changedFilesOutput = sh(
+            returnStdout: true,
+            script: '''
+              set -eu
+
+              if [ -n "${CHANGE_TARGET:-}" ]; then
+                git fetch --no-tags origin "+refs/heads/${CHANGE_TARGET}:refs/remotes/origin/${CHANGE_TARGET}" >/dev/null 2>&1 || true
+
+                if git rev-parse --verify "origin/${CHANGE_TARGET}" >/dev/null 2>&1; then
+                  git diff --name-only "origin/${CHANGE_TARGET}"...HEAD
+                  exit 0
+                fi
+              fi
+
+              if [ -n "${GIT_PREVIOUS_SUCCESSFUL_COMMIT:-}" ] &&
+                git cat-file -e "${GIT_PREVIOUS_SUCCESSFUL_COMMIT}^{commit}" 2>/dev/null; then
+                git diff --name-only "${GIT_PREVIOUS_SUCCESSFUL_COMMIT}" HEAD
+                exit 0
+              fi
+
+              if git rev-parse --verify HEAD~1 >/dev/null 2>&1; then
+                git diff --name-only HEAD~1 HEAD
+              else
+                git ls-files
+              fi
+            ''',
+          ).trim()
+
+          List<String> changedFiles = changedFilesOutput
+            ? changedFilesOutput.split('\\n').collect { it.trim() }.findAll { it }
+            : []
+
+          if (changedFiles.isEmpty()) {
+            echo 'No changed files detected; running the full CI profile.'
+          } else {
+            echo "Changed files:\\n${changedFiles.join('\\n')}"
+          }
+
+          boolean lightweightOnly = !changedFiles.isEmpty() &&
+            changedFiles.every { isPrettierOnlyPath(it) || isCiConfigOnlyPath(it) }
+          boolean hasUnknownPaths = changedFiles.any { !isKnownCiPath(it) }
+
+          if (lightweightOnly) {
+            env.CI_CHECK_PROFILE = 'prettier-only'
+            env.RUN_ESLINT = 'false'
+            env.RUN_TESTS = 'false'
+            env.RUN_BUILD = 'false'
+            env.RUN_DOCKER_BUILD = 'false'
+            env.RUN_PACKAGE_DEPLOY = 'false'
+          } else if (hasUnknownPaths) {
+            env.CI_CHECK_PROFILE = 'full'
+            echo 'Unknown changed paths detected; keeping the full CI profile.'
+          } else if (!changedFiles.isEmpty()) {
+            env.CI_CHECK_PROFILE = 'selective'
+            env.RUN_ESLINT = changedFiles.any { isSourceLintPath(it) }.toString()
+            env.RUN_TESTS = changedFiles.any { isTestImpactingPath(it) }.toString()
+            env.RUN_BUILD = changedFiles.any { isBuildImpactingPath(it) }.toString()
+            env.RUN_DOCKER_BUILD = changedFiles.any { isDockerImpactingPath(it) }.toString()
+            env.RUN_PACKAGE_DEPLOY = changedFiles.any { isDeployImpactingPath(it) }.toString()
+          }
+
+          echo "CI profile: ${env.CI_CHECK_PROFILE}"
+          echo "RUN_ESLINT=${env.RUN_ESLINT}, RUN_TESTS=${env.RUN_TESTS}, RUN_BUILD=${env.RUN_BUILD}, RUN_DOCKER_BUILD=${env.RUN_DOCKER_BUILD}, RUN_PACKAGE_DEPLOY=${env.RUN_PACKAGE_DEPLOY}"
+        }
+      }
+    }
+
     stage('Install') {
       steps {
         sh 'npm ci'
       }
     }
 
-    stage('Lint') {
+    stage('Prettier') {
       steps {
-        sh 'npm run lint'
+        sh 'npm run lint:prettier'
+      }
+    }
+
+    stage('ESLint') {
+      when {
+        expression { env.RUN_ESLINT == 'true' }
+      }
+
+      steps {
+        sh 'npm run lint:eslint'
       }
     }
 
     stage('Test') {
+      when {
+        expression { env.RUN_TESTS == 'true' }
+      }
+
       steps {
         sh 'npm test -- --runInBand'
       }
     }
 
     stage('Build') {
+      when {
+        expression { env.RUN_BUILD == 'true' }
+      }
+
       steps {
         sh 'npm run build'
       }
     }
 
     stage('Build Docker Image') {
+      when {
+        expression { env.RUN_DOCKER_BUILD == 'true' }
+      }
+
       options {
         timeout(time: 15, unit: 'MINUTES')
       }
@@ -112,6 +272,10 @@ pipeline {
     }
 
     stage('Package Deploy Archive') {
+      when {
+        expression { env.RUN_PACKAGE_DEPLOY == 'true' }
+      }
+
       steps {
         sh '''
           set -eu
@@ -138,7 +302,7 @@ pipeline {
 
     stage('Deploy') {
       when {
-        expression { isDeployBranch() }
+        expression { isDeployBranch() && env.RUN_PACKAGE_DEPLOY == 'true' }
       }
 
       steps {
@@ -195,7 +359,7 @@ pipeline {
     }
     success {
       script {
-        notifyGithubStatus('success', 'Jenkins build completed successfully')
+        notifyGithubStatus('success', "Jenkins ${env.CI_CHECK_PROFILE} checks completed")
       }
     }
     failure {
