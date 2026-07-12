@@ -6,7 +6,6 @@ on:
     branches:
       - develop
       - main
-      - master
 
 permissions:
   contents: read
@@ -16,7 +15,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  checks:
+  verify:
     name: Selective Checks
     runs-on: ubuntu-latest
 
@@ -181,7 +180,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version-file: .nvmrc
+          node-version: 22.22.0
           cache: npm
 
       - name: Install dependencies
