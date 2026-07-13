@@ -4,7 +4,7 @@ import { REST } from 'discord.js';
 
 const commandDir = path.resolve(__dirname, '../../../src/commands');
 const opsOnlyCommands = new Set(['gift', 'toggle-bypass']);
-const supportOnlyCommands = new Set(['gift', 'verify']);
+const supportOnlyCommands = new Set(['gift', 'verify', 'verify-greeting']);
 
 function commandFilesFromDisk(): string[] {
   return fs
