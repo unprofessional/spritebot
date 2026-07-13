@@ -21,6 +21,11 @@ export class SupportVerificationDAO {
             raw->>'user_id' = $1
             OR raw->>'userId' = $1
           )
+        UNION
+        SELECT DISTINCT guild_id
+        FROM gifted_guilds
+        WHERE recipient_member_id = $1
+          AND (expires_at IS NULL OR expires_at > NOW())
         ORDER BY guild_id
       `,
       [discordId],
@@ -38,12 +43,20 @@ export class SupportVerificationDAO {
         JOIN game g ON g.id = psl.current_game_id
           AND g.guild_id = psl.guild_id
         WHERE p.discord_id = $1
-          AND EXISTS (
-            SELECT 1
-            FROM entitlements_cache ec
-            WHERE ec.guild_id = psl.guild_id
-              AND ec.status = 'active'
-              AND (ec.ends_at IS NULL OR ec.ends_at > NOW())
+          AND (
+            EXISTS (
+              SELECT 1
+              FROM entitlements_cache ec
+              WHERE ec.guild_id = psl.guild_id
+                AND ec.status = 'active'
+                AND (ec.ends_at IS NULL OR ec.ends_at > NOW())
+            )
+            OR EXISTS (
+              SELECT 1
+              FROM gifted_guilds gg
+              WHERE gg.guild_id = psl.guild_id
+                AND (gg.expires_at IS NULL OR gg.expires_at > NOW())
+            )
           )
         ORDER BY psl.guild_id, g.name
       `,
