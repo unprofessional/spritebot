@@ -14,6 +14,11 @@ export const pgDb = process.env.PG_DB ?? '';
 export const lifecycleNotifyGuildId = process.env.LIFECYCLE_NOTIFY_GUILD_ID ?? '';
 export const lifecycleNotifyChannelId = process.env.LIFECYCLE_NOTIFY_CHANNEL_ID ?? '';
 
+export const supportGuildId = process.env.SUPPORT_GUILD_ID ?? '1526058725587292160';
+export const supportSubscriberRoleId = process.env.SUBSCRIBER_ROLE_ID ?? '';
+export const supportPlayerRoleId = process.env.PLAYER_ROLE_ID ?? '';
+export const supportInviteUrl = process.env.SUPPORT_INVITE_URL ?? 'https://discord.gg/eXktxzKxze';
+
 /** Bump config (minutes) */
 const toInt = (v: string | undefined, dflt: number) => {
   const n = Number(v);
