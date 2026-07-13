@@ -8,6 +8,7 @@ import { startCleanupScheduler } from './schedulers/cleanup_scheduler';
 import { initializeEntitlementEvents } from './client/entitlement_events';
 import { initializeCommands } from './client/initial_commands';
 import { initializeRoleplayProxy } from './client/rp_proxy_events';
+import { initializeSupportVerificationEvents } from './client/support_verification_events';
 import { initializeDB, testPgConnection } from './db/db';
 import {
   installShutdownNotifications,
@@ -20,6 +21,7 @@ dotenv.config();
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.GuildVoiceStates,
     GatewayIntentBits.MessageContent,
@@ -31,6 +33,7 @@ async function main(): Promise<void> {
     await initializeCommands(client);
     initializeEntitlementEvents(client);
     initializeRoleplayProxy(client);
+    initializeSupportVerificationEvents(client);
     initializeVoiceTranscription(client);
     installShutdownNotifications(client);
     await testPgConnection();
