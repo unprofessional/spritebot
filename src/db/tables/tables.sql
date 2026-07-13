@@ -271,6 +271,7 @@ CREATE INDEX idx_entitlements_guild_status ON entitlements_cache (guild_id, stat
 CREATE TABLE gifted_guilds (
   guild_id        TEXT PRIMARY KEY,                 -- Discord guild/server id
   granted_by      TEXT NOT NULL,                    -- Discord user id of granter
+  recipient_member_id TEXT,                         -- optional Discord user id intended to receive support subscriber verification
   note            TEXT,                             -- optional: why/how
   expires_at      TIMESTAMPTZ,                      -- optional: null means no expiry
   created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -280,3 +281,6 @@ CREATE TABLE gifted_guilds (
 -- Helpful for auditing and pruning
 CREATE INDEX IF NOT EXISTS idx_gifted_guilds_expires_at
   ON gifted_guilds (expires_at) WHERE expires_at IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_gifted_guilds_recipient_member_id
+  ON gifted_guilds (recipient_member_id) WHERE recipient_member_id IS NOT NULL;
