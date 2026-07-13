@@ -15,6 +15,7 @@ import { handle as handleEditCharacterStatsButton } from '../../components/edit_
 import { handle as handleEditGameStats } from '../../components/edit_game_stat_button';
 import { handle as handleFinishStatSetup } from '../../components/finish_stat_setup_button';
 import { handle as handleSubmitCharacter } from '../../components/submit_character_button';
+import { handle as handleSupportVerifyButton } from '../../components/support_verify_button';
 import { handle as handleToggleCharacterVisibilityButton } from '../../components/toggle_character_visibility_button';
 import { handle as handleTogglePublishButton } from '../../components/toggle_publish_button';
 import { handle as handleViewParagraphFieldsButton } from '../../components/view_paragraph_fields_button';
@@ -36,6 +37,7 @@ const directRoutes: [RegExp, (i: ButtonInteraction) => Promise<void>][] = [
   [/^confirmDeleteCharacter/, handleConfirmDeleteCharacterButton],
   [/^confirmIcDelete:/, handleConfirmIcDeleteButton],
   [/^cancelIcDelete:/, handleConfirmIcDeleteButton],
+  [/^supportVerify:/, handleSupportVerifyButton],
   [/^charPage:/, handleCharPageButton],
   [/^editCharacterStat/, handleEditCharacterStatsButton],
   [/^calculateCharacterStats:/, handleCalculateStatsButton],
