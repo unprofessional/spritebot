@@ -20,8 +20,18 @@ module.exports = {
       });
     }
 
-    const member = await interaction.guild.members.fetch(interaction.user.id);
-    const result = await verifySupportMember(member);
+    let result: SupportVerificationResult;
+    try {
+      const member = await interaction.guild.members.fetch(interaction.user.id);
+      result = await verifySupportMember(member);
+    } catch (err) {
+      console.error('[verify] Support verification failed:', err);
+      return interaction.reply({
+        content:
+          '⚠️ I found the support server, but could not finish assigning verification roles. Please ask a server admin to check my role permissions and configured role IDs.',
+        ephemeral: true,
+      });
+    }
 
     return interaction.reply({
       content: await verificationMessage(interaction, result),

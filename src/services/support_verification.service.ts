@@ -33,10 +33,17 @@ export function hasSupportVerificationMatch(result: SupportVerificationEligibili
   return result.subscriberGuildIds.length > 0 || result.playerGuilds.length > 0;
 }
 
+function supportVerificationConfig() {
+  // Read env at call time so tests or process managers that set env after module import are honored.
+  return {
+    guildId: process.env.SUPPORT_GUILD_ID ?? supportGuildId,
+    subscriberRoleId: process.env.SUBSCRIBER_ROLE_ID ?? supportSubscriberRoleId,
+    playerRoleId: process.env.PLAYER_ROLE_ID ?? supportPlayerRoleId,
+  };
+}
+
 export async function verifySupportMember(member: GuildMember): Promise<SupportVerificationResult> {
-  const guildId = process.env.SUPPORT_GUILD_ID ?? supportGuildId;
-  const subscriberRoleId = process.env.SUBSCRIBER_ROLE_ID ?? supportSubscriberRoleId;
-  const playerRoleId = process.env.PLAYER_ROLE_ID ?? supportPlayerRoleId;
+  const { guildId, subscriberRoleId, playerRoleId } = supportVerificationConfig();
 
   if (member.guild.id !== guildId) {
     return {

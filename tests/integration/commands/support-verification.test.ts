@@ -12,8 +12,15 @@ const verifySupportMemberMock = verifySupportMember as jest.MockedFunction<
 >;
 
 describe('support server commands', () => {
+  let errorSpy: jest.SpiedFunction<typeof console.error>;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    errorSpy.mockRestore();
   });
 
   test('/support returns the support server invite ephemerally', async () => {
@@ -71,6 +78,20 @@ describe('support server commands', () => {
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
         '❌ No active subscription or game membership found. If you just subscribed, try again in a few minutes.',
+      ephemeral: true,
+    });
+  });
+
+  test('/verify explains role assignment failures', async () => {
+    verifySupportMemberMock.mockRejectedValue(new Error('Missing Permissions'));
+    const command = require('../../../src/commands/verify');
+    const interaction = createVerifyInteraction();
+
+    await command.execute(interaction);
+
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content:
+        '⚠️ I found the support server, but could not finish assigning verification roles. Please ask a server admin to check my role permissions and configured role IDs.',
       ephemeral: true,
     });
   });
