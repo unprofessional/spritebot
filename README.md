@@ -48,6 +48,9 @@ The repo currently defines these slash and context-menu commands:
 - `/bump-thread` - Register and manage auto-bumped threads
 - `/bot-announcements` - Configure lifecycle announcement channels for this server
 - `/subscribe` - View or manage the server's Discord Premium App subscription
+- `/support` - Get an invite to the SPRITEbot support server
+- `/verify` - Verify subscriber/player status in the support server
+- `/verify-greeting` - Owner-only support server setup command for posting the Verify button
 - `/admin` - Admin and GM housekeeping audits, purge previews, and restore tools
 - `/gift` - Owner-only gifted access management in the ops and support servers
 - `/toggle-bypass` - Ops-only entitlement bypass toggle
@@ -339,7 +342,8 @@ Why:
 Ops-only commands:
 
 - `/toggle-bypass` is registered only in `DEV_GUILD_ID`; `/gift` is registered in both `DEV_GUILD_ID` and `SUPPORT_GUILD_ID`.
-- They are Discord administrator commands and also check `OWNER_DISCORD_ID`.
+- `/verify` and `/verify-greeting` are registered only in `SUPPORT_GUILD_ID`.
+- `/gift`, `/toggle-bypass`, and `/verify-greeting` are Discord administrator commands and also check `OWNER_DISCORD_ID`; `/verify` is available to support server members.
 
 Recommended setup:
 
