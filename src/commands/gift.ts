@@ -8,7 +8,7 @@ const giftedDAO = new GiftedGuildsDAO();
 
 export const data = new SlashCommandBuilder()
   .setName('gift')
-  .setDescription('Manage gifted server access (ops guild only)')
+  .setDescription('Manage gifted server access (owner only)')
   .addSubcommand((sc) =>
     sc
       .setName('add')
