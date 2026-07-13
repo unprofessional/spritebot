@@ -12,14 +12,18 @@ const verifySupportMemberMock = verifySupportMember as jest.MockedFunction<
 >;
 
 describe('support server commands', () => {
+  const originalOwnerId = process.env.OWNER_DISCORD_ID;
   let errorSpy: jest.SpiedFunction<typeof console.error>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+    process.env.OWNER_DISCORD_ID = 'owner-1';
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
   });
 
   afterEach(() => {
+    if (originalOwnerId == null) delete process.env.OWNER_DISCORD_ID;
+    else process.env.OWNER_DISCORD_ID = originalOwnerId;
     errorSpy.mockRestore();
   });
 
@@ -95,9 +99,71 @@ describe('support server commands', () => {
       ephemeral: true,
     });
   });
+
+  test('verify button assigns roles and reports matches', async () => {
+    verifySupportMemberMock.mockResolvedValue({
+      subscriberGuildIds: ['guild-1'],
+      playerGuilds: [],
+      assignedRoleIds: ['subscriber-role'],
+      missingRoleIds: [],
+    });
+    const { handle } = require('../../../src/components/support_verify_button');
+    const member = { id: 'member-1' };
+    const interaction = createVerifyInteraction({ member });
+
+    await handle(interaction);
+
+    expect(interaction.guild.members.fetch).toHaveBeenCalledWith('user-1');
+    expect(verifySupportMemberMock).toHaveBeenCalledWith(member);
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content: [
+        '✅ Verified as **Subscriber** — you have an active subscription on **Subscribed Server**',
+        'Your support server roles have been updated.',
+      ].join('\n'),
+      ephemeral: true,
+    });
+  });
+
+  test('/verify-greeting posts Moldy-style copy with a verify button', async () => {
+    const command = require('../../../src/commands/verify-greeting');
+    const send = jest
+      .fn()
+      .mockResolvedValue({ url: 'https://discord.com/channels/support/vestibule/message' });
+    const interaction = createVerifyInteraction({ userId: 'owner-1' });
+    interaction.options = {
+      getChannel: jest.fn().mockReturnValue({
+        send,
+        type: 0,
+      }),
+    };
+
+    await command.execute(interaction);
+
+    const payload = send.mock.calls[0][0];
+    expect(payload.content).toContain('**Welcome to the SPRITEbot Support Server! 👋**');
+    expect(payload.content).toContain('Click **Verify** below.');
+    expect(payload.content).toContain('SPRITEbot will check');
+    expect(payload.components[0].toJSON().components[0]).toEqual(
+      expect.objectContaining({
+        custom_id: 'supportVerify:verify',
+        label: 'Verify',
+      }),
+    );
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content:
+        '✅ Sent the verification greeting to https://discord.com/channels/support/vestibule/message',
+      ephemeral: true,
+    });
+  });
 });
 
-function createVerifyInteraction({ member = {} }: { member?: unknown } = {}) {
+function createVerifyInteraction({
+  member = {},
+  userId = 'user-1',
+}: {
+  member?: unknown;
+  userId?: string;
+} = {}) {
   const guilds = new Map([
     ['guild-1', { name: 'Subscribed Server' }],
     ['guild-2', { name: 'Game Server' }],
@@ -116,7 +182,10 @@ function createVerifyInteraction({ member = {} }: { member?: unknown } = {}) {
         fetch: jest.fn().mockResolvedValue(member),
       },
     },
+    options: {
+      getChannel: jest.fn(),
+    },
     reply: jest.fn().mockResolvedValue(undefined),
-    user: { id: 'user-1' },
+    user: { id: userId },
   };
 }

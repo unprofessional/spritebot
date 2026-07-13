@@ -163,7 +163,7 @@ export async function initializeCommands(client: Client): Promise<Client> {
 
   // Split: ops/support scoped vs global (by name). Keep '/gift' out of global registration.
   const opsOnly = new Set<string>(['gift', 'toggle-bypass']);
-  const supportOnly = new Set<string>(['gift', 'verify']);
+  const supportOnly = new Set<string>(['gift', 'verify', 'verify-greeting']);
   const opsCommands = commands.filter((c) => opsOnly.has(c.data.name));
   const supportCommands = commands.filter((c) => supportOnly.has(c.data.name));
   const globalCommands = commands.filter(

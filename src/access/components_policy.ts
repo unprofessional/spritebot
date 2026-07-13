@@ -70,6 +70,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['cancel_inventory_item_action:', 'core'], // cancel action
   ['cancel_clear_inventory', 'core'], // cancel action
   ['cancelIcDelete:', 'core'], // cancel action
+  ['supportVerify:', 'core'], // support-server role verification
   ['charPage:', 'core'], // pagination on char views
   ['goBackToCharacter:', 'core'], // nav
   ['viewParagraphFields', 'core'], // open long fields
