@@ -15,8 +15,7 @@ describe('IC message delete commands', () => {
     jest.clearAllMocks();
   });
 
-  test('/ic-delete deletes a tracked proxied message by id', async () => {
-    deleteMessageMock.mockResolvedValue({ status: 'deleted' });
+  test('/ic-delete asks for confirmation before deleting a tracked proxied message by id', async () => {
     const command = require('../../../src/commands/ic-delete');
     const interaction = {
       channelId: 'channel-1',
@@ -29,24 +28,34 @@ describe('IC message delete commands', () => {
 
     await command.execute(interaction);
 
+    const reply = interaction.reply.mock.calls[0][0];
+    const row = reply.components[0].toJSON();
+
     expect(command.data.toJSON().options).toEqual([
       expect.objectContaining({ name: 'message', required: true }),
     ]);
-    expect(deleteMessageMock).toHaveBeenCalledWith({
-      client: interaction.client,
-      guildId: 'guild-1',
-      channelId: 'channel-1',
-      userId: 'user-1',
-      messageId: '123456789012345678',
-    });
-    expect(interaction.reply).toHaveBeenCalledWith({
-      content: '🗑️ Deleted your proxied RP message.',
-      ephemeral: true,
-    });
+    expect(deleteMessageMock).not.toHaveBeenCalled();
+    expect(reply).toEqual(
+      expect.objectContaining({
+        content: 'Delete this proxied RP message?',
+        ephemeral: true,
+      }),
+    );
+    expect(row.components[0]).toEqual(
+      expect.objectContaining({
+        custom_id: 'confirmIcDelete:channel-1:123456789012345678:user-1',
+        label: 'Confirm Delete',
+      }),
+    );
+    expect(row.components[1]).toEqual(
+      expect.objectContaining({
+        custom_id: 'cancelIcDelete:channel-1:123456789012345678:user-1',
+        label: 'Cancel',
+      }),
+    );
   });
 
-  test('message context command rejects a proxied message owned by someone else', async () => {
-    deleteMessageMock.mockResolvedValue({ status: 'forbidden' });
+  test('message context command asks for confirmation before deleting', async () => {
     const command = require('../../../src/commands/ic-delete-context');
     const interaction = {
       client: {},
@@ -58,22 +67,89 @@ describe('IC message delete commands', () => {
 
     await command.execute(interaction);
 
+    const reply = interaction.reply.mock.calls[0][0];
+    const row = reply.components[0].toJSON();
+
     expect(command.data.toJSON()).toEqual(
       expect.objectContaining({
         name: 'Delete IC Message',
         type: ApplicationCommandType.Message,
       }),
     );
+    expect(deleteMessageMock).not.toHaveBeenCalled();
+    expect(reply).toEqual(
+      expect.objectContaining({
+        content: 'Delete this proxied RP message?',
+        ephemeral: true,
+      }),
+    );
+    expect(row.components[0]).toEqual(
+      expect.objectContaining({
+        custom_id: 'confirmIcDelete:channel-1:proxy-1:user-2',
+        label: 'Confirm Delete',
+      }),
+    );
+  });
+
+  test('confirmation button deletes the proxied message', async () => {
+    deleteMessageMock.mockResolvedValue({ status: 'deleted' });
+    const { handle } = require('../../../src/components/confirm_ic_delete_button');
+    const interaction = {
+      client: {},
+      customId: 'confirmIcDelete:channel-1:proxy-1:user-1',
+      guildId: 'guild-1',
+      update: jest.fn().mockResolvedValue(undefined),
+      user: { id: 'user-1' },
+    };
+
+    await handle(interaction);
+
     expect(deleteMessageMock).toHaveBeenCalledWith({
       client: interaction.client,
       guildId: 'guild-1',
       channelId: 'channel-1',
-      userId: 'user-2',
+      userId: 'user-1',
       messageId: 'proxy-1',
     });
+    expect(interaction.update).toHaveBeenCalledWith({
+      content: '🗑️ Deleted your proxied RP message.',
+      components: [],
+    });
+  });
+
+  test('confirmation button rejects another user', async () => {
+    const { handle } = require('../../../src/components/confirm_ic_delete_button');
+    const interaction = {
+      customId: 'confirmIcDelete:channel-1:proxy-1:user-1',
+      guildId: 'guild-1',
+      reply: jest.fn().mockResolvedValue(undefined),
+      user: { id: 'user-2' },
+    };
+
+    await handle(interaction);
+
+    expect(deleteMessageMock).not.toHaveBeenCalled();
     expect(interaction.reply).toHaveBeenCalledWith({
-      content: '⛔ You can only delete your own proxied RP messages.',
+      content: '⛔ Only the person who requested this delete can confirm it.',
       ephemeral: true,
+    });
+  });
+
+  test('cancel button clears the delete confirmation', async () => {
+    const { handle } = require('../../../src/components/confirm_ic_delete_button');
+    const interaction = {
+      customId: 'cancelIcDelete:channel-1:proxy-1:user-1',
+      guildId: 'guild-1',
+      update: jest.fn().mockResolvedValue(undefined),
+      user: { id: 'user-1' },
+    };
+
+    await handle(interaction);
+
+    expect(deleteMessageMock).not.toHaveBeenCalled();
+    expect(interaction.update).toHaveBeenCalledWith({
+      content: 'Deletion canceled.',
+      components: [],
     });
   });
 });

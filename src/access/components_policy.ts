@@ -42,6 +42,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['setCharacterField:', 'rpg:characters'], // modal
   ['editCharacterField:', 'rpg:characters'], // modal
   ['handleToggleCharacterVisibilityButton:', 'rpg:characters'],
+  ['confirmIcDelete:', 'rpg:characters'],
 
   // Adjusting numeric stats via calculator (mutating) → gated
   ['adjustStatSelect:', 'rpg:characters'], // select
@@ -68,6 +69,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['inventoryPage:', 'core'], // inventory pagination
   ['cancel_inventory_item_action:', 'core'], // cancel action
   ['cancel_clear_inventory', 'core'], // cancel action
+  ['cancelIcDelete:', 'core'], // cancel action
   ['charPage:', 'core'], // pagination on char views
   ['goBackToCharacter:', 'core'], // nav
   ['viewParagraphFields', 'core'], // open long fields
