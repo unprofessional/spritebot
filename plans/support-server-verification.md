@@ -154,13 +154,16 @@ Not in scope for Phase 1. For later consideration:
   real-time when subscriptions change
 - **Grace period** — consider keeping roles for N days after subscription lapses to avoid
   churn noise
+- **GM role** — dedicated role for users who own/run games on subscribing servers, with
+  GM-specific perks in the support server (e.g. exclusive channels, early access)
 
 ---
 
-## Open questions
+## Resolved questions
 
-- [ ] Role names — "Subscriber" and "Player" good, or prefer something else?
-- [ ] Role colors — match site branding? (cyan for subscriber, green for player?)
-- [ ] Should the vestibule have a bot-generated welcome embed, or just a manual pinned message?
-- [ ] Should `/verify` be re-runnable? (Yes — useful if someone subscribes after joining)
-- [ ] Any additional roles? (e.g. "GM" for users who own games, distinct from players)
+- [x] **Role names:** `subscriber` and `player` (lowercase). Both created in the support server.
+- [x] **Role colors:** `subscriber` = green, `player` = purple.
+- [x] **Vestibule format:** Manual pinned message (not a bot-generated embed). Channel has Send Messages denied for `@everyone` but Use Application Commands allowed, so `/verify` works without chat clutter.
+- [x] **`/verify` re-runnable:** Yes — users who subscribe or join games after arriving can re-run to pick up new roles.
+- [x] **GM role:** Deferred. GMs are covered as Players for now (they exist in games on subscribing servers). GM-specific perks and a dedicated role are a future Phase 2+ consideration.
+- [x] **Role removal on lapse:** Deferred to Phase 2. Phase 1 only adds roles, does not remove them.

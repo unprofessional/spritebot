@@ -242,6 +242,12 @@ PG_DB=spritebot
 LIFECYCLE_NOTIFY_GUILD_ID=
 LIFECYCLE_NOTIFY_CHANNEL_ID=
 
+# Support server verification
+SUPPORT_GUILD_ID=1526058725587292160
+SUBSCRIBER_ROLE_ID=your_support_subscriber_role_id
+PLAYER_ROLE_ID=your_support_player_role_id
+SUPPORT_INVITE_URL=https://discord.gg/eXktxzKxze
+
 # Thread bump tuning
 BUMP_DEFAULT_MINUTES=10050
 BUMP_BUFFER_MINUTES=30
@@ -261,6 +267,8 @@ CLEANUP_INTERVAL_HOURS=24
 Notes:
 
 - `DEV_GUILD_ID` is used for registering ops-only commands
+- `SUPPORT_GUILD_ID` is used for registering `/verify` in the support server only
+- `SUBSCRIBER_ROLE_ID` and `PLAYER_ROLE_ID` are assigned by `/verify` and the support-server join check
 - `OWNER_DISCORD_ID` is used by `/gift`, `/toggle-bypass`, and owner-only `/admin` subcommands
 - `/bot-announcements set` controls where startup/shutdown status messages are posted per server
 - `LIFECYCLE_NOTIFY_GUILD_ID` and `LIFECYCLE_NOTIFY_CHANNEL_ID` can provide one optional fallback startup/shutdown status channel
@@ -277,10 +285,12 @@ Invite the bot with these OAuth2 scopes:
 Enable these gateway intents in code and in the Discord Developer Portal:
 
 - `Guilds`
+- `Guild Members`
 - `Guild Messages`
 - `Message Content`
 
 `Message Content` is required for the RP proxy feature because the bot must read a player's message before reposting it through the character webhook.
+`Guild Members` is required for the support-server join verification check.
 
 ### 4. Discord server permissions
 

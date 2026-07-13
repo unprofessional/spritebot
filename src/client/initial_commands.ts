@@ -23,6 +23,7 @@ import { handleButton } from '../handlers/button_handlers';
 import { handleModal } from '../handlers/modal_handlers';
 import { handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardCommand, guardComponent } from '../access/guards';
+import { supportGuildId } from '../config/env_config';
 
 const { DISCORD_CLIENT_ID, DISCORD_BOT_TOKEN } = process.env;
 // Allow override via env; default to the provided ops guild id
@@ -99,6 +100,19 @@ async function registerOpsCommands(rest: REST, opsCmds: CommandModule[]) {
   console.log(`🛰️  Registered ${payload.length} ops-only command(s) in guild ${DEV_GUILD_ID}`);
 }
 
+async function registerSupportCommands(rest: REST, supportCmds: CommandModule[]) {
+  if (!supportGuildId) {
+    console.warn('⚠️ SUPPORT_GUILD_ID not set; skipping support command registration.');
+    return;
+  }
+
+  const payload: RESTPostAPIApplicationCommandsJSONBody[] = supportCmds.map((c) => c.data.toJSON());
+  await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, supportGuildId), {
+    body: payload,
+  });
+  console.log(`🛰️  Registered ${payload.length} support command(s) in guild ${supportGuildId}`);
+}
+
 const safeFallback = async (interaction: BaseInteraction) => {
   if (!interaction.isRepliable()) return;
   const reply = {
@@ -120,12 +134,18 @@ export async function initializeCommands(client: Client): Promise<Client> {
   // Load into memory
   const commands = await loadCommands(files);
 
-  // Split: ops-only vs global (by name). Keep '/gift' ops-only.
+  // Split: ops-only/support-only vs global (by name). Keep '/gift' ops-only.
   const opsOnly = new Set<string>(['gift', 'toggle-bypass']);
+  const supportOnly = new Set<string>(['verify']);
   const opsCommands = commands.filter((c) => opsOnly.has(c.data.name));
-  const globalCommands = commands.filter((c) => !opsOnly.has(c.data.name));
+  const supportCommands = commands.filter((c) => supportOnly.has(c.data.name));
+  const globalCommands = commands.filter(
+    (c) => !opsOnly.has(c.data.name) && !supportOnly.has(c.data.name),
+  );
 
-  console.log(`🧭 Command split → global=${globalCommands.length} ops-only=${opsCommands.length}`);
+  console.log(
+    `🧭 Command split → global=${globalCommands.length} ops-only=${opsCommands.length} support-only=${supportCommands.length}`,
+  );
 
   // Index on client (typed via your src/types/discordClient.d.ts)
   // We register all in memory so they can execute where available.
@@ -136,6 +156,7 @@ export async function initializeCommands(client: Client): Promise<Client> {
   try {
     await registerGlobalCommands(rest, globalCommands);
     await registerOpsCommands(rest, opsCommands);
+    await registerSupportCommands(rest, supportCommands);
   } catch (err) {
     console.error('❌ Command registration failed:', err);
   }
