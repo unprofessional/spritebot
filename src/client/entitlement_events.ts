@@ -13,6 +13,7 @@ function rawEntitlement(entitlement: Entitlement): Record<string, unknown> {
     id: entitlement.id,
     skuId: entitlement.skuId,
     guildId: entitlement.guildId,
+    userId: entitlement.userId,
     startsTimestamp: entitlement.startsTimestamp,
     endsTimestamp: entitlement.endsTimestamp,
     deleted: entitlement.deleted,
