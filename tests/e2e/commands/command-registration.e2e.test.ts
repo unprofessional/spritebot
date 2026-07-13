@@ -4,6 +4,7 @@ import { REST } from 'discord.js';
 
 const commandDir = path.resolve(__dirname, '../../../src/commands');
 const opsOnlyCommands = new Set(['gift', 'toggle-bypass']);
+const supportOnlyCommands = new Set(['verify']);
 
 function commandFilesFromDisk(): string[] {
   return fs
@@ -31,6 +32,7 @@ describe('command registration', () => {
     process.env.DISCORD_CLIENT_ID = 'app-1';
     process.env.DISCORD_BOT_TOKEN = 'bot-token';
     process.env.DEV_GUILD_ID = 'ops-guild-1';
+    process.env.SUPPORT_GUILD_ID = 'support-guild-1';
 
     logSpy = jest.spyOn(console, 'log').mockImplementation(() => {});
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
@@ -69,7 +71,7 @@ describe('command registration', () => {
       return body ?? [];
     });
 
-    expect(registeredBodies).toHaveLength(2);
+    expect(registeredBodies).toHaveLength(3);
     expect(
       registeredBodies
         .flat()
@@ -78,11 +80,15 @@ describe('command registration', () => {
     ).toEqual(expectedNames);
 
     const [globalCommands, opsCommands] = registeredBodies;
+    const [, , supportCommands] = registeredBodies;
     expect(globalCommands.map((command) => command.name).sort()).toEqual(
-      expectedNames.filter((name) => !opsOnlyCommands.has(name)),
+      expectedNames.filter((name) => !opsOnlyCommands.has(name) && !supportOnlyCommands.has(name)),
     );
     expect(opsCommands.map((command) => command.name).sort()).toEqual(
       expectedNames.filter((name) => opsOnlyCommands.has(name)),
+    );
+    expect(supportCommands.map((command) => command.name).sort()).toEqual(
+      expectedNames.filter((name) => supportOnlyCommands.has(name)),
     );
   });
 
