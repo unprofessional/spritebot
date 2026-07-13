@@ -4,7 +4,7 @@ import { REST } from 'discord.js';
 
 const commandDir = path.resolve(__dirname, '../../../src/commands');
 const opsOnlyCommands = new Set(['gift', 'toggle-bypass']);
-const supportOnlyCommands = new Set(['verify']);
+const supportOnlyCommands = new Set(['gift', 'verify']);
 
 function commandFilesFromDisk(): string[] {
   return fs
@@ -72,12 +72,21 @@ describe('command registration', () => {
     });
 
     expect(registeredBodies).toHaveLength(3);
+    expect([
+      ...new Set(
+        registeredBodies
+          .flat()
+          .map((command) => command.name)
+          .sort(),
+      ),
+    ]).toEqual(expectedNames);
+
     expect(
       registeredBodies
         .flat()
         .map((command) => command.name)
         .sort(),
-    ).toEqual(expectedNames);
+    ).toEqual([...expectedNames, 'gift'].sort());
 
     const [globalCommands, opsCommands] = registeredBodies;
     const [, , supportCommands] = registeredBodies;
