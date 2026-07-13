@@ -6,6 +6,7 @@ import { query } from '../db/client';
 type PgGiftRow = {
   guild_id: string;
   granted_by: string;
+  recipient_member_id: string | null;
   note: string | null;
   expires_at: string | null; // timestamp -> string
   created_at: string; // timestamp -> string
@@ -15,6 +16,7 @@ type PgGiftRow = {
 export interface GiftRow {
   guild_id: string;
   granted_by: string;
+  recipient_member_id: string | null;
   note: string | null;
   expires_at: Date | null;
   created_at: Date;
@@ -24,6 +26,7 @@ export interface GiftRow {
 export interface GiftUpsertInput {
   guildId: string;
   grantedBy: string;
+  recipientMemberId?: string | null;
   note?: string | null;
   expiresAt?: Date | string | null;
 }
@@ -37,6 +40,7 @@ function mapRow(r: PgGiftRow): GiftRow {
   return {
     guild_id: r.guild_id,
     granted_by: r.granted_by,
+    recipient_member_id: r.recipient_member_id ?? null,
     note: r.note ?? null,
     expires_at: r.expires_at ? new Date(r.expires_at) : null,
     created_at: new Date(r.created_at),
@@ -46,27 +50,29 @@ function mapRow(r: PgGiftRow): GiftRow {
 
 export class GiftedGuildsDAO {
   async upsertGift(input: GiftUpsertInput): Promise<GiftRow> {
-    const { guildId, grantedBy, note = null, expiresAt = null } = input;
+    const { guildId, grantedBy, recipientMemberId = null, note = null, expiresAt = null } = input;
     const expires = toDateOrNull(expiresAt);
 
     console.debug(
       `[GiftedGuildsDAO] Upserting gift guild=${guildId} grantedBy=${grantedBy} ` +
+        `recipient=${recipientMemberId ?? 'null'} ` +
         `expires=${expires ? expires.toISOString() : 'null'} note="${note ?? ''}"`,
     );
 
     const sql = `
-      INSERT INTO gifted_guilds (guild_id, granted_by, note, expires_at)
-      VALUES ($1, $2, $3, $4)
+      INSERT INTO gifted_guilds (guild_id, granted_by, recipient_member_id, note, expires_at)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (guild_id)
       DO UPDATE SET
-        granted_by = EXCLUDED.granted_by,
-        note       = EXCLUDED.note,
-        expires_at = EXCLUDED.expires_at,
-        updated_at = CURRENT_TIMESTAMP
-      RETURNING guild_id, granted_by, note, expires_at, created_at, updated_at
+        granted_by          = EXCLUDED.granted_by,
+        recipient_member_id = EXCLUDED.recipient_member_id,
+        note                = EXCLUDED.note,
+        expires_at          = EXCLUDED.expires_at,
+        updated_at          = CURRENT_TIMESTAMP
+      RETURNING guild_id, granted_by, recipient_member_id, note, expires_at, created_at, updated_at
     `;
 
-    const res = await query<PgGiftRow>(sql, [guildId, grantedBy, note, expires]);
+    const res = await query<PgGiftRow>(sql, [guildId, grantedBy, recipientMemberId, note, expires]);
     const row = mapRow(res.rows[0]);
 
     console.debug(
@@ -110,7 +116,7 @@ export class GiftedGuildsDAO {
     console.debug(`[GiftedGuildsDAO] Listing gifts limit=${limit} offset=${offset}`);
 
     const sql = `
-      SELECT guild_id, granted_by, note, expires_at, created_at, updated_at
+      SELECT guild_id, granted_by, recipient_member_id, note, expires_at, created_at, updated_at
       FROM gifted_guilds
       ORDER BY created_at DESC
       LIMIT $1 OFFSET $2
@@ -125,7 +131,7 @@ export class GiftedGuildsDAO {
   async get(guildId: string): Promise<GiftRow | null> {
     console.debug(`[GiftedGuildsDAO] Fetching gift guild=${guildId}`);
     const sql = `
-      SELECT guild_id, granted_by, note, expires_at, created_at, updated_at
+      SELECT guild_id, granted_by, recipient_member_id, note, expires_at, created_at, updated_at
       FROM gifted_guilds
       WHERE guild_id = $1
       LIMIT 1

@@ -16,6 +16,11 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) =>
         o.setName('guild_id').setDescription('Target guild id').setRequired(true),
       )
+      .addStringOption((o) =>
+        o
+          .setName('recipient_member_id')
+          .setDescription('Optional Discord user id to verify as the gift recipient'),
+      )
       .addStringOption((o) => o.setName('note').setDescription('Optional note'))
       .addIntegerOption((o) =>
         o.setName('days').setDescription('Expiry in days (omit = no expiry)'),
@@ -45,6 +50,8 @@ module.exports = {
 
     if (sub === 'add') {
       const guildId = interaction.options.getString('guild_id', true).trim();
+      const recipientMemberId =
+        interaction.options.getString('recipient_member_id')?.trim() || null;
       const note = interaction.options.getString('note') ?? null;
       const days = interaction.options.getInteger('days') ?? null;
       const expiresAt = days ? new Date(Date.now() + days * 24 * 3600 * 1000) : null;
@@ -52,12 +59,13 @@ module.exports = {
       await giftedDAO.upsertGift({
         guildId,
         grantedBy: interaction.user.id,
+        recipientMemberId,
         note,
         expiresAt,
       });
 
       return interaction.reply({
-        content: `✅ Gifted **${guildId}**${expiresAt ? ` until **${expiresAt.toISOString()}**` : ' (no expiry)'}.`,
+        content: `✅ Gifted **${guildId}**${recipientMemberId ? ` to <@${recipientMemberId}>` : ''}${expiresAt ? ` until **${expiresAt.toISOString()}**` : ' (no expiry)'}.`,
         ephemeral: true,
       });
     }
@@ -83,8 +91,9 @@ module.exports = {
         const name = guild ? `**${guild.name}**` : r.guild_id;
         const id = guild ? ` (${r.guild_id})` : '';
         const exp = r.expires_at ? `, expires: ${r.expires_at}` : '';
+        const recipient = r.recipient_member_id ? `, recipient: <@${r.recipient_member_id}>` : '';
         const n = r.note ? ` — ${r.note}` : '';
-        return `• ${name}${id}${exp}${n}`;
+        return `• ${name}${id}${recipient}${exp}${n}`;
       });
       return interaction.reply({ content: lines.join('\n'), ephemeral: true });
     }
