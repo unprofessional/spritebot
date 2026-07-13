@@ -40,7 +40,7 @@ function buildGreeting() {
 
 async function handle(interaction: ButtonInteraction<CacheType>): Promise<void> {
   if (!interaction.guild || interaction.guildId !== supportGuildId) {
-    await interaction.reply({
+    await safeEphemeralReply(interaction, {
       content: 'Use this verification button in the SPRITEbot support server.',
       ephemeral: true,
     });
@@ -51,17 +51,32 @@ async function handle(interaction: ButtonInteraction<CacheType>): Promise<void> 
     const member = await interaction.guild.members.fetch(interaction.user.id);
     const result = await verifySupportMember(member);
 
-    await interaction.reply({
+    await safeEphemeralReply(interaction, {
       content: await buildSupportVerificationMessage(interaction, result),
       ephemeral: true,
     });
   } catch (err) {
     console.error('[support_verify_button] Support verification failed:', err);
-    await interaction.reply({
+    await safeEphemeralReply(interaction, {
       content:
         '⚠️ I found the support server, but could not finish assigning verification roles. Please ask a server admin to check my role permissions and configured role IDs.',
       ephemeral: true,
     });
+  }
+}
+
+async function safeEphemeralReply(
+  interaction: ButtonInteraction<CacheType>,
+  reply: { content: string; ephemeral: true },
+): Promise<void> {
+  try {
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp(reply);
+    } else {
+      await interaction.reply(reply);
+    }
+  } catch (err) {
+    console.error('[support_verify_button] Failed to reply to interaction:', err);
   }
 }
 

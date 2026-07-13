@@ -124,6 +124,25 @@ describe('support server commands', () => {
     });
   });
 
+  test('verify button does not reject when the interaction reply fails', async () => {
+    verifySupportMemberMock.mockResolvedValue({
+      subscriberGuildIds: ['guild-1'],
+      playerGuilds: [],
+      assignedRoleIds: ['subscriber-role'],
+      missingRoleIds: [],
+    });
+    const { handle } = require('../../../src/components/support_verify_button');
+    const interaction = createVerifyInteraction();
+    interaction.reply.mockRejectedValue(new Error('Unknown interaction'));
+
+    await expect(handle(interaction)).resolves.toBeUndefined();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      '[support_verify_button] Failed to reply to interaction:',
+      expect.any(Error),
+    );
+  });
+
   test('/verify-greeting posts Moldy-style copy with a verify button', async () => {
     const command = require('../../../src/commands/verify-greeting');
     const send = jest
