@@ -5,6 +5,7 @@ import type { ButtonInteraction } from 'discord.js';
 import { handle as handleCalculateStatsButton } from '../../components/calculate_character_stats_button';
 import { handle as handleCharPageButton } from '../../components/character_page_buttons';
 import { handle as handleConfirmDeleteCharacterButton } from '../../components/confirm_delete_character_button';
+import { handle as handleConfirmIcDeleteButton } from '../../components/confirm_ic_delete_button';
 import { handle as handleConfirmDeleteStat } from '../../components/confirm_delete_stat_button';
 import { handle as handleConfirmPurgeButton } from '../../components/confirm_purge_button';
 import { handle as handleDefineStats } from '../../components/define_stats_button';
@@ -33,6 +34,8 @@ const directRoutes: [RegExp, (i: ButtonInteraction) => Promise<void>][] = [
   [/^submitNewCharacter/, handleSubmitCharacter],
   [/^deleteCharacter/, handleDeleteCharacter],
   [/^confirmDeleteCharacter/, handleConfirmDeleteCharacterButton],
+  [/^confirmIcDelete:/, handleConfirmIcDeleteButton],
+  [/^cancelIcDelete:/, handleConfirmIcDeleteButton],
   [/^charPage:/, handleCharPageButton],
   [/^editCharacterStat/, handleEditCharacterStatsButton],
   [/^calculateCharacterStats:/, handleCalculateStatsButton],

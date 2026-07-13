@@ -5,8 +5,7 @@ import {
   MessageContextMenuCommandInteraction,
 } from 'discord.js';
 
-import { deleteRoleplayProxyMessage } from '../services/rp_message_proxy.service';
-import { resultMessage, resultReason } from './ic-delete';
+import { buildPrompt as buildIcDeleteConfirmation } from '../components/confirm_ic_delete_button';
 
 module.exports = {
   data: new ContextMenuCommandBuilder()
@@ -23,17 +22,8 @@ module.exports = {
       });
     }
 
-    const result = await deleteRoleplayProxyMessage({
-      client: interaction.client,
-      guildId,
-      channelId: targetMessage.channelId,
-      userId: user.id,
-      messageId: targetMessage.id,
-    });
-
-    return interaction.reply({
-      content: resultMessage(result.status, resultReason(result)),
-      ephemeral: true,
-    });
+    return interaction.reply(
+      buildIcDeleteConfirmation(targetMessage.channelId, targetMessage.id, user.id),
+    );
   },
 };

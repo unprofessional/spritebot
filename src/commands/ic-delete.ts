@@ -1,27 +1,8 @@
 import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 
-import { deleteRoleplayProxyMessage } from '../services/rp_message_proxy.service';
+import { buildPrompt as buildIcDeleteConfirmation } from '../components/confirm_ic_delete_button';
 import { parseDiscordMessageReference } from '../utils/discord_message_reference';
-
-export function resultMessage(status: string, reason?: string): string {
-  if (status === 'deleted') return '🗑️ Deleted your proxied RP message.';
-  if (status === 'forbidden') return '⛔ You can only delete your own proxied RP messages.';
-  if (status === 'not_found') {
-    return '⚠️ I could not find a tracked proxied RP message for that ID or link.';
-  }
-  if (status === 'failed' && reason === 'webhook_not_found') {
-    return '⚠️ I could not find the webhook that created that proxied message.';
-  }
-  if (status === 'failed' && reason === 'channel_cannot_webhook') {
-    return '⚠️ That channel cannot be managed through RP webhooks.';
-  }
-
-  return '❌ Failed to delete that proxied RP message.';
-}
-
-export function resultReason(result: Awaited<ReturnType<typeof deleteRoleplayProxyMessage>>) {
-  return 'reason' in result ? result.reason : undefined;
-}
+import { resultMessage, resultReason } from '../utils/ic_delete_result';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -55,18 +36,9 @@ module.exports = {
       });
     }
 
-    const result = await deleteRoleplayProxyMessage({
-      client: interaction.client,
-      guildId,
-      channelId: reference.channelId,
-      userId: user.id,
-      messageId: reference.messageId,
-    });
-
-    return interaction.reply({
-      content: resultMessage(result.status, resultReason(result)),
-      ephemeral: true,
-    });
+    return interaction.reply(
+      buildIcDeleteConfirmation(reference.channelId, reference.messageId, user.id),
+    );
   },
   resultMessage,
   resultReason,
