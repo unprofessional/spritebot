@@ -37,6 +37,24 @@ describe('support_verification.service', () => {
     });
   });
 
+  test('finds subscriber status from active gifted guild recipients', async () => {
+    await insertGiftedGuild({
+      guildId: 'gifted-guild',
+      recipientMemberId: 'user-1',
+    });
+
+    await insertGiftedGuild({
+      guildId: 'expired-gifted-guild',
+      recipientMemberId: 'user-1',
+      expiresAt: "CURRENT_TIMESTAMP - INTERVAL '1 day'",
+    });
+
+    await expect(getSupportVerificationEligibility('user-1')).resolves.toEqual({
+      subscriberGuildIds: ['gifted-guild'],
+      playerGuilds: [],
+    });
+  });
+
   test('finds player status for current games in entitled guilds', async () => {
     const gameId = await insertGame({ guildId: 'subscribed-guild', createdBy: 'gm-1' });
     await insertPlayerLink({ discordId: 'user-1', guildId: 'subscribed-guild', gameId });
@@ -48,6 +66,28 @@ describe('support_verification.service', () => {
     await expect(getSupportVerificationEligibility('user-1')).resolves.toEqual({
       subscriberGuildIds: [],
       playerGuilds: [{ guild_id: 'subscribed-guild', game_name: 'Lanternfall' }],
+    });
+  });
+
+  test('finds player status for current games in gifted guilds', async () => {
+    const gameId = await insertGame({ guildId: 'gifted-guild', createdBy: 'gm-1' });
+    await insertPlayerLink({ discordId: 'user-1', guildId: 'gifted-guild', gameId });
+    await insertGiftedGuild({ guildId: 'gifted-guild' });
+
+    await expect(getSupportVerificationEligibility('user-1')).resolves.toEqual({
+      subscriberGuildIds: [],
+      playerGuilds: [{ guild_id: 'gifted-guild', game_name: 'Lanternfall' }],
+    });
+  });
+
+  test('does not find gifted guild player status for another user', async () => {
+    const gameId = await insertGame({ guildId: 'gifted-guild', createdBy: 'gm-1' });
+    await insertPlayerLink({ discordId: 'other-user', guildId: 'gifted-guild', gameId });
+    await insertGiftedGuild({ guildId: 'gifted-guild' });
+
+    await expect(getSupportVerificationEligibility('user-1')).resolves.toEqual({
+      subscriberGuildIds: [],
+      playerGuilds: [],
     });
   });
 
@@ -124,6 +164,24 @@ async function insertGame({
   );
 
   return result.rows[0].id;
+}
+
+async function insertGiftedGuild({
+  guildId,
+  recipientMemberId = null,
+  expiresAt = null,
+}: {
+  guildId: string;
+  recipientMemberId?: string | null;
+  expiresAt?: string | null;
+}) {
+  await query(
+    `
+      INSERT INTO gifted_guilds (guild_id, granted_by, recipient_member_id, expires_at)
+      VALUES ($1, 'owner-1', $2, ${expiresAt ?? 'NULL'})
+    `,
+    [guildId, recipientMemberId],
+  );
 }
 
 async function insertPlayerLink({
