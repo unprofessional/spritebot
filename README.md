@@ -49,7 +49,7 @@ The repo currently defines these slash and context-menu commands:
 - `/bot-announcements` - Configure lifecycle announcement channels for this server
 - `/subscribe` - View or manage the server's Discord Premium App subscription
 - `/admin` - Admin and GM housekeeping audits, purge previews, and restore tools
-- `/gift` - Ops-only gifted access management
+- `/gift` - Owner-only gifted access management in the ops and support servers
 - `/toggle-bypass` - Ops-only entitlement bypass toggle
 
 Some commands are available to everyone, while others are gated by feature access. The mapping currently lives in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts).
@@ -267,7 +267,7 @@ CLEANUP_INTERVAL_HOURS=24
 Notes:
 
 - `DEV_GUILD_ID` is used for registering ops-only commands
-- `SUPPORT_GUILD_ID` is used for registering `/verify` in the support server only
+- `SUPPORT_GUILD_ID` is used for registering `/verify` and owner-only `/gift` in the support server
 - `SUBSCRIBER_ROLE_ID` and `PLAYER_ROLE_ID` are assigned by `/verify` and the support-server join check
 - `OWNER_DISCORD_ID` is used by `/gift`, `/toggle-bypass`, and owner-only `/admin` subcommands
 - `/bot-announcements set` controls where startup/shutdown status messages are posted per server
@@ -338,7 +338,7 @@ Why:
 
 Ops-only commands:
 
-- `/gift` and `/toggle-bypass` are registered only in `DEV_GUILD_ID`.
+- `/toggle-bypass` is registered only in `DEV_GUILD_ID`; `/gift` is registered in both `DEV_GUILD_ID` and `SUPPORT_GUILD_ID`.
 - They are Discord administrator commands and also check `OWNER_DISCORD_ID`.
 
 Recommended setup:

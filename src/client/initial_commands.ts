@@ -113,6 +113,33 @@ async function registerSupportCommands(rest: REST, supportCmds: CommandModule[])
   console.log(`🛰️  Registered ${payload.length} support command(s) in guild ${supportGuildId}`);
 }
 
+async function registerScopedCommands(
+  rest: REST,
+  opsCmds: CommandModule[],
+  supportCmds: CommandModule[],
+) {
+  if (DEV_GUILD_ID && DEV_GUILD_ID === supportGuildId) {
+    const scopedCommands = new Map<string, CommandModule>();
+    for (const command of [...opsCmds, ...supportCmds]) {
+      scopedCommands.set(command.data.name, command);
+    }
+
+    const payload: RESTPostAPIApplicationCommandsJSONBody[] = [...scopedCommands.values()].map(
+      (c) => c.data.toJSON(),
+    );
+    await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, DEV_GUILD_ID), {
+      body: payload,
+    });
+    console.log(
+      `🛰️  Registered ${payload.length} scoped command(s) in shared ops/support guild ${DEV_GUILD_ID}`,
+    );
+    return;
+  }
+
+  await registerOpsCommands(rest, opsCmds);
+  await registerSupportCommands(rest, supportCmds);
+}
+
 const safeFallback = async (interaction: BaseInteraction) => {
   if (!interaction.isRepliable()) return;
   const reply = {
@@ -134,9 +161,9 @@ export async function initializeCommands(client: Client): Promise<Client> {
   // Load into memory
   const commands = await loadCommands(files);
 
-  // Split: ops-only/support-only vs global (by name). Keep '/gift' ops-only.
+  // Split: ops/support scoped vs global (by name). Keep '/gift' out of global registration.
   const opsOnly = new Set<string>(['gift', 'toggle-bypass']);
-  const supportOnly = new Set<string>(['verify']);
+  const supportOnly = new Set<string>(['gift', 'verify']);
   const opsCommands = commands.filter((c) => opsOnly.has(c.data.name));
   const supportCommands = commands.filter((c) => supportOnly.has(c.data.name));
   const globalCommands = commands.filter(
@@ -155,8 +182,7 @@ export async function initializeCommands(client: Client): Promise<Client> {
   const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN!);
   try {
     await registerGlobalCommands(rest, globalCommands);
-    await registerOpsCommands(rest, opsCommands);
-    await registerSupportCommands(rest, supportCommands);
+    await registerScopedCommands(rest, opsCommands, supportCommands);
   } catch (err) {
     console.error('❌ Command registration failed:', err);
   }
