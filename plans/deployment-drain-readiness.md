@@ -275,6 +275,12 @@ Update `src/db/client.ts` so `query()` is aware of lifecycle state:
   - `pool.idleCount`
   - `pool.waitingCount`
 
+The lifecycle shutdown notification is the first known `allowDuringDrain`
+exception: `sendLifecycleNotification()` currently reads notification targets
+from `lifecycle_notification_channel`. Either mark that read as
+`allowDuringDrain` or snapshot notification targets before the DB drain gate
+starts refusing normal app queries.
+
 Do not introduce a full transaction helper in the first pass unless needed.
 Instead, reserve the shape:
 
