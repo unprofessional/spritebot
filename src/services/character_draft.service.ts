@@ -206,5 +206,11 @@ export function purgeStaleDrafts(): void {
   }
 }
 
-const purgeInterval = setInterval(purgeStaleDrafts, 1000 * 60 * 5);
+let purgeInterval: NodeJS.Timeout | null = setInterval(purgeStaleDrafts, 1000 * 60 * 5);
 purgeInterval.unref?.();
+
+export function stopCharacterDraftPurge(): void {
+  if (!purgeInterval) return;
+  clearInterval(purgeInterval);
+  purgeInterval = null;
+}
