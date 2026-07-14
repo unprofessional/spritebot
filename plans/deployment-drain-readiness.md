@@ -1,6 +1,6 @@
 # Deployment Drain Readiness Plan
 
-> **Status:** Draft for review
+> **Status:** Approved — ready for implementation
 > **Target:** SPRITEbot deployment rollout groundwork
 > **Goal:** Add the app and deploy primitives needed to drain Discord work,
 > timers, database connections, and in-flight async operations before a
@@ -223,15 +223,18 @@ Add a small lifecycle coordinator, likely `src/runtime/lifecycle.ts`, with:
 Responsibilities:
 
 - Own all process signal handling.
-- Stop accepting new Discord work.
-- Stop schedulers.
-- Wait for in-flight tracked work.
-- Stop voice sessions with timeout.
-- Send shutdown lifecycle notification.
-- Destroy Discord client.
-- Close the Postgres pool.
-- Let Node exit naturally or set `process.exitCode`, instead of calling
-  `process.exit(0)` early.
+- Execute shutdown in this exact order:
+  1. `beginDrain()` — reject new interactions, stop accepting new work.
+  2. Stop schedulers (bump, cleanup, character draft purge).
+  3. `waitForIdle(timeout)` — wait for in-flight Discord handlers to settle.
+  4. `stopAllForShutdown(15s)` — voice transcript dumps (best-effort).
+  5. Send shutdown lifecycle notification.
+  6. `client.destroy()` — tear down Discord client.
+  7. `closeDb()` — drain and close Postgres pool.
+  8. Exit naturally via `process.exitCode` (no `process.exit(0)`).
+
+The ordering of steps 4–6 is critical: voice `stopAndDump` sends transcript
+files to Discord via the client, so it **must** run before `client.destroy()`.
 
 ### 2. Track Discord Handler Work
 
@@ -252,12 +255,12 @@ When draining:
 - MessageCreate, entitlement, guild-member, and voice-state events should avoid
   starting new work once draining begins.
 
-Open question for Moldy:
+Decision:
 
-- Should entitlement and support member events be skipped during drain, or
-  should they be allowed to finish because they are important state updates?
-  My recommendation is "finish already-started, do not start new" and rely on
-  lazy entitlement reconciliation/support verify button after restart.
+- Entitlement and support member events: finish already-started, do not start
+  new. Rely on lazy entitlement reconciliation and the self-service Verify
+  button after restart. The Verify button is idempotent — users will just
+  click it again.
 
 ### 3. Make Database Drain Observable
 
@@ -315,25 +318,28 @@ Add to `VoiceManager`:
 - `stopAllForShutdown(options?: { timeoutMs: number }): Promise<VoiceShutdownSummary>`
 - Stop accepting new sessions while draining.
 - Destroy active connections.
-- Wait for pending transcriptions up to a bounded timeout.
-- Best-effort transcript dump if the Discord client is still available.
+- Wait for pending transcriptions up to 15s timeout (best-effort).
+- Transcript dump if the Discord client is still available.
 
-Shutdown ordering should stop voice before `client.destroy()`.
+Shutdown ordering: voice `stopAllForShutdown()` **must** run before
+`client.destroy()`, because `stopAndDump` sends transcript files via the
+Discord client.
 
 ### 6. Docker Stop Contract
 
 Update deployment/runtime config:
 
-- Add `stop_grace_period`, likely 60 to 120 seconds, in `docker-compose.yml`.
+- Add `stop_grace_period: 90s` in `docker-compose.yml` (60s app drain + 30s
+  buffer for Docker's own teardown).
 - Optionally add `init: true` so signal forwarding/reaping is predictable.
 - Keep `entrypoint.sh` using `exec`, which is already correct for signal
   forwarding through Infisical.
 
-Potential later addition:
+Deferred:
 
-- Add an internal health/drain status command or lightweight HTTP server if we
-  need external orchestration to ask "ready", "draining", or "idle".
-  For the first pass, logs plus Docker stop signal may be enough.
+- Internal HTTP health/drain endpoint. Not needed until blue-green
+  orchestration requires external readiness polling. Docker signal + logs is
+  sufficient for single-container.
 
 ### 7. Deploy Script Groundwork
 
@@ -463,16 +469,12 @@ For a later blue-green PR:
 
 ---
 
-## Open Questions for Review
+## Resolved Questions
 
-- What shutdown timeout is acceptable for production? My starting suggestion
-  is 60 seconds for normal drain, with Docker `stop_grace_period` set to 90
-  seconds.
-- Should voice transcript dump block deploy drain, or should it be best-effort
-  with a shorter timeout such as 15 seconds?
-- Should support-server join verification be skipped during drain, or queued
-  somehow? Today it can be recovered by the Verify button.
-- Do we want a small internal HTTP health/drain server now, or defer until
-  blue-green orchestration actually needs it?
-- Should Postgres advisory lock be introduced in Phase 1 as a passive safety
-  measure, or deferred until blue-green?
+| Question                          | Decision                                                                                                                              |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Shutdown timeout                  | 60s app drain, 90s Docker `stop_grace_period`                                                                                         |
+| Voice transcript dump             | Best-effort with 15s timeout. Transcripts are nice-to-have, not data-critical. Sessions are already interrupted by deploy.            |
+| Support verification during drain | Skip new ones. The Verify button is self-service and idempotent — users click again after restart. No queuing needed.                 |
+| HTTP health/drain endpoint        | Defer. Docker signal + logs is sufficient for single-container. Only needed when blue-green orchestration requires readiness polling. |
+| Postgres advisory lock            | Defer to Phase 4. It's blue-green machinery — premature complexity with no consumer in Phase 1.                                       |
