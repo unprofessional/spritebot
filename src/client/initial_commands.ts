@@ -24,6 +24,12 @@ import { handleModal } from '../handlers/modal_handlers';
 import { handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardCommand, guardComponent } from '../access/guards';
 import { supportGuildId } from '../config/env_config';
+import {
+  DRAINING_REPLY,
+  isDrainInProgressError,
+  isDraining,
+  trackOperation,
+} from '../runtime/lifecycle';
 
 const { DISCORD_CLIENT_ID, DISCORD_BOT_TOKEN } = process.env;
 // Allow override via env; default to the provided ops guild id
@@ -150,6 +156,16 @@ const safeFallback = async (interaction: BaseInteraction) => {
   else await interaction.reply(reply);
 };
 
+const drainFallback = async (interaction: BaseInteraction) => {
+  if (!interaction.isRepliable()) return;
+  const reply = {
+    content: DRAINING_REPLY,
+    ephemeral: true as const,
+  };
+  if (interaction.replied || interaction.deferred) await interaction.followUp(reply);
+  else await interaction.reply(reply);
+};
+
 // --- Main ---
 export async function initializeCommands(client: Client): Promise<Client> {
   if (!fs.existsSync(commandDir)) throw new Error(`Command directory missing: ${commandDir}`);
@@ -190,47 +206,58 @@ export async function initializeCommands(client: Client): Promise<Client> {
   // Interactions
   client.on(Events.InteractionCreate, (interaction) => {
     void (async () => {
+      if (isDraining()) {
+        await drainFallback(interaction);
+        return;
+      }
+
       try {
-        if (interaction.isChatInputCommand()) {
-          const auth = await guardCommand(interaction);
-          if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
+        await trackOperation(`interaction:${interaction.type}`, async () => {
+          if (interaction.isChatInputCommand()) {
+            const auth = await guardCommand(interaction);
+            if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
 
-          const cmd = client.commands.get(interaction.commandName);
-          if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
-          await cmd.execute(interaction);
-          return;
-        }
+            const cmd = client.commands.get(interaction.commandName);
+            if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
+            await cmd.execute(interaction);
+            return;
+          }
 
-        if (interaction.isMessageContextMenuCommand()) {
-          const auth = await guardCommand(interaction);
-          if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
+          if (interaction.isMessageContextMenuCommand()) {
+            const auth = await guardCommand(interaction);
+            if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
 
-          const cmd = client.commands.get(interaction.commandName);
-          if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
-          await cmd.execute(interaction);
-          return;
-        }
+            const cmd = client.commands.get(interaction.commandName);
+            if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
+            await cmd.execute(interaction);
+            return;
+          }
 
-        if (interaction.isModalSubmit()) {
-          const auth = await guardComponent(interaction);
-          if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-          return handleModal(interaction);
-        }
+          if (interaction.isModalSubmit()) {
+            const auth = await guardComponent(interaction);
+            if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
+            return handleModal(interaction);
+          }
 
-        if (interaction.isButton()) {
-          const auth = await guardComponent(interaction);
-          if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-          return handleButton(interaction);
-        }
+          if (interaction.isButton()) {
+            const auth = await guardComponent(interaction);
+            if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
+            return handleButton(interaction);
+          }
 
-        if (interaction.isStringSelectMenu()) {
-          const auth = await guardComponent(interaction);
-          if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-          return handleSelectMenu(interaction);
-        }
+          if (interaction.isStringSelectMenu()) {
+            const auth = await guardComponent(interaction);
+            if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
+            return handleSelectMenu(interaction);
+          }
 
-        console.warn('⚠️ Unhandled interaction:', interaction.type);
+          console.warn('⚠️ Unhandled interaction:', interaction.type);
+        });
       } catch (err) {
+        if (isDrainInProgressError(err)) {
+          await drainFallback(interaction);
+          return;
+        }
         console.error('❌ Interaction error:', err);
         await safeFallback(interaction);
       }

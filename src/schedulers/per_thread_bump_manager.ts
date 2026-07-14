@@ -23,6 +23,8 @@ export class PerThreadBumpManager {
   private inFlight = 0;
   private queue: Array<() => Promise<void>> = [];
   private readonly MAX_CONCURRENCY = 3;
+  private acceptingWork = true;
+  private drainWaiters = new Set<() => void>();
 
   private attempts = new Map<string, number>(); // thread_id -> failures
 
@@ -65,12 +67,37 @@ export class PerThreadBumpManager {
   }
 
   stop(): void {
+    this.acceptingWork = false;
     for (const [id, t] of this.timers) {
       clearTimeout(t);
       this.timers.delete(id);
     }
-    // allow in-flight queue items to finish naturally
     console.log('[bump] manager stopped; timers cleared');
+    this.notifyDrainWaiters();
+  }
+
+  async drain(timeoutMs: number): Promise<boolean> {
+    if (this.isDrained()) return true;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let timeout: NodeJS.Timeout;
+      const done = (waiter: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        this.drainWaiters.delete(waiter);
+        resolve();
+      };
+      const waiter = () => {
+        if (!this.isDrained()) return;
+        done(waiter);
+      };
+      timeout = setTimeout(() => done(waiter), Math.max(0, timeoutMs));
+      this.drainWaiters.add(waiter);
+    });
+
+    return this.isDrained();
   }
 
   // ---- internals ----
@@ -147,6 +174,10 @@ export class PerThreadBumpManager {
   // --- tiny send queue ---
 
   private async enqueueBump(task: () => Promise<void>): Promise<void> {
+    if (!this.acceptingWork) {
+      throw new Error('Bump manager is stopping.');
+    }
+
     return new Promise<void>((resolve, reject) => {
       this.queue.push(async () => {
         try {
@@ -173,9 +204,20 @@ export class PerThreadBumpManager {
         })
         .finally(() => {
           this.inFlight--;
+          this.notifyDrainWaiters();
           // continue draining if more work remains
           if (this.queue.length > 0) void this.drainQueue();
         });
+    }
+  }
+
+  private isDrained(): boolean {
+    return this.inFlight === 0 && this.queue.length === 0;
+  }
+
+  private notifyDrainWaiters(): void {
+    for (const waiter of this.drainWaiters) {
+      waiter();
     }
   }
 }

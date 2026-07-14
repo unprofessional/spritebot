@@ -8,6 +8,10 @@ export interface LifecycleNotificationChannelRow {
   updated_at: string;
 }
 
+type FindAllOptions = {
+  allowDuringDrain?: boolean;
+};
+
 export class LifecycleNotificationChannelDAO {
   async upsert({
     guildId,
@@ -50,9 +54,11 @@ export class LifecycleNotificationChannelDAO {
     return result.rows[0] ?? null;
   }
 
-  async findAll(): Promise<LifecycleNotificationChannelRow[]> {
+  async findAll(options: FindAllOptions = {}): Promise<LifecycleNotificationChannelRow[]> {
     const result = await query<LifecycleNotificationChannelRow>(
       `SELECT * FROM lifecycle_notification_channel ORDER BY guild_id`,
+      [],
+      { allowDuringDrain: options.allowDuringDrain },
     );
     return result.rows;
   }
