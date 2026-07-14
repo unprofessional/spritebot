@@ -4,6 +4,7 @@ import { GameDAO } from '../../../src/dao/game.dao';
 import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import { query } from '../../../src/db/client';
 import {
+  getGlobalStats,
   getGameAudit,
   getOrphanReport,
   getPrivateCharacterAudit,
@@ -287,6 +288,77 @@ describe('admin_housekeeping.service', () => {
         inactiveOver60Days: false,
       }),
     ]);
+  });
+
+  test('reports global usage stats', async () => {
+    const publicGame = await createGame('Public Table', { isPublic: true });
+    await createGame('Private Table');
+
+    await characterDAO.create({
+      user_id: 'player-1',
+      game_id: publicGame.id,
+      name: 'Visible Hero',
+      visibility: 'public',
+    });
+    await characterDAO.create({
+      user_id: 'player-2',
+      game_id: publicGame.id,
+      name: 'Quiet Hero',
+      visibility: 'private',
+    });
+    const deletedCharacter = await characterDAO.create({
+      user_id: 'player-3',
+      game_id: publicGame.id,
+      name: 'Gone Hero',
+      visibility: 'public',
+    });
+    await query(`UPDATE character SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1`, [
+      deletedCharacter.id,
+    ]);
+
+    await query(
+      `
+        INSERT INTO entitlements_cache (
+          entitlement_id, guild_id, sku_id, status, starts_at, ends_at
+        )
+        VALUES
+          ('active-1', 'subscriber-guild', 'sku-1', 'active', CURRENT_TIMESTAMP, NULL),
+          ('active-2', 'subscriber-guild', 'sku-1', 'active', CURRENT_TIMESTAMP, NULL),
+          (
+            'expired-1', 'expired-guild', 'sku-1', 'active',
+            CURRENT_TIMESTAMP - INTERVAL '10 days',
+            CURRENT_TIMESTAMP - INTERVAL '1 day'
+          ),
+          ('canceled-1', 'canceled-guild', 'sku-1', 'canceled', CURRENT_TIMESTAMP, NULL)
+      `,
+    );
+    await query(
+      `
+        INSERT INTO gifted_guilds (guild_id, granted_by, expires_at)
+        VALUES
+          ('gifted-guild', 'owner-1', NULL),
+          ('subscriber-guild', 'owner-1', NULL),
+          ('expired-gifted-guild', 'owner-1', CURRENT_TIMESTAMP - INTERVAL '1 day')
+      `,
+    );
+    await query(
+      `
+        INSERT INTO player (discord_id)
+        VALUES ('player-1'), ('player-2'), ('player-1')
+        ON CONFLICT (discord_id) DO NOTHING
+      `,
+    );
+
+    await expect(getGlobalStats()).resolves.toEqual({
+      activeSubscriberGuilds: 1,
+      activeGiftedGuilds: 2,
+      activeAccessGuilds: 2,
+      publicGames: 1,
+      totalGames: 2,
+      publicCharacters: 1,
+      totalActiveCharacters: 2,
+      linkedPlayers: 2,
+    });
   });
 
   test('audits private characters and ownership scope', async () => {
