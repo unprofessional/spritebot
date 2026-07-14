@@ -52,6 +52,17 @@ export interface PrivateCharacterAuditRow {
   hasNoFilledStats: boolean;
 }
 
+export interface GlobalStats {
+  activeSubscriberGuilds: number;
+  activeGiftedGuilds: number;
+  activeAccessGuilds: number;
+  publicGames: number;
+  totalGames: number;
+  publicCharacters: number;
+  totalActiveCharacters: number;
+  linkedPlayers: number;
+}
+
 type QueryClient = Pick<DbClient, 'query'>;
 
 const DEFAULT_CLIENT: QueryClient = { query };
@@ -377,6 +388,82 @@ export async function purgeSafeOrphans(
       count: toCount(row.stale_entitlements),
     },
   ];
+}
+
+export async function getGlobalStats(client: QueryClient = DEFAULT_CLIENT): Promise<GlobalStats> {
+  const result = await client.query<{
+    active_subscriber_guilds: string | number;
+    active_gifted_guilds: string | number;
+    active_access_guilds: string | number;
+    public_games: string | number;
+    total_games: string | number;
+    public_characters: string | number;
+    total_active_characters: string | number;
+    linked_players: string | number;
+  }>(`
+    SELECT
+      (
+        SELECT COUNT(DISTINCT guild_id)
+        FROM entitlements_cache
+        WHERE status = 'active'
+          AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)
+      ) AS active_subscriber_guilds,
+      (
+        SELECT COUNT(*)
+        FROM gifted_guilds
+        WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP
+      ) AS active_gifted_guilds,
+      (
+        SELECT COUNT(*)
+        FROM (
+          SELECT guild_id
+          FROM entitlements_cache
+          WHERE status = 'active'
+            AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)
+          UNION
+          SELECT guild_id
+          FROM gifted_guilds
+          WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP
+        ) active_access_guilds
+      ) AS active_access_guilds,
+      (
+        SELECT COUNT(*)
+        FROM game
+        WHERE is_public = TRUE
+      ) AS public_games,
+      (
+        SELECT COUNT(*)
+        FROM game
+      ) AS total_games,
+      (
+        SELECT COUNT(*)
+        FROM character
+        WHERE visibility = 'public'
+          AND deleted_at IS NULL
+      ) AS public_characters,
+      (
+        SELECT COUNT(*)
+        FROM character
+        WHERE deleted_at IS NULL
+      ) AS total_active_characters,
+      (
+        SELECT COUNT(DISTINCT p.discord_id)
+        FROM player p
+      ) AS linked_players
+  `);
+
+  const row = result.rows[0];
+
+  return {
+    activeSubscriberGuilds: toCount(row?.active_subscriber_guilds),
+    activeGiftedGuilds: toCount(row?.active_gifted_guilds),
+    activeAccessGuilds: toCount(row?.active_access_guilds),
+    publicGames: toCount(row?.public_games),
+    totalGames: toCount(row?.total_games),
+    publicCharacters: toCount(row?.public_characters),
+    totalActiveCharacters: toCount(row?.total_active_characters),
+    linkedPlayers: toCount(row?.linked_players),
+  };
 }
 
 export async function getThreadBumpCheckCandidates(

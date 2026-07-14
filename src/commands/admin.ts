@@ -3,6 +3,7 @@
 import { ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
 import { handleAdminCharacters } from '../handlers/admin_characters.handler';
 import { handleAdminGames } from '../handlers/admin_games.handler';
+import { handleAdminGlobalStats } from '../handlers/admin_global_stats.handler';
 import { handleAdminOrphans, handleAdminOrphansPurge } from '../handlers/admin_orphans.handler';
 import { handleAdminRestoreCharacter } from '../handlers/admin_restore.handler';
 import { userOwnsGame, userOwnsGameInGuild } from '../services/admin_housekeeping.service';
@@ -23,6 +24,9 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((subcommand) =>
     subcommand.setName('games').setDescription('Audit games in this server'),
+  )
+  .addSubcommand((subcommand) =>
+    subcommand.setName('global-stats').setDescription('Show global SPRITEbot usage stats'),
   )
   .addSubcommand((subcommand) =>
     subcommand
@@ -98,6 +102,15 @@ module.exports = {
       }
 
       await handleAdminOrphansPurge(interaction);
+      return;
+    }
+
+    if (subcommand === 'global-stats') {
+      if (!isOwner(interaction.user.id)) {
+        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+      }
+
+      await handleAdminGlobalStats(interaction);
       return;
     }
 
