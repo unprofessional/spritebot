@@ -137,9 +137,15 @@ The `/admin` command provides read-only audits and carefully gated cleanup tools
 
 - `/admin orphans` - owner-only, ops-guild report of stale or orphaned rows
 - `/admin orphans-purge` - owner-only preview and confirmation flow for safe hard deletes
+- `/admin global-stats` - owner-only global usage snapshot for bot/server health
 - `/admin games` - game audit for the bot owner or a GM in the current server
 - `/admin characters` - private-character audit for the bot owner or a GM-scoped game
 - `/admin restore-character` - owner-only restore of a soft-deleted character by ID
+
+`/admin global-stats` reports an ephemeral embed with the bot's current Discord guild count,
+active paid subscriber guilds, active gifted guilds, distinct active access guilds, public/total
+games, public/active characters, and linked player count. The access-guild count is distinct across
+paid entitlements and gifts, so a guild with both is counted once.
 
 Automated cleanup runs on startup and then on a configurable interval. It reuses the same safe
 purge logic as `/admin orphans-purge` and does not touch games, private non-deleted characters,
