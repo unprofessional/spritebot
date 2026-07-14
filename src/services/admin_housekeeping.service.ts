@@ -55,6 +55,7 @@ export interface PrivateCharacterAuditRow {
 export interface GlobalStats {
   activeSubscriberGuilds: number;
   activeGiftedGuilds: number;
+  activeAccessGuilds: number;
   publicGames: number;
   totalGames: number;
   publicCharacters: number;
@@ -393,6 +394,7 @@ export async function getGlobalStats(client: QueryClient = DEFAULT_CLIENT): Prom
   const result = await client.query<{
     active_subscriber_guilds: string | number;
     active_gifted_guilds: string | number;
+    active_access_guilds: string | number;
     public_games: string | number;
     total_games: string | number;
     public_characters: string | number;
@@ -411,6 +413,19 @@ export async function getGlobalStats(client: QueryClient = DEFAULT_CLIENT): Prom
         FROM gifted_guilds
         WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP
       ) AS active_gifted_guilds,
+      (
+        SELECT COUNT(*)
+        FROM (
+          SELECT guild_id
+          FROM entitlements_cache
+          WHERE status = 'active'
+            AND (ends_at IS NULL OR ends_at > CURRENT_TIMESTAMP)
+          UNION
+          SELECT guild_id
+          FROM gifted_guilds
+          WHERE expires_at IS NULL OR expires_at > CURRENT_TIMESTAMP
+        ) active_access_guilds
+      ) AS active_access_guilds,
       (
         SELECT COUNT(*)
         FROM game
@@ -442,6 +457,7 @@ export async function getGlobalStats(client: QueryClient = DEFAULT_CLIENT): Prom
   return {
     activeSubscriberGuilds: toCount(row?.active_subscriber_guilds),
     activeGiftedGuilds: toCount(row?.active_gifted_guilds),
+    activeAccessGuilds: toCount(row?.active_access_guilds),
     publicGames: toCount(row?.public_games),
     totalGames: toCount(row?.total_games),
     publicCharacters: toCount(row?.public_characters),
