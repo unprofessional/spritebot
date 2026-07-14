@@ -52,8 +52,14 @@ type VoiceSession = VoiceSessionStatus & {
   receiver: AudioReceiver;
   transcript: TranscriptEntry[];
   participants: Set<string>;
+  speakerIdentities: Map<string, SpeakerIdentity>;
   pendingTranscriptions: Set<Promise<void>>;
   isStopping: boolean;
+};
+
+type SpeakerIdentity = {
+  displayName: string;
+  isBot: boolean;
 };
 
 type TranscriptEntry = {
@@ -115,6 +121,7 @@ export class VoiceManager {
       ),
       transcript: [],
       participants: new Set(),
+      speakerIdentities: new Map(),
       pendingTranscriptions: new Set(),
       isStopping: false,
     };
@@ -193,6 +200,9 @@ export class VoiceManager {
     userId: string,
     segment: SpeechSegment,
   ): Promise<void> {
+    const speaker = await this.getSpeakerIdentity(session, userId);
+    if (speaker.isBot) return;
+
     const wav = encodePcm16MonoWav(segment.pcm);
     const result = await this.transcriptionClient.transcribeWav(
       wav,
@@ -200,22 +210,36 @@ export class VoiceManager {
     );
     if (!result.text) return;
 
-    const member = await session.client.guilds.cache
-      .get(session.guildId)
-      ?.members.fetch(userId)
-      .catch(() => null);
-    const user = member?.user ?? (await session.client.users.fetch(userId).catch(() => null));
-    const displayName = member?.displayName ?? user?.displayName ?? user?.username ?? userId;
-
     session.participants.add(userId);
     session.participantCount = session.participants.size;
     session.segmentsTranscribed += 1;
     session.transcript.push({
       userId,
-      displayName,
+      displayName: speaker.displayName,
       timestamp: segment.startedAt,
       text: result.text,
     });
+  }
+
+  private async getSpeakerIdentity(
+    session: VoiceSession,
+    userId: string,
+  ): Promise<SpeakerIdentity> {
+    const cached = session.speakerIdentities.get(userId);
+    if (cached) return cached;
+
+    const member = await session.client.guilds.cache
+      .get(session.guildId)
+      ?.members.fetch(userId)
+      .catch(() => null);
+    const user = member?.user ?? (await session.client.users.fetch(userId).catch(() => null));
+    const identity = {
+      displayName: member?.displayName ?? user?.displayName ?? user?.username ?? userId,
+      isBot: member?.user.bot ?? user?.bot ?? false,
+    };
+
+    session.speakerIdentities.set(userId, identity);
+    return identity;
   }
 
   private async sendTranscriptDump(session: VoiceSession, autoStopped: boolean): Promise<void> {
