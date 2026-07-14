@@ -71,6 +71,25 @@ If everything is clean, show a single "✅ No orphans detected" message.
 This gives GMs visibility into their own server's health and lets the bot
 owner audit any server.
 
+### `/admin global-stats` — Global Usage Snapshot
+
+**Who:** Bot owner only.
+
+**What it shows:**
+
+- Current number of Discord servers the bot is in, from the live Discord
+  client cache
+- Active paid subscriber guilds from `entitlements_cache`
+- Active gifted guilds from `gifted_guilds`
+- Distinct active access guilds, using a union of active paid entitlements
+  and active gifts so overlap is counted once
+- Public games / total games
+- Public characters / active non-deleted characters
+- Linked players
+
+This is an internal health snapshot for owner/admin use, not an external
+analytics surface.
+
 ### `/admin characters` — Private Character Audit
 
 **Who:** Bot owner (all guilds) or GM (own game only).
