@@ -10,7 +10,6 @@ export async function handleAdminGlobalStats(
 ): Promise<void> {
   const stats = await getGlobalStats();
   const botGuilds = interaction.client.guilds.cache.size;
-  const activeAccessGuilds = stats.activeSubscriberGuilds + stats.activeGiftedGuilds;
 
   const embed = new EmbedBuilder()
     .setTitle('SPRITEbot Global Stats')
@@ -33,7 +32,7 @@ export async function handleAdminGlobalStats(
       },
       {
         name: 'Access Guilds',
-        value: formatNumber(activeAccessGuilds),
+        value: formatNumber(stats.activeAccessGuilds),
         inline: true,
       },
       {

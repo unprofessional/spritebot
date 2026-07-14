@@ -337,6 +337,7 @@ describe('admin_housekeeping.service', () => {
         INSERT INTO gifted_guilds (guild_id, granted_by, expires_at)
         VALUES
           ('gifted-guild', 'owner-1', NULL),
+          ('subscriber-guild', 'owner-1', NULL),
           ('expired-gifted-guild', 'owner-1', CURRENT_TIMESTAMP - INTERVAL '1 day')
       `,
     );
@@ -350,7 +351,8 @@ describe('admin_housekeeping.service', () => {
 
     await expect(getGlobalStats()).resolves.toEqual({
       activeSubscriberGuilds: 1,
-      activeGiftedGuilds: 1,
+      activeGiftedGuilds: 2,
+      activeAccessGuilds: 2,
       publicGames: 1,
       totalGames: 2,
       publicCharacters: 1,
