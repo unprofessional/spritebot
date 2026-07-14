@@ -1,0 +1,478 @@
+# Deployment Drain Readiness Plan
+
+> **Status:** Draft for review
+> **Target:** SPRITEbot deployment rollout groundwork
+> **Goal:** Add the app and deploy primitives needed to drain Discord work,
+> timers, database connections, and in-flight async operations before a
+> container is replaced. This is not full blue-green yet, but it should make
+> that future strategy much safer.
+
+---
+
+## Why This Matters
+
+The current deployment path is a direct container replacement:
+
+- Jenkins packages the repo and deploys to `shinralabs`.
+- The remote deploy script runs `docker compose up -d --build --remove-orphans`.
+- Docker stops the existing `spritebot` container and starts the rebuilt one.
+
+That is simple and has worked, but the application does not currently have a
+coordinated drain lifecycle. The process sends a shutdown notification and
+destroys the Discord client, but it does not wait for all in-flight Discord
+handlers, scheduler work, voice transcription work, or Postgres pool shutdown
+before exiting.
+
+Before blue-green, we should first make "one instance stops cleanly" true.
+
+---
+
+## Current Audit Findings
+
+### Process Lifecycle
+
+Relevant files:
+
+- `src/index.ts`
+- `src/services/lifecycle_notification.service.ts`
+- `src/db/client.ts`
+- `Dockerfile`
+- `docker-compose.yml`
+- `entrypoint.sh`
+- `Jenkinsfile`
+
+Current behavior:
+
+- `src/index.ts` initializes Discord event handlers, DB access, schedulers,
+  lifecycle notifications, and voice transcription.
+- `installShutdownNotifications()` registers `SIGINT` and `SIGTERM`.
+- On shutdown signal, it sends a lifecycle shutdown notification, calls
+  `client.destroy()`, then calls `process.exit(0)`.
+- `closeDb()` exists in `src/db/client.ts`, but production shutdown does not
+  call it.
+- `docker-compose.yml` has no explicit `stop_grace_period`.
+- The deployment script does not run a pre-stop drain command or wait for app
+  readiness/drain state.
+
+Risks:
+
+- `process.exit(0)` can terminate remaining async work after the shutdown
+  notification finishes.
+- The Postgres pool can be torn down by process exit instead of drained with
+  `pool.end()`.
+- Docker's default stop timeout may be too short or implicit for voice,
+  Discord API calls, or slow DB work.
+
+### Discord Event Handling
+
+Relevant files:
+
+- `src/client/initial_commands.ts`
+- `src/client/entitlement_events.ts`
+- `src/client/rp_proxy_events.ts`
+- `src/client/support_verification_events.ts`
+- `src/voice/voice_manager.ts`
+
+Current behavior:
+
+- Interaction, message, entitlement, guild member, and voice-state handlers
+  are registered directly on the Discord client.
+- Most handlers start async work inside `void (async () => { ... })()`.
+- There is no shared in-flight operation tracker.
+- There is no `isDraining` gate to reject new interactions with a friendly
+  ephemeral "restarting" response.
+- There is no removal of listeners during shutdown except indirectly through
+  `client.destroy()`.
+
+Risks:
+
+- A signal can arrive while a command, component, RP proxy message, entitlement
+  webhook, or support verification is mid-flight.
+- New interactions can still begin during the early part of shutdown.
+- The process has no central way to wait for active handlers to settle.
+
+### Database Connections and Transactions
+
+Relevant files:
+
+- `src/db/client.ts`
+- `src/db/db.ts`
+- `src/dao/*.dao.ts`
+- `src/services/admin_housekeeping.service.ts`
+
+Current behavior:
+
+- All production DB access goes through a singleton `pg.Pool`.
+- `closeDb()` calls `pool.end()`, but only tests call it today.
+- DAOs use one-off `query()` calls.
+- The current app code does not appear to use explicit multi-statement
+  application transactions through `BEGIN` / `COMMIT` / `ROLLBACK`; those
+  keywords only appear in SQL trigger/function definitions.
+- The largest write batch is admin housekeeping cleanup, which uses one SQL
+  statement with multiple CTE deletes.
+
+Risks:
+
+- Without an app drain gate, new `query()` calls can start after shutdown has
+  begun.
+- Without an in-flight query count, shutdown cannot report or wait for active
+  database work.
+- Future explicit transactions would need a stronger client checkout API than
+  the current `query()` helper.
+
+### Schedulers and Timers
+
+Relevant files:
+
+- `src/schedulers/bump_scheduler.ts`
+- `src/schedulers/per_thread_bump_manager.ts`
+- `src/schedulers/cleanup_scheduler.ts`
+- `src/services/character_draft.service.ts`
+
+Current behavior:
+
+- Bump scheduler:
+  - Uses a 30 second polling `setInterval`.
+  - Uses `PerThreadBumpManager` with per-thread `setTimeout`s.
+  - Registers its own `SIGINT` / `SIGTERM` stop handler.
+  - `stop()` clears timers but does not await queued or in-flight bump sends.
+- Cleanup scheduler:
+  - Uses `setInterval`.
+  - Registers its own `SIGINT` / `SIGTERM` stop handler by default.
+  - `stopCleanupScheduler()` clears the interval but does not wait for an
+    active cleanup run.
+- Character drafts:
+  - `character_draft.service.ts` creates a module-level stale draft purge
+    interval immediately on import.
+  - The interval is unref'd, but there is no exported stop hook.
+
+Risks:
+
+- Multiple independent signal handlers make shutdown ordering hard to reason
+  about.
+- Bump sends can be mid-Discord-send or mid-DB-update when Docker stops the
+  container.
+- Cleanup can be mid-delete when shutdown proceeds.
+- Timers should stop accepting new work before the DB pool is closed.
+
+### Voice Transcription
+
+Relevant files:
+
+- `src/voice/voice_manager.ts`
+- `src/voice/audio_receiver.ts`
+- `src/voice/transcription_client.ts`
+
+Current behavior:
+
+- Active voice sessions are held in memory.
+- `stopAndDump()` destroys the voice connection, waits for pending
+  transcriptions, sends a transcript file to Discord, and deletes the session.
+- There is no global `stopAll()` for shutdown.
+- Shutdown currently destroys the Discord client outside the voice manager, so
+  active sessions may not dump transcripts cleanly.
+
+Risks:
+
+- Deploys can interrupt active transcription sessions.
+- If `client.destroy()` runs before transcript dump, the bot may lose the last
+  transcript.
+- Waiting forever for transcription HTTP calls would also be bad, so shutdown
+  needs a timeout.
+
+### Deployment Mechanics
+
+Relevant files:
+
+- `Jenkinsfile`
+- `docker-compose.yml`
+- `Dockerfile`
+- `entrypoint.sh`
+
+Current behavior:
+
+- `docker compose up -d --build --remove-orphans` handles replacement.
+- No explicit `stop_grace_period`.
+- No healthcheck.
+- No drain endpoint or CLI command.
+- No two-phase deploy such as "ask old app to drain, wait, then replace".
+
+Risks:
+
+- The deploy process cannot distinguish "old container finished draining" from
+  "Docker killed it after timeout".
+- The future blue-green strategy needs more than two containers. Discord
+  gateway events can be duplicated if two active instances using the same bot
+  token process the same event stream without a leader/lease guard.
+
+---
+
+## Recommended Design
+
+### 1. Central Runtime Lifecycle Module
+
+Add a small lifecycle coordinator, likely `src/runtime/lifecycle.ts`, with:
+
+- `isDraining(): boolean`
+- `beginDrain(reason: string): void`
+- `trackOperation<T>(name: string, fn: () => Promise<T>): Promise<T>`
+- `waitForIdle(timeoutMs: number): Promise<DrainSummary>`
+- `registerShutdownHook(name: string, hook: () => Promise<void> | void): void`
+- `runGracefulShutdown(signal: NodeJS.Signals): Promise<void>`
+
+Responsibilities:
+
+- Own all process signal handling.
+- Stop accepting new Discord work.
+- Stop schedulers.
+- Wait for in-flight tracked work.
+- Stop voice sessions with timeout.
+- Send shutdown lifecycle notification.
+- Destroy Discord client.
+- Close the Postgres pool.
+- Let Node exit naturally or set `process.exitCode`, instead of calling
+  `process.exit(0)` early.
+
+### 2. Track Discord Handler Work
+
+Wrap these handler entry points with `trackOperation()`:
+
+- Interaction handling in `src/client/initial_commands.ts`
+- Entitlement events in `src/client/entitlement_events.ts`
+- RP proxy message handling in `src/client/rp_proxy_events.ts`
+- Support verification member join handling in
+  `src/client/support_verification_events.ts`
+- Voice-state handling in `src/voice/voice_manager.ts`
+
+When draining:
+
+- Chat commands, context menu commands, buttons, selects, and modals should get
+  an ephemeral "SPRITEbot is restarting. Please try again in a moment." when
+  possible.
+- MessageCreate, entitlement, guild-member, and voice-state events should avoid
+  starting new work once draining begins.
+
+Open question for Moldy:
+
+- Should entitlement and support member events be skipped during drain, or
+  should they be allowed to finish because they are important state updates?
+  My recommendation is "finish already-started, do not start new" and rely on
+  lazy entitlement reconciliation/support verify button after restart.
+
+### 3. Make Database Drain Observable
+
+Update `src/db/client.ts` so `query()` is aware of lifecycle state:
+
+- Increment/decrement an in-flight DB query counter.
+- Refuse new queries after drain begins, except queries explicitly marked as
+  `allowDuringDrain`.
+- Ensure `closeDb()` is called after app work is idle.
+- Log pool stats at shutdown if useful:
+  - `pool.totalCount`
+  - `pool.idleCount`
+  - `pool.waitingCount`
+
+Do not introduce a full transaction helper in the first pass unless needed.
+Instead, reserve the shape:
+
+```ts
+withDbClient(async (client) => {
+  await client.query('BEGIN');
+  try {
+    ...
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  }
+});
+```
+
+That gives future explicit transactions a drain-aware client checkout API.
+
+### 4. Make Schedulers Stoppable and Awaitable
+
+Update scheduler APIs:
+
+- `startBumpScheduler(client)` should return a controller:
+  - `stopAcceptingWork()`
+  - `drain(timeoutMs)`
+- `PerThreadBumpManager.stop()` should clear timers and stop queue intake.
+- Add a way to wait for current bump queue/in-flight sends to settle, bounded
+  by timeout.
+- `startCleanupScheduler()` should return a controller or expose
+  `stopCleanupScheduler({ wait: true })`.
+- Track active cleanup run promise.
+- Export `stopCharacterDraftPurge()` from `character_draft.service.ts`.
+
+Signal registration should move out of individual schedulers and into the
+central lifecycle module.
+
+### 5. Add Voice Shutdown Hook
+
+Add to `VoiceManager`:
+
+- `stopAllForShutdown(options?: { timeoutMs: number }): Promise<VoiceShutdownSummary>`
+- Stop accepting new sessions while draining.
+- Destroy active connections.
+- Wait for pending transcriptions up to a bounded timeout.
+- Best-effort transcript dump if the Discord client is still available.
+
+Shutdown ordering should stop voice before `client.destroy()`.
+
+### 6. Docker Stop Contract
+
+Update deployment/runtime config:
+
+- Add `stop_grace_period`, likely 60 to 120 seconds, in `docker-compose.yml`.
+- Optionally add `init: true` so signal forwarding/reaping is predictable.
+- Keep `entrypoint.sh` using `exec`, which is already correct for signal
+  forwarding through Infisical.
+
+Potential later addition:
+
+- Add an internal health/drain status command or lightweight HTTP server if we
+  need external orchestration to ask "ready", "draining", or "idle".
+  For the first pass, logs plus Docker stop signal may be enough.
+
+### 7. Deploy Script Groundwork
+
+Short term:
+
+- Rely on Docker `SIGTERM` plus `stop_grace_period`.
+- Make app shutdown robust enough that `docker compose up` can safely replace
+  the container.
+
+Next step before blue-green:
+
+- Split deploy into explicit phases:
+  1. Build new image.
+  2. Start new container in standby or ready state.
+  3. Drain old active container.
+  4. Promote new active container.
+  5. Stop old container after idle.
+
+Blue-green caveat:
+
+- Discord bots are event consumers, not plain HTTP servers. Running two fully
+  active instances with the same token can duplicate event processing. Before
+  true blue-green, add an "active instance lease" so exactly one instance:
+  - logs into the Discord gateway, or
+  - processes Discord events and schedulers.
+
+Likely lease options:
+
+- Postgres advisory lock held by the active instance.
+- A `runtime_instance_lease` table with heartbeat/expiry.
+- Deployment-level single-active guarantee, with DB lease as safety net.
+
+---
+
+## Proposed Implementation Phases
+
+### Phase 1: Single-Container Graceful Drain
+
+Deliverables:
+
+- Central lifecycle coordinator.
+- One signal handler path.
+- Stop calling `process.exit(0)` inside lifecycle notifications.
+- Track in-flight Discord operations.
+- Add drain gate for new interactions.
+- Stop schedulers before closing DB.
+- Close Postgres pool with `closeDb()`.
+- Add `stop_grace_period` to Docker Compose.
+- Tests for:
+  - shutdown calls hooks in order
+  - new interactions are rejected during drain
+  - in-flight tracked operations are awaited
+  - DB close is called after hooks
+
+Suggested files:
+
+- `src/runtime/lifecycle.ts`
+- `src/index.ts`
+- `src/services/lifecycle_notification.service.ts`
+- `src/client/initial_commands.ts`
+- `src/client/*_events.ts`
+- `src/schedulers/*.ts`
+- `src/db/client.ts`
+- `docker-compose.yml`
+- `tests/unit/runtime/lifecycle.test.ts`
+
+### Phase 2: Scheduler and Voice Completeness
+
+Deliverables:
+
+- Awaitable bump scheduler drain.
+- Awaitable cleanup scheduler stop.
+- Stop character draft purge interval.
+- Voice `stopAllForShutdown()` with timeout.
+- Logging for shutdown summary.
+
+Tests:
+
+- Bump queue drains or times out.
+- Cleanup active run is awaited.
+- Voice manager attempts transcript dump before Discord destroy.
+
+### Phase 3: Deployment Orchestration Readiness
+
+Deliverables:
+
+- Optional local drain/status endpoint or CLI.
+- Jenkins deploy script waits for clean stop or reports forced timeout.
+- Remote deploy logs shutdown summary.
+- Document manual rollback and drain verification steps.
+
+### Phase 4: Blue-Green Foundation
+
+Deliverables:
+
+- Active instance lease.
+- Standby instance mode.
+- Promotion path.
+- Scheduler ownership tied to the active lease.
+- Discord gateway ownership decision:
+  - only active instance logs into Discord, or
+  - both connect but only lease owner processes events. The former is simpler
+    and safer.
+
+---
+
+## Suggested Acceptance Criteria
+
+For the first implementation PR:
+
+- Sending `SIGTERM` to the running process logs a clear shutdown sequence.
+- New Discord interactions during drain receive a restart response when
+  possible.
+- Existing tracked operations are allowed to complete until a configured
+  timeout.
+- Bump and cleanup schedulers stop creating new work.
+- `closeDb()` runs on production shutdown.
+- Docker allows enough stop time for graceful drain.
+- If timeout is exceeded, the app logs what was still in flight before exit.
+
+For a later blue-green PR:
+
+- Two containers can exist, but only one owns Discord processing and scheduler
+  work.
+- Promotion and demotion are explicit and observable.
+- A failed new container does not steal active ownership.
+
+---
+
+## Open Questions for Review
+
+- What shutdown timeout is acceptable for production? My starting suggestion
+  is 60 seconds for normal drain, with Docker `stop_grace_period` set to 90
+  seconds.
+- Should voice transcript dump block deploy drain, or should it be best-effort
+  with a shorter timeout such as 15 seconds?
+- Should support-server join verification be skipped during drain, or queued
+  somehow? Today it can be recovered by the Verify button.
+- Do we want a small internal HTTP health/drain server now, or defer until
+  blue-green orchestration actually needs it?
+- Should Postgres advisory lock be introduced in Phase 1 as a passive safety
+  measure, or deferred until blue-green?
