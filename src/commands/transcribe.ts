@@ -108,8 +108,14 @@ module.exports = {
         return interaction.editReply('⚠️ No transcription session is active.');
       }
 
+      if (result.final) {
+        return interaction.editReply(
+          `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+        );
+      }
+
       return interaction.editReply(
-        `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+        `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
       );
     }
 

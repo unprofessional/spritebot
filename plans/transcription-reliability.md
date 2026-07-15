@@ -232,6 +232,66 @@ Tests:
 - Final dump includes segments that finished during drain.
 - Failure report counts match actual failures.
 
+### Phase 4: Progress UI Polish + Cleanup
+
+Deliverables:
+
+- Replace raw progress counter messages like
+  `done=5 failed=0 timeout=0 queued=12 transcribing=2` with a
+  SOULbot-style editable progress message.
+- Use one text-channel progress message during drain instead of sending a new
+  message every interval.
+- Render a compact progress bar and human-readable summary:
+
+  ```text
+  Transcription still processing...
+  ██████░░░░░░ 50% (18/36 segments)
+  12 queued, 2 in progress, 18 complete, 0 failed, 0 timed out.
+  ```
+
+- Throttle progress-message edits so Discord is not spammed during fast queue
+  movement; force the final update when processing completes or times out.
+- On final transcript post, either delete the progress message or edit it to a
+  final status such as `Transcription complete. Final transcript posted below.`
+- Replace raw queue-stat strings in transcript dump messages with the same
+  user-facing copy style.
+- Consolidate progress formatting into a small voice-local utility, taking the
+  useful parts of SOULbot's `progress_message.js` pattern without coupling the
+  repos.
+- Review Phase 1-3 cleanup/refactor opportunities:
+  - Keep `voice_manager.ts` focused on lifecycle orchestration by moving
+    transcript/progress presentation helpers out of the manager.
+  - Ensure session cleanup is single-path and idempotent across manual stop,
+    auto-stop, disconnect, drain timeout, and deployment shutdown.
+  - Re-check queue stats semantics after timeout so `pending` represents
+    user-visible unfinished records, not internal worker slots still unwinding.
+  - Consider whether `TranscriptionQueue` should expose a stable
+    `completedCount` / `totalCount` helper to prevent percentage math from
+    drifting between callers.
+  - Confirm progress output still behaves well when there are zero queued
+    segments, all failures, or a late completion after timeout.
+  - Remove redundant `getSpeakerIdentity` + `isBot` check inside
+    `transcribeSegment` — dead code since Phase 2 moved the bot filter into
+    `spoolAndQueueTranscription` before enqueue.
+
+Suggested files:
+
+- `src/voice/progress_message.ts` (new)
+- `src/voice/transcript_formatter.ts`
+- `src/voice/transcription_queue.ts`
+- `src/voice/voice_manager.ts`
+
+Tests:
+
+- Progress formatter renders a readable bar and summary from queue stats.
+- Progress handle edits one message, throttles duplicate/rapid updates, and
+  forces final updates.
+- Final drain completion dismisses or finalizes the progress message.
+- Timeout finalization reports timed-out segments without leaving a misleading
+  in-progress count.
+- Transcript dump messages use user-facing queue wording instead of raw
+  `key=value` counters.
+
 ---
 
 ## Configuration
@@ -263,17 +323,20 @@ For the full implementation:
 - Segments survive a process restart (disk spooling).
 - The user sees progress during long drain waits.
 - Partial transcripts are available immediately on stop.
+- Long drain progress updates are readable, low-noise, and do not spam the
+  channel with repeated status messages.
+- Final transcript messages use the same user-facing status language as the
+  progress UI.
 
 ---
 
-## Open Questions for Review
+## Resolved Questions
 
-- Should disk spooling use the container's `/tmp` or a mounted volume? `/tmp`
-  is simpler but won't survive container replacement. A volume survives but
-  adds Docker config.
-- What's the right concurrency limit for the current Whisper deployment? Need
-  to benchmark whether Whisper can actually handle 3 parallel requests or if
-  it serializes internally and we should use 1–2.
-- Should we add a max queue depth with a hard cap, beyond which we start
-  dropping lowest-energy segments? Or is disk spool + patience always better?
-- Is 120s drain timeout reasonable, or should it scale with queue depth?
+| Question                                                | Decision                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Disk spool: `/tmp` vs mounted volume                    | Use `/tmp`. Simpler, no Docker config changes. Spool data is transient by design — segments only need to survive long enough for transcription, not container replacement. Recovery on restart is best-effort logging, not automatic re-processing.                                           |
+| Whisper concurrency limit                               | Default to 3. The env knob (`TRANSCRIPTION_CONCURRENCY`) lets us tune down to 1–2 if benchmarking shows Whisper serializes internally. Start optimistic, dial back if needed.                                                                                                                 |
+| Max queue depth / segment dropping                      | No hard cap. Disk spool + patience is always better than dropping audio. The bounded concurrency queue already prevents Whisper overload, and the drain timeout prevents infinite waits. Dropping segments loses data with no recovery path.                                                  |
+| Drain timeout: fixed vs scaling                         | Fixed 120s default. Scaling with queue depth adds complexity for marginal benefit — the per-request timeout (60s) already bounds individual segment time, and the drain timeout is a backstop, not a precision tool. Tunable via `TRANSCRIPTION_DRAIN_TIMEOUT_MS` if a deployment needs more. |
+| Progress message: delete vs edit after final transcript | Edit into a completed status (e.g. "✅ Transcription complete. Final transcript posted below."). Deleting leaves a confusing gap if someone scrolls back. The edited message doubles as an audit trail.                                                                                       |
+| Progress bar: count failed/timed-out as resolved        | Yes. The bar represents "how much queue work remains," not success rate. Users watching a progress bar want to know when it'll be done. Success/failure breakdown belongs in the summary line underneath and in the transcript file.                                                          |
