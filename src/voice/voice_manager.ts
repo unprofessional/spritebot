@@ -13,7 +13,6 @@ import {
   Events,
   Guild,
   GuildTextBasedChannel,
-  PermissionFlagsBits,
   VoiceState,
   VoiceBasedChannel,
 } from 'discord.js';
@@ -41,6 +40,10 @@ import {
   type TranscriptEntry,
 } from './transcript_formatter';
 import { TranscriptionClient } from './transcription_client';
+import {
+  formatMissingTranscriptionPermissions,
+  getMissingTranscriptionPermissions,
+} from './transcription_permissions';
 import { TranscriptionQueue, type TranscriptionSegmentRecord } from './transcription_queue';
 import { encodePcm16MonoWav } from './wav';
 
@@ -121,13 +124,13 @@ export class VoiceManager {
     const existing = this.sessions.get(params.guild.id);
     if (existing) return toStatus(existing);
 
-    const botMember = params.guild.members.me ?? (await params.guild.members.fetchMe());
-    const permissions = params.voiceChannel.permissionsFor(botMember);
-    if (
-      !permissions?.has(PermissionFlagsBits.Connect) ||
-      !permissions.has(PermissionFlagsBits.Speak)
-    ) {
-      throw new Error('I need Connect and Speak permissions in that voice channel.');
+    const missingPermissions = await getMissingTranscriptionPermissions(
+      params.guild,
+      params.voiceChannel,
+      params.textChannel,
+    );
+    if (missingPermissions.length > 0) {
+      throw new Error(formatMissingTranscriptionPermissions(missingPermissions));
     }
 
     const connection = joinVoiceChannel({
