@@ -343,6 +343,29 @@ pipeline {
                       [ "\$running" = "true" ]
                     }
 
+                    stop_service_with_logs() {
+                      service="\$1"
+                      echo "[deploy] Stopping old \$service container with 90s grace period..."
+                      stop_started="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                      compose_bg stop -t 90 "\$service"
+                      stop_finished="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                      echo "[deploy] Stop command completed. started=\$stop_started finished=\$stop_finished"
+
+                      compose_bg logs --no-color --since 10m "\$service" > .deploy-shutdown.log 2>/dev/null || true
+                      if [ -s .deploy-shutdown.log ]; then
+                        echo '[deploy] Recent lifecycle shutdown log lines:'
+                        grep -E '\\[lifecycle\\]|shutdown|drain|voice shutdown|database close' .deploy-shutdown.log | tail -80 || true
+
+                        if grep -q '\\[lifecycle\\] database close' .deploy-shutdown.log; then
+                          echo '[deploy] Observed graceful shutdown through database close.'
+                        else
+                          echo '[deploy] WARNING: did not observe database close in recent logs; shutdown may have timed out or logging may be incomplete.' >&2
+                        fi
+                      else
+                        echo '[deploy] WARNING: no recent shutdown logs were available for the old container.' >&2
+                      fi
+                    }
+
                     current_service=''
                     running_services=''
                     running_count=0
@@ -373,6 +396,13 @@ pipeline {
                     fi
                     echo "[deploy] Target standby slot: \$target_service"
 
+                    if [ "\$current_service" = "spritebot" ]; then
+                      echo '[deploy] Legacy spritebot service predates slot lease coordination; stopping it before starting the first blue/green slot.'
+                      stop_service_with_logs "\$current_service"
+                      compose_bg rm -f "\$current_service" >/dev/null 2>&1 || true
+                      current_service=''
+                    fi
+
                     find . -mindepth 1 -maxdepth 1 \
                       ! -name .env \
                       ! -name .env.infisical \
@@ -389,26 +419,7 @@ pipeline {
                     compose_bg up -d --build --no-deps "\$target_service"
 
                     if [ -n "\$current_service" ]; then
-                      echo "[deploy] Stopping old \$current_service container with 90s grace period..."
-                      stop_started="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                      compose_bg stop -t 90 "\$current_service"
-                      stop_finished="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-                      echo "[deploy] Stop command completed. started=\$stop_started finished=\$stop_finished"
-
-                      compose_bg logs --no-color --since 10m "\$current_service" > .deploy-shutdown.log 2>/dev/null || true
-                      if [ -s .deploy-shutdown.log ]; then
-                        echo '[deploy] Recent lifecycle shutdown log lines:'
-                        grep -E '\\[lifecycle\\]|shutdown|drain|voice shutdown|database close' .deploy-shutdown.log | tail -80 || true
-
-                        if grep -q '\\[lifecycle\\] database close' .deploy-shutdown.log; then
-                          echo '[deploy] Observed graceful shutdown through database close.'
-                        else
-                          echo '[deploy] WARNING: did not observe database close in recent logs; shutdown may have timed out or logging may be incomplete.' >&2
-                        fi
-                      else
-                        echo '[deploy] WARNING: no recent shutdown logs were available for the old container.' >&2
-                      fi
-
+                      stop_service_with_logs "\$current_service"
                       compose_bg rm -f "\$current_service" >/dev/null 2>&1 || true
                     fi
 

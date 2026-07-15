@@ -492,8 +492,13 @@ Deliverables:
   - Wait up to 60s for the target slot to log runtime lease acquisition or
     Discord login.
 - Legacy transition support.
-  - First deploy after this phase can hand off from the existing `spritebot`
+  - First deploy after this phase can move from the existing `spritebot`
     service to `spritebot-blue`.
+  - If the current service is the legacy `spritebot` service, Jenkins stops it
+    before starting the first slot. The live host was verified to be running a
+    pre-lease artifact with no `runtime_instance_lease` table, so starting a
+    standby slot first would let it acquire an empty lease while the legacy bot
+    was still connected to Discord.
   - Later deploys alternate between blue and green slots.
 
 Tests:
@@ -507,6 +512,9 @@ Notes:
   shape, not a request/load-balancer strategy.
 - The candidate standby container connects to Postgres while waiting, but does
   not connect to Discord until it owns the lease.
+- The stop-first rule only applies to the legacy `spritebot` service. Once the
+  deployment is slot-based, the old slot owns the lease and the new standby can
+  safely start before the old slot drains.
 - If lease acquisition is not observed within 60s, Jenkins warns and prints
   target slot logs for manual diagnosis instead of silently declaring the
   handoff clean.
