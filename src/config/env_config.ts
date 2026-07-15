@@ -2,8 +2,24 @@
 import dotenv from 'dotenv';
 dotenv.config({ quiet: process.env.NODE_ENV === 'test' });
 
+/** Bump/config helpers */
+const toInt = (v: string | undefined, dflt: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dflt;
+};
+const toMs = (v: string | undefined, dfltMs: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
+};
+
 export const token = process.env.DISCORD_BOT_TOKEN ?? '';
 export const runMode = process.env.RUN_MODE ?? 'development';
+export const runtimeInstanceMode =
+  process.env.SPRITEBOT_INSTANCE_MODE === 'standby' ? 'standby' : 'active';
+export const runtimeInstanceId = process.env.SPRITEBOT_INSTANCE_ID ?? '';
+export const runtimeLeaseTtlMs = toMs(process.env.SPRITEBOT_LEASE_TTL_MS, 30_000);
+export const runtimeLeaseHeartbeatMs = toMs(process.env.SPRITEBOT_LEASE_HEARTBEAT_MS, 10_000);
+export const runtimeLeaseStandbyPollMs = toMs(process.env.SPRITEBOT_STANDBY_POLL_MS, 5_000);
 
 export const pgHost = process.env.PG_HOST ?? '';
 export const pgPort = process.env.PG_PORT ?? '';
@@ -18,16 +34,6 @@ export const supportGuildId = process.env.SUPPORT_GUILD_ID ?? '15260587255872921
 export const supportSubscriberRoleId = process.env.SUBSCRIBER_ROLE_ID ?? '';
 export const supportPlayerRoleId = process.env.PLAYER_ROLE_ID ?? '';
 export const supportInviteUrl = process.env.SUPPORT_INVITE_URL ?? 'https://discord.gg/eXktxzKxze';
-
-/** Bump config (minutes) */
-const toInt = (v: string | undefined, dflt: number) => {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dflt;
-};
-const toMs = (v: string | undefined, dfltMs: number) => {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
-};
 
 export const transcriptionServiceUrl =
   process.env.TRANSCRIPTION_SERVICE_URL ?? 'http://192.168.7.73:9700/inference';
