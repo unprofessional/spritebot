@@ -466,6 +466,26 @@ If a bad container is still running and Jenkins is unavailable, stop it with the
 docker compose stop -t 90 spritebot
 ```
 
+### Active Instance Lease
+
+SPRITEbot has a Postgres-backed runtime lease so future blue-green deployments can run a standby
+container without duplicate Discord gateway processing. Only the lease owner registers commands,
+logs into Discord, and starts schedulers.
+
+Runtime variables:
+
+- `SPRITEBOT_INSTANCE_MODE=active` starts normally and fails fast if another live instance owns the lease.
+- `SPRITEBOT_INSTANCE_MODE=standby` waits without connecting to Discord until the active lease expires
+  or is released, then promotes itself by acquiring the lease and logging in.
+- `SPRITEBOT_INSTANCE_ID` optionally sets a stable human-readable instance id; otherwise one is generated
+  from host, process id, and a random suffix.
+- `SPRITEBOT_LEASE_TTL_MS` defaults to `30000`.
+- `SPRITEBOT_LEASE_HEARTBEAT_MS` defaults to `10000`.
+- `SPRITEBOT_STANDBY_POLL_MS` defaults to `5000`.
+
+The active instance releases the lease after Discord client teardown and before DB pool close during
+graceful shutdown. If an active process dies without cleanup, standby promotion waits for the lease TTL.
+
 ### Secret Management (Infisical)
 
 Spritebot uses [Infisical](https://infisical.com/) for secret management. Application secrets (bot token, DB credentials, etc.) are stored in Infisical and injected at container startup via the Infisical CLI. No application secrets are stored in local files.

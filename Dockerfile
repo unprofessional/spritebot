@@ -1,7 +1,9 @@
 # ---------- Builder ----------
-FROM node:22.22.0-alpine AS builder
+FROM node:22.22.0-bookworm-slim AS builder
 
-RUN apk add --no-cache python3 make g++
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -12,12 +14,14 @@ COPY . .
 RUN npm run build
 
 # ---------- Runtime ----------
-FROM node:22.22.0-alpine AS runtime
+FROM node:22.22.0-bookworm-slim AS runtime
 
 # Install Infisical CLI
-RUN apk add --no-cache curl bash \
-    && curl -1sLf "https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.alpine.sh" | bash \
-    && apk add --no-cache infisical
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends bash ca-certificates curl \
+    && curl -1sLf "https://dl.cloudsmith.io/public/infisical/infisical-cli/setup.deb.sh" | bash \
+    && apt-get install -y --no-install-recommends infisical \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
