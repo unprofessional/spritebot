@@ -453,13 +453,24 @@ Deliverables:
 Deliverables:
 
 - Active instance lease.
+  - Implemented as a Postgres-backed `runtime_instance_lease` row keyed by
+    `discord-gateway`.
+  - The lease has heartbeat and expiry fields so a standby container can
+    promote after an unclean active-instance failure.
 - Standby instance mode.
+  - `SPRITEBOT_INSTANCE_MODE=standby` waits without logging into Discord until
+    it acquires the active lease.
 - Promotion path.
+  - Standby promotion is automatic on lease acquisition. It then registers
+    commands, logs into Discord, and starts scheduler ownership normally.
 - Scheduler ownership tied to the active lease.
+  - Schedulers are only started in the Discord `ready` path after the runtime
+    lease is acquired.
 - Discord gateway ownership decision:
   - only active instance logs into Discord, or
   - both connect but only lease owner processes events. The former is simpler
     and safer.
+  - Decision implemented: only the lease owner logs into Discord.
 
 ---
 
