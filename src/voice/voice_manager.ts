@@ -24,9 +24,11 @@ import {
   isDraining,
   trackOperation,
 } from '../runtime/lifecycle';
+import { transcriptionConcurrency } from '../config/env_config';
 import { AudioReceiver } from './audio_receiver';
 import type { SpeechSegment } from './segment_buffer';
 import { TranscriptionClient } from './transcription_client';
+import { TranscriptionQueue, type TranscriptionSegmentRecord } from './transcription_queue';
 import { encodePcm16MonoWav } from './wav';
 
 export type StartTranscriptionParams = {
@@ -65,7 +67,8 @@ type VoiceSession = VoiceSessionStatus & {
   transcript: TranscriptEntry[];
   participants: Set<string>;
   speakerIdentities: Map<string, SpeakerIdentity>;
-  pendingTranscriptions: Set<Promise<void>>;
+  segmentRecords: TranscriptionSegmentRecord[];
+  transcriptionQueue: TranscriptionQueue;
   isStopping: boolean;
 };
 
@@ -138,7 +141,8 @@ export class VoiceManager {
       transcript: [],
       participants: new Set(),
       speakerIdentities: new Map(),
-      pendingTranscriptions: new Set(),
+      segmentRecords: [],
+      transcriptionQueue: new TranscriptionQueue({ concurrency: transcriptionConcurrency }),
       isStopping: false,
     };
 
@@ -191,7 +195,7 @@ export class VoiceManager {
 
     session.isStopping = true;
     session.connection.destroy();
-    await Promise.allSettled([...session.pendingTranscriptions]);
+    await session.transcriptionQueue.onIdle();
     await this.sendTranscriptDump(session, autoStopped);
     this.sessions.delete(guildId);
 
@@ -238,31 +242,36 @@ export class VoiceManager {
   }
 
   private queueTranscription(session: VoiceSession, userId: string, segment: SpeechSegment): void {
-    const task = this.transcribeSegment(session, userId, segment)
-      .catch((err) => {
-        console.error(`[voice] transcription failed guild=${session.guildId} user=${userId}`, err);
-      })
-      .finally(() => {
-        session.pendingTranscriptions.delete(task);
-      });
+    const queued = session.transcriptionQueue.enqueue({
+      userId,
+      timestamp: segment.startedAt,
+      durationMs: segment.durationMs,
+      transcribe: () => this.transcribeSegment(session, userId, segment),
+    });
+    session.segmentRecords.push(queued.record);
 
-    session.pendingTranscriptions.add(task);
+    void queued.completion.then((record) => {
+      if (record.status !== 'failed') return;
+      console.error(
+        `[voice] transcription failed guild=${session.guildId} user=${userId} segment=${record.id}: ${record.lastError}`,
+      );
+    });
   }
 
   private async transcribeSegment(
     session: VoiceSession,
     userId: string,
     segment: SpeechSegment,
-  ): Promise<void> {
+  ): Promise<string | null> {
     const speaker = await this.getSpeakerIdentity(session, userId);
-    if (speaker.isBot) return;
+    if (speaker.isBot) return null;
 
     const wav = encodePcm16MonoWav(segment.pcm);
     const result = await this.transcriptionClient.transcribeWav(
       wav,
       `${session.guildId}-${userId}-${segment.startedAt.getTime()}.wav`,
     );
-    if (!result.text) return;
+    if (!result.text) return null;
 
     session.participants.add(userId);
     session.participantCount = session.participants.size;
@@ -273,6 +282,7 @@ export class VoiceManager {
       timestamp: segment.startedAt,
       text: result.text,
     });
+    return result.text;
   }
 
   private async getSpeakerIdentity(

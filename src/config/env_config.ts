@@ -35,6 +35,12 @@ export const transcriptionSilenceMs = toMs(process.env.TRANSCRIPTION_SILENCE_MS,
 export const transcriptionMaxSegmentMs = toMs(process.env.TRANSCRIPTION_MAX_SEGMENT_MS, 30_000);
 export const transcriptionMinSegmentMs = toMs(process.env.TRANSCRIPTION_MIN_SEGMENT_MS, 600);
 export const transcriptionVadThreshold = Number(process.env.TRANSCRIPTION_VAD_THRESHOLD ?? '0.012');
+export const transcriptionConcurrency = toInt(process.env.TRANSCRIPTION_CONCURRENCY, 3);
+export const transcriptionRequestTimeoutMs = toMs(
+  process.env.TRANSCRIPTION_REQUEST_TIMEOUT_MS,
+  60_000,
+);
+export const transcriptionMaxRetries = Math.max(0, toInt(process.env.TRANSCRIPTION_MAX_RETRIES, 2));
 
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)
 export const bumpDefaultMinutes = toInt(process.env.BUMP_DEFAULT_MINUTES, 10050);
