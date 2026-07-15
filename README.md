@@ -404,7 +404,10 @@ The pipeline:
 - builds the Docker image as an optional CI smoke check when Docker is available on the Jenkins agent
 - packages the repo into `spritebot-deploy.tar.gz`
 - deploys from `main` or `master` to `shinralabs`
-- preserves remote `.env.infisical` and rebuilds/restarts with `docker compose up -d --build --remove-orphans`
+- preserves remote `.env.infisical`
+- stops the existing `spritebot` container with the configured 90 second grace period before replacing it
+- prints recent lifecycle shutdown logs so Jenkins shows whether the app drained through `database close`
+- rebuilds/restarts with `docker compose up -d --build --remove-orphans`
 
 Jenkins assumptions:
 
@@ -417,6 +420,51 @@ Jenkins assumptions:
 
 If this job should deploy from `develop` instead of `main`/`master`, update `isDeployBranch()` in
 the Jenkinsfile.
+
+### Deployment Drain Verification
+
+Deploys are still single-container replacements, but Jenkins now makes the stop step explicit before
+extracting the new archive. The old container receives `SIGTERM` through Docker Compose, has up to the
+Compose `stop_grace_period` to drain, and Jenkins prints recent lifecycle lines from `docker compose logs`.
+
+Expected shutdown signs in Jenkins:
+
+- `[lifecycle] drain started: SIGTERM`
+- `[lifecycle] in-flight operations drained.` or a warning naming timed-out operations
+- `[lifecycle] voice shutdown...`
+- `[lifecycle] shutdown notification...`
+- `[lifecycle] discord client destroy...`
+- `[lifecycle] database close...`
+- `[deploy] Observed graceful shutdown through database close.`
+
+If Jenkins prints a warning that `database close` was not observed, treat the deploy as potentially forced
+or incomplete. Check the remote host before retrying:
+
+```bash
+ssh shinralabs
+cd ~/dev/spritebot
+docker compose ps
+docker compose logs --tail=200 spritebot
+```
+
+### Manual Rollback
+
+The safest rollback is to revert or reset the deploy branch to the previous known-good commit and rerun the
+Jenkins deploy. If the remote host needs immediate manual intervention:
+
+```bash
+ssh shinralabs
+cd ~/dev/spritebot
+docker compose ps
+docker compose logs --tail=200 spritebot
+docker compose up -d --build --remove-orphans
+```
+
+If a bad container is still running and Jenkins is unavailable, stop it with the same grace contract:
+
+```bash
+docker compose stop -t 90 spritebot
+```
 
 ### Secret Management (Infisical)
 
@@ -447,8 +495,6 @@ The entrypoint script (`entrypoint.sh`) authenticates with Infisical using Unive
 **Fallback:** If you need to run without Infisical, you can override the container command to `node dist/index.js` and provide a traditional `.env` file with all application secrets.
 
 The container does not provision PostgreSQL — you still need a reachable database.
-
-TODO: Add production restart/deploy steps for draining active Discord and database work before stopping the container, so shutdown notifications and in-flight operations have time to finish cleanly.
 
 ## Feature Access Model
 

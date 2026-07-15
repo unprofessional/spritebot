@@ -433,9 +433,20 @@ Tests:
 Deliverables:
 
 - Optional local drain/status endpoint or CLI.
+  - Deferred per the resolved decision below. Docker signal + logs remains the
+    single-container orchestration contract until blue-green needs external
+    readiness polling.
 - Jenkins deploy script waits for clean stop or reports forced timeout.
+  - Implemented by making the remote deploy stop explicit:
+    `docker compose stop -t 90 spritebot` before archive extraction and
+    replacement.
+  - Jenkins now warns if recent logs do not show the app reaching the
+    `database close` shutdown step.
 - Remote deploy logs shutdown summary.
+  - Jenkins prints recent lifecycle shutdown lines from the old container and
+    recent startup logs after `docker compose up`.
 - Document manual rollback and drain verification steps.
+  - Added to `README.md` under Jenkins deployment.
 
 ### Phase 4: Blue-Green Foundation
 
