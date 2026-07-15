@@ -270,6 +270,9 @@ Deliverables:
     drifting between callers.
   - Confirm progress output still behaves well when there are zero queued
     segments, all failures, or a late completion after timeout.
+  - Remove redundant `getSpeakerIdentity` + `isBot` check inside
+    `transcribeSegment` — dead code since Phase 2 moved the bot filter into
+    `spoolAndQueueTranscription` before enqueue.
 
 Suggested files:
 
@@ -327,19 +330,13 @@ For the full implementation:
 
 ---
 
-## Open Questions for Review
+## Resolved Questions
 
-- Should disk spooling use the container's `/tmp` or a mounted volume? `/tmp`
-  is simpler but won't survive container replacement. A volume survives but
-  adds Docker config.
-- What's the right concurrency limit for the current Whisper deployment? Need
-  to benchmark whether Whisper can actually handle 3 parallel requests or if
-  it serializes internally and we should use 1–2.
-- Should we add a max queue depth with a hard cap, beyond which we start
-  dropping lowest-energy segments? Or is disk spool + patience always better?
-- Is 120s drain timeout reasonable, or should it scale with queue depth?
-- Should the Phase 4 progress message be deleted after the final transcript, or
-  edited into a compact completed/timed-out status for auditability?
-- Should the progress bar include failed/timed-out segments as "complete" for
-  percentage purposes? Current proposal counts them as resolved because no more
-  work remains for those records.
+| Question                                                | Decision                                                                                                                                                                                                                                                                                      |
+| ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Disk spool: `/tmp` vs mounted volume                    | Use `/tmp`. Simpler, no Docker config changes. Spool data is transient by design — segments only need to survive long enough for transcription, not container replacement. Recovery on restart is best-effort logging, not automatic re-processing.                                           |
+| Whisper concurrency limit                               | Default to 3. The env knob (`TRANSCRIPTION_CONCURRENCY`) lets us tune down to 1–2 if benchmarking shows Whisper serializes internally. Start optimistic, dial back if needed.                                                                                                                 |
+| Max queue depth / segment dropping                      | No hard cap. Disk spool + patience is always better than dropping audio. The bounded concurrency queue already prevents Whisper overload, and the drain timeout prevents infinite waits. Dropping segments loses data with no recovery path.                                                  |
+| Drain timeout: fixed vs scaling                         | Fixed 120s default. Scaling with queue depth adds complexity for marginal benefit — the per-request timeout (60s) already bounds individual segment time, and the drain timeout is a backstop, not a precision tool. Tunable via `TRANSCRIPTION_DRAIN_TIMEOUT_MS` if a deployment needs more. |
+| Progress message: delete vs edit after final transcript | Edit into a completed status (e.g. "✅ Transcription complete. Final transcript posted below."). Deleting leaves a confusing gap if someone scrolls back. The edited message doubles as an audit trail.                                                                                       |
+| Progress bar: count failed/timed-out as resolved        | Yes. The bar represents "how much queue work remains," not success rate. Users watching a progress bar want to know when it'll be done. Success/failure breakdown belongs in the summary line underneath and in the transcript file.                                                          |
