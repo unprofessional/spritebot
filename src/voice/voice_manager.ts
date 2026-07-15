@@ -24,10 +24,17 @@ import {
   isDraining,
   trackOperation,
 } from '../runtime/lifecycle';
-import { transcriptionConcurrency } from '../config/env_config';
+import { transcriptionConcurrency, transcriptionDrainTimeoutMs } from '../config/env_config';
 import { AudioReceiver } from './audio_receiver';
 import { SegmentSpool } from './segment_spool';
 import type { SpeechSegment } from './segment_buffer';
+import {
+  formatDuration,
+  formatQueueStats,
+  formatTranscript,
+  type TranscriptDumpKind,
+  type TranscriptEntry,
+} from './transcript_formatter';
 import { TranscriptionClient } from './transcription_client';
 import { TranscriptionQueue, type TranscriptionSegmentRecord } from './transcription_queue';
 import { encodePcm16MonoWav } from './wav';
@@ -53,6 +60,10 @@ export type StopTranscriptionResult = {
   segmentCount: number;
   participantCount: number;
   autoStopped: boolean;
+  pendingCount: number;
+  failedCount: number;
+  timeoutCount: number;
+  final: boolean;
 };
 
 export type VoiceShutdownSummary = {
@@ -78,13 +89,6 @@ type VoiceSession = VoiceSessionStatus & {
 type SpeakerIdentity = {
   displayName: string;
   isBot: boolean;
-};
-
-type TranscriptEntry = {
-  userId: string;
-  displayName: string;
-  timestamp: Date;
-  text: string;
 };
 
 export class VoiceManager {
@@ -199,30 +203,75 @@ export class VoiceManager {
 
   private async stopAndDump(
     guildId: string,
-    { autoStopped }: { autoStopped: boolean },
+    { autoStopped, waitForFinal = false }: { autoStopped: boolean; waitForFinal?: boolean },
   ): Promise<StopTranscriptionResult> {
     const session = this.sessions.get(guildId);
     if (!session) {
       getVoiceConnection(guildId)?.destroy();
-      return { stopped: false, segmentCount: 0, participantCount: 0, autoStopped };
+      return {
+        stopped: false,
+        segmentCount: 0,
+        participantCount: 0,
+        autoStopped,
+        pendingCount: 0,
+        failedCount: 0,
+        timeoutCount: 0,
+        final: true,
+      };
     }
 
     session.isStopping = true;
     session.connection.destroy();
     await Promise.allSettled([...session.pendingSpools]);
-    await session.transcriptionQueue.onIdle();
-    try {
-      await this.sendTranscriptDump(session, autoStopped);
-    } finally {
-      await session.segmentSpool.cleanup();
-      this.sessions.delete(guildId);
+    const stats = session.transcriptionQueue.stats();
+
+    if (stats.pending === 0) {
+      try {
+        await this.sendTranscriptDump(session, autoStopped, { kind: 'final', timedOut: false });
+      } finally {
+        await session.segmentSpool.cleanup();
+        this.sessions.delete(guildId);
+      }
+
+      return {
+        stopped: true,
+        segmentCount: session.transcript.length,
+        participantCount: session.participants.size,
+        autoStopped,
+        pendingCount: 0,
+        failedCount: stats.failed,
+        timeoutCount: stats.timeout,
+        final: true,
+      };
     }
+
+    await this.sendTranscriptDump(session, autoStopped, { kind: 'partial', timedOut: false });
+    if (waitForFinal) {
+      await this.finishStoppedSession(session, autoStopped);
+      const finalStats = session.transcriptionQueue.stats();
+      return {
+        stopped: true,
+        segmentCount: session.transcript.length,
+        participantCount: session.participants.size,
+        autoStopped,
+        pendingCount: finalStats.pending,
+        failedCount: finalStats.failed,
+        timeoutCount: finalStats.timeout,
+        final: true,
+      };
+    }
+
+    void this.finishStoppedSession(session, autoStopped);
 
     return {
       stopped: true,
       segmentCount: session.transcript.length,
       participantCount: session.participants.size,
       autoStopped,
+      pendingCount: stats.pending,
+      failedCount: stats.failed,
+      timeoutCount: stats.timeout,
+      final: false,
     };
   }
 
@@ -242,7 +291,9 @@ export class VoiceManager {
     }
 
     const stopAll = Promise.allSettled(
-      guildIds.map((guildId) => this.stopAndDump(guildId, { autoStopped: true })),
+      guildIds.map((guildId) =>
+        this.stopAndDump(guildId, { autoStopped: true, waitForFinal: true }),
+      ),
     );
     const timedOut = await promiseTimedOut(stopAll, timeoutMs);
 
@@ -275,6 +326,47 @@ export class VoiceManager {
         session.pendingSpools.delete(spoolTask);
       });
     session.pendingSpools.add(spoolTask);
+  }
+
+  private async finishStoppedSession(session: VoiceSession, autoStopped: boolean): Promise<void> {
+    const progress = this.startProgressReporter(session);
+    const timedOut = await promiseTimedOut(
+      session.transcriptionQueue.onIdle(),
+      transcriptionDrainTimeoutMs,
+    );
+    if (timedOut) {
+      session.transcriptionQueue.markUnfinishedTimedOut(
+        `Drain timed out after ${transcriptionDrainTimeoutMs}ms`,
+      );
+    }
+
+    clearInterval(progress);
+    try {
+      await this.sendTranscriptDump(session, autoStopped, { kind: 'final', timedOut });
+    } catch (err) {
+      console.error(`[voice] failed to send final transcript guild=${session.guildId}`, err);
+    } finally {
+      await session.segmentSpool.cleanup();
+      this.sessions.delete(session.guildId);
+    }
+  }
+
+  private startProgressReporter(session: VoiceSession): NodeJS.Timeout {
+    return setInterval(() => {
+      void this.sendProgressUpdate(session);
+    }, 30_000);
+  }
+
+  private async sendProgressUpdate(session: VoiceSession): Promise<void> {
+    const channel = await session.client.channels.fetch(session.textChannelId).catch(() => null);
+    if (!isTextOutputChannel(channel)) return;
+
+    const stats = session.transcriptionQueue.stats();
+    if (stats.pending === 0) return;
+
+    await channel.send({
+      content: `Transcription is still processing. ${formatQueueStats(stats)}`,
+    });
   }
 
   private async spoolAndQueueTranscription(
@@ -376,24 +468,39 @@ export class VoiceManager {
     return identity;
   }
 
-  private async sendTranscriptDump(session: VoiceSession, autoStopped: boolean): Promise<void> {
+  private async sendTranscriptDump(
+    session: VoiceSession,
+    autoStopped: boolean,
+    { kind, timedOut }: { kind: TranscriptDumpKind; timedOut: boolean },
+  ): Promise<void> {
     const channel = await session.client.channels.fetch(session.textChannelId).catch(() => null);
     if (!isTextOutputChannel(channel)) return;
 
     const endedAt = new Date();
-    const transcript = formatTranscript(session, endedAt);
+    const stats = session.transcriptionQueue.stats();
+    const transcript = formatTranscript(
+      {
+        guildId: session.guildId,
+        voiceChannelId: session.voiceChannelId,
+        textChannelId: session.textChannelId,
+        startedAt: session.startedAt,
+        participants: session.participants.size,
+        transcript: session.transcript,
+        segmentRecords: session.segmentRecords,
+      },
+      { endedAt, kind, timedOut },
+    );
     const attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), {
-      name: `transcript-${session.guildId}-${session.startedAt.toISOString().replace(/[:.]/g, '-')}.txt`,
+      name: `${kind}-transcript-${session.guildId}-${session.startedAt.toISOString().replace(/[:.]/g, '-')}.txt`,
     });
 
     await channel.send({
       content: [
-        autoStopped
-          ? 'Transcription stopped because the voice channel emptied.'
-          : 'Transcription stopped.',
+        transcriptMessage(kind, autoStopped, timedOut),
         `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,
         `Participants: ${session.participants.size}`,
-        `Segments: ${session.transcript.length}`,
+        `Segments included: ${session.transcript.length}`,
+        `Queue: ${formatQueueStats(stats)}`,
       ].join('\n'),
       files: [attachment],
     });
@@ -440,48 +547,24 @@ export function initializeVoiceTranscription(client: Client): void {
   voiceManager.install(client);
 }
 
-function formatTranscript(session: VoiceSession, endedAt: Date): string {
-  const sorted = [...session.transcript].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-  );
-
-  const lines = [
-    'SPRITEbot Voice Transcript',
-    `Voice channel: ${session.voiceChannelId}`,
-    `Text channel: ${session.textChannelId}`,
-    `Started: ${session.startedAt.toISOString()}`,
-    `Ended: ${endedAt.toISOString()}`,
-    `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,
-    `Participants: ${session.participants.size}`,
-    `Segments: ${sorted.length}`,
-    '',
-  ];
-
-  if (sorted.length === 0) {
-    lines.push('(No speech segments were transcribed.)');
-    return `${lines.join('\n')}\n`;
+function transcriptMessage(
+  kind: TranscriptDumpKind,
+  autoStopped: boolean,
+  timedOut: boolean,
+): string {
+  if (kind === 'partial') {
+    return autoStopped
+      ? 'Transcription stopped because the voice channel emptied. Partial transcript attached; remaining audio is still processing.'
+      : 'Transcription stopped. Partial transcript attached; remaining audio is still processing.';
   }
 
-  for (const entry of sorted) {
-    lines.push(
-      `[${formatOffset(entry.timestamp.getTime() - session.startedAt.getTime())}] ${entry.displayName}: ${entry.text}`,
-    );
+  if (timedOut) {
+    return 'Final transcription drain timed out. Latest partial transcript attached.';
   }
 
-  return `${lines.join('\n')}\n`;
-}
-
-function formatOffset(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-
-  return [hours, minutes, seconds].map((part) => String(part).padStart(2, '0')).join(':');
-}
-
-function formatDuration(ms: number): string {
-  return formatOffset(ms);
+  return autoStopped
+    ? 'Transcription stopped because the voice channel emptied. Final transcript attached.'
+    : 'Transcription stopped. Final transcript attached.';
 }
 
 async function promiseTimedOut(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {

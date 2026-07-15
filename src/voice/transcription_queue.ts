@@ -1,4 +1,4 @@
-export type TranscriptionSegmentStatus = 'queued' | 'transcribing' | 'done' | 'failed';
+export type TranscriptionSegmentStatus = 'queued' | 'transcribing' | 'done' | 'failed' | 'timeout';
 
 export type TranscriptionSegmentRecord = {
   id: number;
@@ -17,6 +17,7 @@ export type TranscriptionQueueStats = {
   transcribing: number;
   done: number;
   failed: number;
+  timeout: number;
   active: number;
   pending: number;
 };
@@ -92,13 +93,13 @@ export class TranscriptionQueue {
         acc[record.status] += 1;
         return acc;
       },
-      { queued: 0, transcribing: 0, done: 0, failed: 0 },
+      { queued: 0, transcribing: 0, done: 0, failed: 0, timeout: 0 },
     );
 
     return {
       ...counts,
       active: this.activeCount,
-      pending: this.queue.length + this.activeCount,
+      pending: counts.queued + counts.transcribing,
     };
   }
 
@@ -108,6 +109,29 @@ export class TranscriptionQueue {
     await new Promise<void>((resolve) => {
       this.idleResolvers.add(resolve);
     });
+  }
+
+  markUnfinishedTimedOut(message: string): number {
+    const queuedTasks = this.queue.splice(0);
+    let timedOut = 0;
+
+    for (const task of queuedTasks) {
+      if (task.record.status !== 'queued' && task.record.status !== 'transcribing') continue;
+      task.record.status = 'timeout';
+      task.record.lastError = message;
+      timedOut += 1;
+      task.resolve(task.record);
+    }
+
+    for (const record of this.records) {
+      if (record.status !== 'queued' && record.status !== 'transcribing') continue;
+      record.status = 'timeout';
+      record.lastError = message;
+      timedOut += 1;
+    }
+
+    this.resolveIdleIfReady();
+    return timedOut;
   }
 
   private pump(): void {
@@ -123,14 +147,24 @@ export class TranscriptionQueue {
   }
 
   private async runTask(task: QueuedTask): Promise<void> {
+    const isTimedOut = () => task.record.status === ('timeout' as TranscriptionSegmentStatus);
+
+    if (isTimedOut()) {
+      task.resolve(task.record);
+      return;
+    }
+
     task.record.status = 'transcribing';
     task.record.attempts += 1;
 
     try {
-      task.record.result = await task.transcribe();
+      const result = await task.transcribe();
+      if (isTimedOut()) return;
+      task.record.result = result;
       task.record.status = 'done';
       task.record.lastError = null;
     } catch (err) {
+      if (isTimedOut()) return;
       task.record.status = 'failed';
       task.record.lastError = errorMessage(err);
     } finally {
