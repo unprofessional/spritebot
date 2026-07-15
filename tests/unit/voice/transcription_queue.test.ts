@@ -46,6 +46,7 @@ describe('TranscriptionQueue', () => {
       userId: 'user-1',
       timestamp: new Date('2026-07-15T00:00:00.000Z'),
       durationMs: 1_000,
+      diskPath: '/tmp/spritebot-voice/session/segment.wav',
       transcribe: async () => {
         throw new Error('whisper unavailable');
       },
@@ -55,6 +56,7 @@ describe('TranscriptionQueue', () => {
       status: 'failed',
       attempts: 1,
       lastError: 'whisper unavailable',
+      diskPath: '/tmp/spritebot-voice/session/segment.wav',
     });
     expect(queue.snapshot()).toHaveLength(1);
     expect(queue.stats()).toMatchObject({ failed: 1, pending: 0 });
