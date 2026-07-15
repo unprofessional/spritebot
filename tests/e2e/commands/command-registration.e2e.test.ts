@@ -1,6 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { REST } from 'discord.js';
+import { Events, REST } from 'discord.js';
+
+import { beginDrain, DRAINING_REPLY, resetLifecycleForTests } from '../../../src/runtime/lifecycle';
 
 const commandDir = path.resolve(__dirname, '../../../src/commands');
 const opsOnlyCommands = new Set(['gift', 'toggle-bypass']);
@@ -40,6 +42,7 @@ describe('command registration', () => {
   });
 
   afterEach(() => {
+    resetLifecycleForTests();
     logSpy.mockRestore();
     warnSpy.mockRestore();
     errorSpy.mockRestore();
@@ -115,4 +118,46 @@ describe('command registration', () => {
       );
     }
   });
+
+  test('responds to new interactions with a drain message during shutdown', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = {
+      on: jest.fn(),
+      once: jest.fn(),
+    };
+    await initializeCommands(client);
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    expect(interactionListener).toBeDefined();
+
+    beginDrain('test');
+    const interaction = {
+      isRepliable: () => true,
+      replied: false,
+      deferred: false,
+      reply: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content: DRAINING_REPLY,
+      ephemeral: true,
+    });
+  });
 });
+
+async function flushPromises(): Promise<void> {
+  await Promise.resolve();
+  await Promise.resolve();
+}
