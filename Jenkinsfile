@@ -328,6 +328,37 @@ pipeline {
                       exit 1
                     fi
 
+                    echo '[deploy] Checking for existing spritebot container...'
+                    existing_container="\$(docker compose ps -q spritebot || true)"
+                    if [ -n "\$existing_container" ]; then
+                      running="\$(docker inspect -f '{{.State.Running}}' "\$existing_container" 2>/dev/null || echo false)"
+                      if [ "\$running" = "true" ]; then
+                        echo '[deploy] Stopping existing spritebot container with 90s grace period...'
+                        stop_started="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                        docker compose stop -t 90 spritebot
+                        stop_finished="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                        echo "[deploy] Stop command completed. started=\$stop_started finished=\$stop_finished"
+
+                        docker compose logs --no-color --since 10m spritebot > .deploy-shutdown.log 2>/dev/null || true
+                        if [ -s .deploy-shutdown.log ]; then
+                          echo '[deploy] Recent lifecycle shutdown log lines:'
+                          grep -E '\\[lifecycle\\]|shutdown|drain|voice shutdown|database close' .deploy-shutdown.log | tail -80 || true
+
+                          if grep -q '\\[lifecycle\\] database close' .deploy-shutdown.log; then
+                            echo '[deploy] Observed graceful shutdown through database close.'
+                          else
+                            echo '[deploy] WARNING: did not observe database close in recent logs; shutdown may have timed out or logging may be incomplete.' >&2
+                          fi
+                        else
+                          echo '[deploy] WARNING: no recent shutdown logs were available for the old container.' >&2
+                        fi
+                      else
+                        echo '[deploy] Existing spritebot container is not running; skipping stop.'
+                      fi
+                    else
+                      echo '[deploy] No existing spritebot container found.'
+                    fi
+
                     find . -mindepth 1 -maxdepth 1 \
                       ! -name .env \
                       ! -name .env.infisical \
@@ -340,9 +371,11 @@ pipeline {
                     docker compose config >/dev/null
                     docker compose up -d --build --remove-orphans
                     docker compose ps
+                    echo '[deploy] Recent startup log lines:'
+                    docker compose logs --no-color --tail=80 spritebot || true
                     rm -f ${env.DEPLOY_ARCHIVE}
                   """,
-                  execTimeout: 120000,
+                  execTimeout: 600000,
                 ),
               ],
               verbose: true,
