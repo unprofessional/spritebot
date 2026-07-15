@@ -18,10 +18,10 @@ interface SchedulerOptions {
   intervalHours?: number;
   logger?: CleanupLogger;
   runImmediately?: boolean;
-  registerSignals?: boolean;
 }
 
 let cleanupHandle: NodeJS.Timeout | null = null;
+let activeCleanupRun: Promise<HousekeepingPurgeResult[]> | null = null;
 
 function formatResults(results: HousekeepingPurgeResult[]): string {
   return results.map((result) => `${result.category}=${result.count}`).join(' ');
@@ -52,16 +52,18 @@ export function startCleanupScheduler({
   intervalHours = cleanupIntervalHours,
   logger = console,
   runImmediately = true,
-  registerSignals = true,
 }: SchedulerOptions = {}): void {
   if (cleanupHandle) return;
 
   const intervalMs = Math.max(1, intervalHours) * HOURS_TO_MS;
   const tick = async () => {
     try {
-      await runCleanupOnce({ cleanup, logger });
+      activeCleanupRun = runCleanupOnce({ cleanup, logger });
+      await activeCleanupRun;
     } catch (err) {
       logger.warn('[cleanup] scheduled cleanup failed:', err);
+    } finally {
+      activeCleanupRun = null;
     }
   };
 
@@ -70,16 +72,18 @@ export function startCleanupScheduler({
   cleanupHandle = setInterval(tick, intervalMs);
   cleanupHandle.unref?.();
 
-  if (registerSignals) {
-    process.once('SIGINT', stopCleanupScheduler);
-    process.once('SIGTERM', stopCleanupScheduler);
-  }
-
   logger.log(`[cleanup] scheduler started; interval=${intervalHours}h`);
 }
 
-export function stopCleanupScheduler(): void {
-  if (!cleanupHandle) return;
-  clearInterval(cleanupHandle);
-  cleanupHandle = null;
+export function stopCleanupScheduler(options: { wait?: false }): void;
+export function stopCleanupScheduler(options: { wait: true }): Promise<void>;
+export function stopCleanupScheduler(options: { wait?: boolean } = {}): Promise<void> | void {
+  if (cleanupHandle) {
+    clearInterval(cleanupHandle);
+    cleanupHandle = null;
+  }
+
+  if (options.wait) {
+    return activeCleanupRun?.then(() => undefined) ?? Promise.resolve();
+  }
 }

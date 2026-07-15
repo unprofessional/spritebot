@@ -18,6 +18,12 @@ import {
   VoiceBasedChannel,
 } from 'discord.js';
 
+import {
+  DrainInProgressError,
+  isDrainInProgressError,
+  isDraining,
+  trackOperation,
+} from '../runtime/lifecycle';
 import { AudioReceiver } from './audio_receiver';
 import type { SpeechSegment } from './segment_buffer';
 import { TranscriptionClient } from './transcription_client';
@@ -44,6 +50,12 @@ export type StopTranscriptionResult = {
   segmentCount: number;
   participantCount: number;
   autoStopped: boolean;
+};
+
+export type VoiceShutdownSummary = {
+  stopped: number;
+  timedOut: boolean;
+  remainingSessions: number;
 };
 
 type VoiceSession = VoiceSessionStatus & {
@@ -83,6 +95,10 @@ export class VoiceManager {
   }
 
   async start(params: StartTranscriptionParams): Promise<VoiceSessionStatus> {
+    if (isDraining()) {
+      throw new DrainInProgressError('SPRITEbot is restarting; voice transcription cannot start.');
+    }
+
     this.install(params.client);
 
     const existing = this.sessions.get(params.guild.id);
@@ -140,18 +156,27 @@ export class VoiceManager {
   }
 
   async handleVoiceStateUpdate(oldState: VoiceState, newState: VoiceState): Promise<void> {
-    const session = this.sessions.get(oldState.guild.id);
-    if (!session || session.isStopping) return;
+    if (isDraining()) return;
 
-    const touchedSessionChannel =
-      oldState.channelId === session.voiceChannelId ||
-      newState.channelId === session.voiceChannelId;
-    if (!touchedSessionChannel) return;
+    try {
+      await trackOperation('voice:state-update', async () => {
+        const session = this.sessions.get(oldState.guild.id);
+        if (!session || session.isStopping) return;
 
-    await new Promise((resolve) => setTimeout(resolve, 1_500));
-    if (this.hasNonBotMembers(oldState.guild, session.voiceChannelId)) return;
+        const touchedSessionChannel =
+          oldState.channelId === session.voiceChannelId ||
+          newState.channelId === session.voiceChannelId;
+        if (!touchedSessionChannel) return;
 
-    await this.stopAndDump(session.guildId, { autoStopped: true });
+        await new Promise((resolve) => setTimeout(resolve, 1_500));
+        if (this.hasNonBotMembers(oldState.guild, session.voiceChannelId)) return;
+
+        await this.stopAndDump(session.guildId, { autoStopped: true });
+      });
+    } catch (err) {
+      if (isDrainInProgressError(err)) return;
+      throw err;
+    }
   }
 
   private async stopAndDump(
@@ -181,6 +206,35 @@ export class VoiceManager {
   status(guildId: string): VoiceSessionStatus | null {
     const session = this.sessions.get(guildId);
     return session ? toStatus(session) : null;
+  }
+
+  async stopAllForShutdown({
+    timeoutMs = 15_000,
+  }: {
+    timeoutMs?: number;
+  } = {}): Promise<VoiceShutdownSummary> {
+    const guildIds = [...this.sessions.keys()];
+    if (!guildIds.length) {
+      return { stopped: 0, timedOut: false, remainingSessions: 0 };
+    }
+
+    const stopAll = Promise.allSettled(
+      guildIds.map((guildId) => this.stopAndDump(guildId, { autoStopped: true })),
+    );
+    const timedOut = await promiseTimedOut(stopAll, timeoutMs);
+
+    if (timedOut) {
+      for (const [guildId, session] of this.sessions) {
+        session.connection.destroy();
+        this.sessions.delete(guildId);
+      }
+    }
+
+    return {
+      stopped: guildIds.length - this.sessions.size,
+      timedOut,
+      remainingSessions: this.sessions.size,
+    };
   }
 
   private queueTranscription(session: VoiceSession, userId: string, segment: SpeechSegment): void {
@@ -348,4 +402,15 @@ function formatOffset(ms: number): string {
 
 function formatDuration(ms: number): string {
   return formatOffset(ms);
+}
+
+async function promiseTimedOut(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
+  let timeout: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<'timeout'>((resolve) => {
+    timeout = setTimeout(() => resolve('timeout'), Math.max(0, timeoutMs));
+  });
+
+  const result = await Promise.race([promise.then(() => 'done' as const), timeoutPromise]);
+  if (timeout) clearTimeout(timeout);
+  return result === 'timeout';
 }

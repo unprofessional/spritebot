@@ -9,3 +9,5 @@ services:
     command: ['/app/entrypoint.sh']
     restart: unless-stopped
     network_mode: bridge
+    init: true
+    stop_grace_period: 90s
