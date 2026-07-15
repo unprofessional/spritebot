@@ -26,11 +26,16 @@ import {
 } from '../runtime/lifecycle';
 import { transcriptionConcurrency, transcriptionDrainTimeoutMs } from '../config/env_config';
 import { AudioReceiver } from './audio_receiver';
+import {
+  createNoopTranscriptionProgressMessage,
+  createTranscriptionProgressMessage,
+  formatQueueSummary,
+  type TranscriptionProgressMessage,
+} from './progress_message';
 import { SegmentSpool } from './segment_spool';
 import type { SpeechSegment } from './segment_buffer';
 import {
   formatDuration,
-  formatQueueStats,
   formatTranscript,
   type TranscriptDumpKind,
   type TranscriptEntry,
@@ -329,7 +334,8 @@ export class VoiceManager {
   }
 
   private async finishStoppedSession(session: VoiceSession, autoStopped: boolean): Promise<void> {
-    const progress = this.startProgressReporter(session);
+    const progressMessage = await this.createProgressMessage(session);
+    const progress = this.startProgressReporter(session, progressMessage);
     const timedOut = await promiseTimedOut(
       session.transcriptionQueue.onIdle(),
       transcriptionDrainTimeoutMs,
@@ -343,6 +349,7 @@ export class VoiceManager {
     clearInterval(progress);
     try {
       await this.sendTranscriptDump(session, autoStopped, { kind: 'final', timedOut });
+      await progressMessage.complete(session.transcriptionQueue.stats(), { timedOut });
     } catch (err) {
       console.error(`[voice] failed to send final transcript guild=${session.guildId}`, err);
     } finally {
@@ -351,22 +358,29 @@ export class VoiceManager {
     }
   }
 
-  private startProgressReporter(session: VoiceSession): NodeJS.Timeout {
-    return setInterval(() => {
-      void this.sendProgressUpdate(session);
-    }, 30_000);
+  private async createProgressMessage(
+    session: VoiceSession,
+  ): Promise<TranscriptionProgressMessage> {
+    const channel = await session.client.channels.fetch(session.textChannelId).catch(() => null);
+    if (!isTextOutputChannel(channel)) return createNoopTranscriptionProgressMessage();
+
+    return createTranscriptionProgressMessage(channel, session.transcriptionQueue.stats()).catch(
+      (err) => {
+        console.error(`[voice] failed to create progress message guild=${session.guildId}`, err);
+        return createNoopTranscriptionProgressMessage();
+      },
+    );
   }
 
-  private async sendProgressUpdate(session: VoiceSession): Promise<void> {
-    const channel = await session.client.channels.fetch(session.textChannelId).catch(() => null);
-    if (!isTextOutputChannel(channel)) return;
-
-    const stats = session.transcriptionQueue.stats();
-    if (stats.pending === 0) return;
-
-    await channel.send({
-      content: `Transcription is still processing. ${formatQueueStats(stats)}`,
-    });
+  private startProgressReporter(
+    session: VoiceSession,
+    progressMessage: TranscriptionProgressMessage,
+  ): NodeJS.Timeout {
+    return setInterval(() => {
+      void progressMessage.update(session.transcriptionQueue.stats()).catch((err) => {
+        console.error(`[voice] failed to update progress message guild=${session.guildId}`, err);
+      });
+    }, 30_000);
   }
 
   private async spoolAndQueueTranscription(
@@ -391,7 +405,8 @@ export class VoiceManager {
       timestamp: segment.startedAt,
       durationMs: segment.durationMs,
       diskPath,
-      transcribe: () => this.transcribeSegment(session, userId, segment.startedAt, diskPath),
+      transcribe: () =>
+        this.transcribeSegment(session, userId, speaker.displayName, segment.startedAt, diskPath),
     });
     session.segmentRecords.push(queued.record);
 
@@ -422,12 +437,10 @@ export class VoiceManager {
   private async transcribeSegment(
     session: VoiceSession,
     userId: string,
+    displayName: string,
     startedAt: Date,
     diskPath: string,
   ): Promise<string | null> {
-    const speaker = await this.getSpeakerIdentity(session, userId);
-    if (speaker.isBot) return null;
-
     const wav = await session.segmentSpool.readSegment(diskPath);
     const result = await this.transcriptionClient.transcribeWav(
       wav,
@@ -440,7 +453,7 @@ export class VoiceManager {
     session.segmentsTranscribed += 1;
     session.transcript.push({
       userId,
-      displayName: speaker.displayName,
+      displayName,
       timestamp: startedAt,
       text: result.text,
     });
@@ -500,7 +513,7 @@ export class VoiceManager {
         `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,
         `Participants: ${session.participants.size}`,
         `Segments included: ${session.transcript.length}`,
-        `Queue: ${formatQueueStats(stats)}`,
+        `Queue: ${formatQueueSummary(stats)}`,
       ].join('\n'),
       files: [attachment],
     });
