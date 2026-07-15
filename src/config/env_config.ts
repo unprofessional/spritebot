@@ -2,8 +2,24 @@
 import dotenv from 'dotenv';
 dotenv.config({ quiet: process.env.NODE_ENV === 'test' });
 
+/** Bump/config helpers */
+const toInt = (v: string | undefined, dflt: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dflt;
+};
+const toMs = (v: string | undefined, dfltMs: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
+};
+
 export const token = process.env.DISCORD_BOT_TOKEN ?? '';
 export const runMode = process.env.RUN_MODE ?? 'development';
+export const runtimeInstanceMode =
+  process.env.SPRITEBOT_INSTANCE_MODE === 'standby' ? 'standby' : 'active';
+export const runtimeInstanceId = process.env.SPRITEBOT_INSTANCE_ID ?? '';
+export const runtimeLeaseTtlMs = toMs(process.env.SPRITEBOT_LEASE_TTL_MS, 30_000);
+export const runtimeLeaseHeartbeatMs = toMs(process.env.SPRITEBOT_LEASE_HEARTBEAT_MS, 10_000);
+export const runtimeLeaseStandbyPollMs = toMs(process.env.SPRITEBOT_STANDBY_POLL_MS, 5_000);
 
 export const pgHost = process.env.PG_HOST ?? '';
 export const pgPort = process.env.PG_PORT ?? '';
@@ -19,22 +35,23 @@ export const supportSubscriberRoleId = process.env.SUBSCRIBER_ROLE_ID ?? '';
 export const supportPlayerRoleId = process.env.PLAYER_ROLE_ID ?? '';
 export const supportInviteUrl = process.env.SUPPORT_INVITE_URL ?? 'https://discord.gg/eXktxzKxze';
 
-/** Bump config (minutes) */
-const toInt = (v: string | undefined, dflt: number) => {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dflt;
-};
-const toMs = (v: string | undefined, dfltMs: number) => {
-  const n = Number(v);
-  return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
-};
-
 export const transcriptionServiceUrl =
   process.env.TRANSCRIPTION_SERVICE_URL ?? 'http://192.168.7.73:9700/inference';
 export const transcriptionSilenceMs = toMs(process.env.TRANSCRIPTION_SILENCE_MS, 700);
 export const transcriptionMaxSegmentMs = toMs(process.env.TRANSCRIPTION_MAX_SEGMENT_MS, 30_000);
 export const transcriptionMinSegmentMs = toMs(process.env.TRANSCRIPTION_MIN_SEGMENT_MS, 600);
 export const transcriptionVadThreshold = Number(process.env.TRANSCRIPTION_VAD_THRESHOLD ?? '0.012');
+export const transcriptionConcurrency = toInt(process.env.TRANSCRIPTION_CONCURRENCY, 3);
+export const transcriptionRequestTimeoutMs = toMs(
+  process.env.TRANSCRIPTION_REQUEST_TIMEOUT_MS,
+  60_000,
+);
+export const transcriptionMaxRetries = Math.max(0, toInt(process.env.TRANSCRIPTION_MAX_RETRIES, 2));
+export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/tmp/spritebot-voice';
+export const transcriptionDrainTimeoutMs = toMs(
+  process.env.TRANSCRIPTION_DRAIN_TIMEOUT_MS,
+  120_000,
+);
 
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)
 export const bumpDefaultMinutes = toInt(process.env.BUMP_DEFAULT_MINUTES, 10050);

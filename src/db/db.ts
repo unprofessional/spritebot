@@ -41,6 +41,7 @@ export async function initializeDB(): Promise<void> {
       'rp_channel_mode',
       'rp_proxy_message',
       'lifecycle_notification_channel',
+      'runtime_instance_lease',
     ];
 
     // 🔍 Check which tables exist

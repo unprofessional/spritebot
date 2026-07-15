@@ -8,6 +8,10 @@ import {
 } from 'discord.js';
 
 import { PlayerDAO } from '../dao/player.dao';
+import {
+  formatMissingTranscriptionPermissions,
+  getMissingTranscriptionPermissions,
+} from '../voice/transcription_permissions';
 import { voiceManager } from '../voice/voice_manager';
 
 const playerDAO = new PlayerDAO();
@@ -89,6 +93,15 @@ module.exports = {
         return interaction.editReply('⚠️ Choose a text channel for transcript output.');
       }
 
+      const missingPermissions = await getMissingTranscriptionPermissions(
+        interaction.guild,
+        voiceChannel as VoiceBasedChannel,
+        textChannel as GuildTextBasedChannel,
+      );
+      if (missingPermissions.length > 0) {
+        return interaction.editReply(formatMissingTranscriptionPermissions(missingPermissions));
+      }
+
       const status = await voiceManager.start({
         client: interaction.client,
         guild: interaction.guild,
@@ -108,8 +121,14 @@ module.exports = {
         return interaction.editReply('⚠️ No transcription session is active.');
       }
 
+      if (result.final) {
+        return interaction.editReply(
+          `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+        );
+      }
+
       return interaction.editReply(
-        `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+        `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
       );
     }
 

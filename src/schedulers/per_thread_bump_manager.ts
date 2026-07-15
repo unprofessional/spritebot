@@ -23,6 +23,8 @@ export class PerThreadBumpManager {
   private inFlight = 0;
   private queue: Array<() => Promise<void>> = [];
   private readonly MAX_CONCURRENCY = 3;
+  private acceptingWork = true;
+  private drainWaiters = new Set<() => void>();
 
   private attempts = new Map<string, number>(); // thread_id -> failures
 
@@ -46,6 +48,8 @@ export class PerThreadBumpManager {
   }
 
   async onRegisteredOrUpdated(threadId: string): Promise<void> {
+    if (!this.acceptingWork) return;
+
     // Clear any existing timer and reschedule based on fresh DB row
     this.clearTimer(threadId);
 
@@ -65,12 +69,37 @@ export class PerThreadBumpManager {
   }
 
   stop(): void {
+    this.acceptingWork = false;
     for (const [id, t] of this.timers) {
       clearTimeout(t);
       this.timers.delete(id);
     }
-    // allow in-flight queue items to finish naturally
     console.log('[bump] manager stopped; timers cleared');
+    this.notifyDrainWaiters();
+  }
+
+  async drain(timeoutMs: number): Promise<boolean> {
+    if (this.isDrained()) return true;
+
+    await new Promise<void>((resolve) => {
+      let settled = false;
+      let timeout: NodeJS.Timeout;
+      const done = (waiter: () => void) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        this.drainWaiters.delete(waiter);
+        resolve();
+      };
+      const waiter = () => {
+        if (!this.isDrained()) return;
+        done(waiter);
+      };
+      timeout = setTimeout(() => done(waiter), Math.max(0, timeoutMs));
+      this.drainWaiters.add(waiter);
+    });
+
+    return this.isDrained();
   }
 
   // ---- internals ----
@@ -82,6 +111,8 @@ export class PerThreadBumpManager {
   }
 
   private async scheduleForRow(row: BumpThreadRow, nowMs: number) {
+    if (!this.acceptingWork) return;
+
     // ARCHIVE-AWARE: use the async nextDueAt(client, row)
     const dueAt = await this.service.nextDueAt(this.client, row);
     const baseDelay = Math.max(0, dueAt.getTime() - nowMs);
@@ -96,6 +127,8 @@ export class PerThreadBumpManager {
 
   // delayMs is required; callers precompute archive-aware delay
   private armOneShot(row: BumpThreadRow, delayMs: number) {
+    if (!this.acceptingWork) return;
+
     const baseDelay = Math.max(0, delayMs);
     const jittered = withJitter(Math.max(MIN_DELAY_MS, baseDelay)); // enforce floor + jitter
 
@@ -108,6 +141,8 @@ export class PerThreadBumpManager {
       try {
         await this.enqueueBump(() => this.service.bumpNow(this.client, row.thread_id));
         console.log(`[bump] fired OK thread=${row.thread_id}`);
+        if (!this.acceptingWork) return;
+
         // success → reset attempts and re-arm to next archive-aware due
         this.attempts.delete(row.thread_id);
         const fresh = await this.service['dao'].get(row.thread_id);
@@ -130,6 +165,8 @@ export class PerThreadBumpManager {
         }
 
         // Non-terminal: backoff retry
+        if (!this.acceptingWork) return;
+
         const nextAttempt = (this.attempts.get(row.thread_id) ?? 0) + 1;
         this.attempts.set(row.thread_id, nextAttempt);
         const backoff = retryDelayMs(nextAttempt);
@@ -147,6 +184,10 @@ export class PerThreadBumpManager {
   // --- tiny send queue ---
 
   private async enqueueBump(task: () => Promise<void>): Promise<void> {
+    if (!this.acceptingWork) {
+      throw new Error('Bump manager is stopping.');
+    }
+
     return new Promise<void>((resolve, reject) => {
       this.queue.push(async () => {
         try {
@@ -173,9 +214,20 @@ export class PerThreadBumpManager {
         })
         .finally(() => {
           this.inFlight--;
+          this.notifyDrainWaiters();
           // continue draining if more work remains
           if (this.queue.length > 0) void this.drainQueue();
         });
+    }
+  }
+
+  private isDrained(): boolean {
+    return this.inFlight === 0 && this.queue.length === 0;
+  }
+
+  private notifyDrainWaiters(): void {
+    for (const waiter of this.drainWaiters) {
+      waiter();
     }
   }
 }
