@@ -42,6 +42,10 @@ export const transcriptionRequestTimeoutMs = toMs(
 );
 export const transcriptionMaxRetries = Math.max(0, toInt(process.env.TRANSCRIPTION_MAX_RETRIES, 2));
 export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/tmp/spritebot-voice';
+export const transcriptionDrainTimeoutMs = toMs(
+  process.env.TRANSCRIPTION_DRAIN_TIMEOUT_MS,
+  120_000,
+);
 
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)
 export const bumpDefaultMinutes = toInt(process.env.BUMP_DEFAULT_MINUTES, 10050);
