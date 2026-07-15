@@ -1,6 +1,7 @@
 import { Client, Entitlement, Events } from 'discord.js';
 
 import { EntitlementsCacheDAO } from '../dao/entitlements_cache.dao';
+import { isDrainInProgressError, isDraining, trackOperation } from '../runtime/lifecycle';
 
 const dao = new EntitlementsCacheDAO();
 
@@ -50,9 +51,11 @@ async function upsertEntitlement(
 export function initializeEntitlementEvents(client: Client): void {
   client.on(Events.EntitlementCreate, (entitlement) => {
     void (async () => {
+      if (isDraining()) return;
       try {
-        await upsertEntitlement(entitlement, 'active');
+        await trackOperation('entitlement:create', () => upsertEntitlement(entitlement, 'active'));
       } catch (err) {
+        if (isDrainInProgressError(err)) return;
         console.error('[entitlement_events] Failed to process entitlement create:', err);
       }
     })();
@@ -60,9 +63,13 @@ export function initializeEntitlementEvents(client: Client): void {
 
   client.on(Events.EntitlementUpdate, (_oldEntitlement, newEntitlement) => {
     void (async () => {
+      if (isDraining()) return;
       try {
-        await upsertEntitlement(newEntitlement, 'active');
+        await trackOperation('entitlement:update', () =>
+          upsertEntitlement(newEntitlement, 'active'),
+        );
       } catch (err) {
+        if (isDrainInProgressError(err)) return;
         console.error('[entitlement_events] Failed to process entitlement update:', err);
       }
     })();
@@ -70,9 +77,11 @@ export function initializeEntitlementEvents(client: Client): void {
 
   client.on(Events.EntitlementDelete, (entitlement) => {
     void (async () => {
+      if (isDraining()) return;
       try {
-        await upsertEntitlement(entitlement, 'expired');
+        await trackOperation('entitlement:delete', () => upsertEntitlement(entitlement, 'expired'));
       } catch (err) {
+        if (isDrainInProgressError(err)) return;
         console.error('[entitlement_events] Failed to process entitlement delete:', err);
       }
     })();

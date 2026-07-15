@@ -30,8 +30,12 @@ function envTarget(): NotificationTarget | null {
   };
 }
 
-async function getNotificationTargets(): Promise<NotificationTarget[]> {
-  const rows = await lifecycleNotificationChannelDAO.findAll();
+async function getNotificationTargets(
+  options: { allowDuringDrain?: boolean } = {},
+): Promise<NotificationTarget[]> {
+  const rows = await lifecycleNotificationChannelDAO.findAll({
+    allowDuringDrain: options.allowDuringDrain,
+  });
   const targets: NotificationTarget[] = rows.map((row) => ({
     guildId: row.guild_id,
     channelId: row.channel_id,
@@ -53,8 +57,9 @@ async function getNotificationTargets(): Promise<NotificationTarget[]> {
 export async function sendLifecycleNotification(
   client: Client,
   event: LifecycleEvent,
+  options: { allowDuringDrain?: boolean } = {},
 ): Promise<NotificationSummary> {
-  const targets = await getNotificationTargets();
+  const targets = await getNotificationTargets({ allowDuringDrain: options.allowDuringDrain });
   if (!targets.length) return { sent: 0, failed: 0, skipped: 0 };
 
   const copy = EVENT_COPY[event];
@@ -99,21 +104,8 @@ export async function sendLifecycleNotification(
   );
 }
 
-export function installShutdownNotifications(client: Client): void {
-  let shuttingDown = false;
-
-  const handleSignal = (signal: NodeJS.Signals) => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-
-    void (async () => {
-      console.log(`[lifecycle] Received ${signal}; sending shutdown notification.`);
-      await sendLifecycleNotification(client, 'shutdown');
-      client.destroy();
-      process.exit(0);
-    })();
-  };
-
-  process.once('SIGINT', handleSignal);
-  process.once('SIGTERM', handleSignal);
+export function installShutdownNotifications(): void {
+  console.warn(
+    '[lifecycle] installShutdownNotifications is deprecated; shutdown is owned by runtime/lifecycle.',
+  );
 }

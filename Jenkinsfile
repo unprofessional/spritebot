@@ -328,6 +328,81 @@ pipeline {
                       exit 1
                     fi
 
+                    compose_bg() {
+                      docker compose --profile bluegreen "\$@"
+                    }
+
+                    is_service_running() {
+                      service="\$1"
+                      container="\$(compose_bg ps -q "\$service" 2>/dev/null || true)"
+                      if [ -z "\$container" ]; then
+                        return 1
+                      fi
+
+                      running="\$(docker inspect -f '{{.State.Running}}' "\$container" 2>/dev/null || echo false)"
+                      [ "\$running" = "true" ]
+                    }
+
+                    stop_service_with_logs() {
+                      service="\$1"
+                      echo "[deploy] Stopping old \$service container with 90s grace period..."
+                      stop_started="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                      compose_bg stop -t 90 "\$service"
+                      stop_finished="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                      echo "[deploy] Stop command completed. started=\$stop_started finished=\$stop_finished"
+
+                      compose_bg logs --no-color --since 10m "\$service" > .deploy-shutdown.log 2>/dev/null || true
+                      if [ -s .deploy-shutdown.log ]; then
+                        echo '[deploy] Recent lifecycle shutdown log lines:'
+                        grep -E '\\[lifecycle\\]|shutdown|drain|voice shutdown|database close' .deploy-shutdown.log | tail -80 || true
+
+                        if grep -q '\\[lifecycle\\] database close' .deploy-shutdown.log; then
+                          echo '[deploy] Observed graceful shutdown through database close.'
+                        else
+                          echo '[deploy] WARNING: did not observe database close in recent logs; shutdown may have timed out or logging may be incomplete.' >&2
+                        fi
+                      else
+                        echo '[deploy] WARNING: no recent shutdown logs were available for the old container.' >&2
+                      fi
+                    }
+
+                    current_service=''
+                    running_services=''
+                    running_count=0
+                    for candidate in spritebot-blue spritebot-green spritebot; do
+                      if is_service_running "\$candidate"; then
+                        running_services="\$running_services \$candidate"
+                        running_count=\$((running_count + 1))
+                        current_service="\$candidate"
+                      fi
+                    done
+
+                    if [ "\$running_count" -gt 1 ]; then
+                      echo "[deploy] Multiple spritebot services are running:\$running_services" >&2
+                      echo '[deploy] Refusing to guess the active slot. Stop the stale container manually and rerun deploy.' >&2
+                      exit 1
+                    fi
+
+                    if [ "\$current_service" = "spritebot-blue" ]; then
+                      target_service='spritebot-green'
+                    else
+                      target_service='spritebot-blue'
+                    fi
+
+                    if [ -n "\$current_service" ]; then
+                      echo "[deploy] Current active container appears to be \$current_service."
+                    else
+                      echo '[deploy] No running spritebot container found; target slot will start directly.'
+                    fi
+                    echo "[deploy] Target standby slot: \$target_service"
+
+                    if [ "\$current_service" = "spritebot" ]; then
+                      echo '[deploy] Legacy spritebot service predates slot lease coordination; stopping it before starting the first blue/green slot.'
+                      stop_service_with_logs "\$current_service"
+                      compose_bg rm -f "\$current_service" >/dev/null 2>&1 || true
+                      current_service=''
+                    fi
+
                     find . -mindepth 1 -maxdepth 1 \
                       ! -name .env \
                       ! -name .env.infisical \
@@ -337,12 +412,40 @@ pipeline {
 
                     tar -xzf ${env.DEPLOY_ARCHIVE}
                     chmod +x entrypoint.sh
-                    docker compose config >/dev/null
-                    docker compose up -d --build --remove-orphans
-                    docker compose ps
+                    compose_bg config >/dev/null
+
+                    echo "[deploy] Starting new \$target_service container in standby mode..."
+                    promotion_started="\$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+                    compose_bg up -d --build --no-deps "\$target_service"
+
+                    if [ -n "\$current_service" ]; then
+                      stop_service_with_logs "\$current_service"
+                      compose_bg rm -f "\$current_service" >/dev/null 2>&1 || true
+                    fi
+
+                    echo "[deploy] Waiting for \$target_service to acquire the runtime lease..."
+                    acquired='false'
+                    for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+                      if compose_bg logs --no-color --since "\$promotion_started" "\$target_service" 2>/dev/null |
+                        grep -Eq '\\[runtime-lease\\] acquired|Logged in as'; then
+                        acquired='true'
+                        break
+                      fi
+                      sleep 5
+                    done
+
+                    if [ "\$acquired" = "true" ]; then
+                      echo "[deploy] \$target_service acquired the runtime lease and is active."
+                    else
+                      echo "[deploy] WARNING: did not observe \$target_service acquire the runtime lease within 60s." >&2
+                    fi
+
+                    compose_bg ps
+                    echo "[deploy] Recent startup log lines for \$target_service:"
+                    compose_bg logs --no-color --tail=120 "\$target_service" || true
                     rm -f ${env.DEPLOY_ARCHIVE}
                   """,
-                  execTimeout: 120000,
+                  execTimeout: 600000,
                 ),
               ],
               verbose: true,

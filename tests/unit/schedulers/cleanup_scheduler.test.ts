@@ -62,7 +62,6 @@ describe('cleanup_scheduler', () => {
       cleanup,
       intervalHours: 1,
       logger,
-      registerSignals: false,
     });
 
     await flushPromises();
@@ -79,4 +78,37 @@ describe('cleanup_scheduler', () => {
       expect.any(Error),
     );
   });
+
+  test('waits for an active cleanup run when requested', async () => {
+    const logger = createLogger();
+    const release = deferred<HousekeepingPurgeResult[]>();
+    const cleanup = jest.fn().mockReturnValue(release.promise);
+
+    startCleanupScheduler({
+      cleanup,
+      logger,
+      runImmediately: true,
+    });
+    await flushPromises();
+
+    const stopped = stopCleanupScheduler({ wait: true });
+    let resolved = false;
+    void stopped.then(() => {
+      resolved = true;
+    });
+    await flushPromises();
+    expect(resolved).toBe(false);
+
+    release.resolve([]);
+    await expect(stopped).resolves.toBeUndefined();
+    expect(resolved).toBe(true);
+  });
 });
+
+function deferred<T>(): { promise: Promise<T>; resolve: (value: T) => void } {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve;
+  });
+  return { promise, resolve };
+}
