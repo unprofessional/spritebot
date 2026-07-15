@@ -8,6 +8,10 @@ import {
 } from 'discord.js';
 
 import { PlayerDAO } from '../dao/player.dao';
+import {
+  formatMissingTranscriptionPermissions,
+  getMissingTranscriptionPermissions,
+} from '../voice/transcription_permissions';
 import { voiceManager } from '../voice/voice_manager';
 
 const playerDAO = new PlayerDAO();
@@ -87,6 +91,15 @@ module.exports = {
         textChannel.type !== ChannelType.AnnouncementThread
       ) {
         return interaction.editReply('⚠️ Choose a text channel for transcript output.');
+      }
+
+      const missingPermissions = await getMissingTranscriptionPermissions(
+        interaction.guild,
+        voiceChannel as VoiceBasedChannel,
+        textChannel as GuildTextBasedChannel,
+      );
+      if (missingPermissions.length > 0) {
+        return interaction.editReply(formatMissingTranscriptionPermissions(missingPermissions));
       }
 
       const status = await voiceManager.start({
