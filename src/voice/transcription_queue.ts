@@ -5,6 +5,7 @@ export type TranscriptionSegmentRecord = {
   userId: string;
   timestamp: Date;
   durationMs: number;
+  diskPath: string | null;
   status: TranscriptionSegmentStatus;
   result: string | null;
   attempts: number;
@@ -21,9 +22,11 @@ export type TranscriptionQueueStats = {
 };
 
 type QueueTask = {
+  id?: number;
   userId: string;
   timestamp: Date;
   durationMs: number;
+  diskPath?: string | null;
   transcribe: () => Promise<string | null>;
 };
 
@@ -50,18 +53,25 @@ export class TranscriptionQueue {
     this.concurrency = Math.max(1, Math.floor(concurrency));
   }
 
+  reserveId(): number {
+    const id = this.nextId;
+    this.nextId += 1;
+    return id;
+  }
+
   enqueue(task: QueueTask): QueuedTranscription {
+    const id = task.id ?? this.reserveId();
     const record: TranscriptionSegmentRecord = {
-      id: this.nextId,
+      id,
       userId: task.userId,
       timestamp: task.timestamp,
       durationMs: task.durationMs,
+      diskPath: task.diskPath ?? null,
       status: 'queued',
       result: null,
       attempts: 0,
       lastError: null,
     };
-    this.nextId += 1;
     this.records.push(record);
 
     const completion = new Promise<TranscriptionSegmentRecord>((resolve) => {

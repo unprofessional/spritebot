@@ -26,6 +26,7 @@ import {
 } from '../runtime/lifecycle';
 import { transcriptionConcurrency } from '../config/env_config';
 import { AudioReceiver } from './audio_receiver';
+import { SegmentSpool } from './segment_spool';
 import type { SpeechSegment } from './segment_buffer';
 import { TranscriptionClient } from './transcription_client';
 import { TranscriptionQueue, type TranscriptionSegmentRecord } from './transcription_queue';
@@ -69,6 +70,8 @@ type VoiceSession = VoiceSessionStatus & {
   speakerIdentities: Map<string, SpeakerIdentity>;
   segmentRecords: TranscriptionSegmentRecord[];
   transcriptionQueue: TranscriptionQueue;
+  segmentSpool: SegmentSpool;
+  pendingSpools: Set<Promise<void>>;
   isStopping: boolean;
 };
 
@@ -88,10 +91,12 @@ export class VoiceManager {
   private readonly sessions = new Map<string, VoiceSession>();
   private readonly transcriptionClient = new TranscriptionClient();
   private installedClient: Client | null = null;
+  private checkedRecoverableSpools = false;
 
   install(client: Client): void {
     if (this.installedClient) return;
     this.installedClient = client;
+    this.reportRecoverableSpools();
     client.on(Events.VoiceStateUpdate, (oldState, newState) => {
       void this.handleVoiceStateUpdate(oldState, newState);
     });
@@ -126,6 +131,10 @@ export class VoiceManager {
 
     await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
 
+    const sessionId = `${Date.now()}-${process.pid}`;
+    const segmentSpool = new SegmentSpool({ guildId: params.guild.id, sessionId });
+    await segmentSpool.initialize();
+
     const session: VoiceSession = {
       client: params.client,
       guildId: params.guild.id,
@@ -143,12 +152,17 @@ export class VoiceManager {
       speakerIdentities: new Map(),
       segmentRecords: [],
       transcriptionQueue: new TranscriptionQueue({ concurrency: transcriptionConcurrency }),
+      segmentSpool,
+      pendingSpools: new Set(),
       isStopping: false,
     };
 
     session.receiver.start();
     connection.on(VoiceConnectionStatus.Disconnected, () => {
-      this.sessions.delete(params.guild.id);
+      if (session.isStopping) return;
+      void session.segmentSpool.cleanup().finally(() => {
+        this.sessions.delete(params.guild.id);
+      });
     });
 
     this.sessions.set(params.guild.id, session);
@@ -195,9 +209,14 @@ export class VoiceManager {
 
     session.isStopping = true;
     session.connection.destroy();
+    await Promise.allSettled([...session.pendingSpools]);
     await session.transcriptionQueue.onIdle();
-    await this.sendTranscriptDump(session, autoStopped);
-    this.sessions.delete(guildId);
+    try {
+      await this.sendTranscriptDump(session, autoStopped);
+    } finally {
+      await session.segmentSpool.cleanup();
+      this.sessions.delete(guildId);
+    }
 
     return {
       stopped: true,
@@ -230,6 +249,7 @@ export class VoiceManager {
     if (timedOut) {
       for (const [guildId, session] of this.sessions) {
         session.connection.destroy();
+        await session.segmentSpool.cleanup();
         this.sessions.delete(guildId);
       }
     }
@@ -242,11 +262,44 @@ export class VoiceManager {
   }
 
   private queueTranscription(session: VoiceSession, userId: string, segment: SpeechSegment): void {
+    if (session.isStopping) return;
+
+    const spoolTask = this.spoolAndQueueTranscription(session, userId, segment)
+      .catch((err) => {
+        console.error(
+          `[voice] failed to spool segment guild=${session.guildId} user=${userId}`,
+          err,
+        );
+      })
+      .finally(() => {
+        session.pendingSpools.delete(spoolTask);
+      });
+    session.pendingSpools.add(spoolTask);
+  }
+
+  private async spoolAndQueueTranscription(
+    session: VoiceSession,
+    userId: string,
+    segment: SpeechSegment,
+  ): Promise<void> {
+    const speaker = await this.getSpeakerIdentity(session, userId);
+    if (speaker.isBot) return;
+
+    const segmentId = session.transcriptionQueue.reserveId();
+    const diskPath = await session.segmentSpool.writeSegment({
+      segmentId,
+      userId,
+      timestamp: segment.startedAt,
+      wav: encodePcm16MonoWav(segment.pcm),
+    });
+
     const queued = session.transcriptionQueue.enqueue({
+      id: segmentId,
       userId,
       timestamp: segment.startedAt,
       durationMs: segment.durationMs,
-      transcribe: () => this.transcribeSegment(session, userId, segment),
+      diskPath,
+      transcribe: () => this.transcribeSegment(session, userId, segment.startedAt, diskPath),
     });
     session.segmentRecords.push(queued.record);
 
@@ -258,18 +311,35 @@ export class VoiceManager {
     });
   }
 
+  private reportRecoverableSpools(): void {
+    if (this.checkedRecoverableSpools) return;
+    this.checkedRecoverableSpools = true;
+
+    void SegmentSpool.findRecoverableSessions()
+      .then((sessions) => {
+        if (!sessions.length) return;
+        console.warn(
+          `[voice] found ${sessions.length} recoverable transcription spool session(s); leaving files in place for manual re-processing or cleanup: ${sessions.join(', ')}`,
+        );
+      })
+      .catch((err) => {
+        console.warn('[voice] unable to inspect transcription spool directory', err);
+      });
+  }
+
   private async transcribeSegment(
     session: VoiceSession,
     userId: string,
-    segment: SpeechSegment,
+    startedAt: Date,
+    diskPath: string,
   ): Promise<string | null> {
     const speaker = await this.getSpeakerIdentity(session, userId);
     if (speaker.isBot) return null;
 
-    const wav = encodePcm16MonoWav(segment.pcm);
+    const wav = await session.segmentSpool.readSegment(diskPath);
     const result = await this.transcriptionClient.transcribeWav(
       wav,
-      `${session.guildId}-${userId}-${segment.startedAt.getTime()}.wav`,
+      `${session.guildId}-${userId}-${startedAt.getTime()}.wav`,
     );
     if (!result.text) return null;
 
@@ -279,7 +349,7 @@ export class VoiceManager {
     session.transcript.push({
       userId,
       displayName: speaker.displayName,
-      timestamp: segment.startedAt,
+      timestamp: startedAt,
       text: result.text,
     });
     return result.text;
