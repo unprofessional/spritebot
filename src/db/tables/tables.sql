@@ -198,6 +198,22 @@ CREATE INDEX idx_rp_proxy_message_channel_id ON rp_proxy_message(channel_id);
 CREATE INDEX idx_lifecycle_notification_channel_channel_id
   ON lifecycle_notification_channel(channel_id);
 
+-- === RUNTIME INSTANCE LEASE ===
+-- Used by blue-green/standby deployments so only one container owns Discord
+-- gateway processing and scheduler work at a time.
+CREATE TABLE runtime_instance_lease (
+  lease_key TEXT PRIMARY KEY,
+  instance_id TEXT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('active', 'standby')),
+  acquired_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  heartbeat_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  expires_at TIMESTAMPTZ NOT NULL,
+  metadata JSONB NOT NULL DEFAULT '{}'::jsonb
+);
+
+CREATE INDEX idx_runtime_instance_lease_expires_at
+  ON runtime_instance_lease(expires_at);
+
 -- Stat lookups
 CREATE INDEX idx_stat_character_id ON character_stat_field(character_id);
 CREATE INDEX idx_stat_template_game_id ON stat_template(game_id);
