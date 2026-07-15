@@ -501,8 +501,12 @@ opposite slot from the new archive, stops the old active slot with the 90s grace
 the new slot logs for runtime lease acquisition or Discord login.
 
 The original `spritebot` service remains in `docker-compose.yml` as the default local/single-container
-service and as a migration source for the first slot deploy. For deployment diagnostics on the remote
-host, include the `bluegreen` profile:
+service and as a migration source for the first slot deploy. Jenkins treats that first migration as a
+stop-first handoff because the legacy container may predate runtime lease ownership. After the app is
+running in a blue/green slot, later deploys start the opposite standby slot before stopping the old
+lease-owning slot.
+
+For deployment diagnostics on the remote host, include the `bluegreen` profile:
 
 ```bash
 docker compose --profile bluegreen ps
