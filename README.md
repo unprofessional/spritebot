@@ -443,8 +443,8 @@ or incomplete. Check the remote host before retrying:
 ```bash
 ssh shinralabs
 cd ~/dev/spritebot
-docker compose ps
-docker compose logs --tail=200 spritebot
+docker compose --profile bluegreen ps
+docker compose --profile bluegreen logs --tail=200 spritebot-blue spritebot-green
 ```
 
 ### Manual Rollback
@@ -455,15 +455,17 @@ Jenkins deploy. If the remote host needs immediate manual intervention:
 ```bash
 ssh shinralabs
 cd ~/dev/spritebot
-docker compose ps
-docker compose logs --tail=200 spritebot
-docker compose up -d --build --remove-orphans
+docker compose --profile bluegreen ps
+docker compose --profile bluegreen logs --tail=200 spritebot-blue spritebot-green
+docker compose --profile bluegreen up -d --build spritebot-blue
 ```
 
 If a bad container is still running and Jenkins is unavailable, stop it with the same grace contract:
 
 ```bash
-docker compose stop -t 90 spritebot
+docker compose --profile bluegreen stop -t 90 spritebot-blue
+# or:
+docker compose --profile bluegreen stop -t 90 spritebot-green
 ```
 
 ### Active Instance Lease
@@ -485,6 +487,28 @@ Runtime variables:
 
 The active instance releases the lease after Discord client teardown and before DB pool close during
 graceful shutdown. If an active process dies without cleanup, standby promotion waits for the lease TTL.
+
+### Blue-Green Slot Deploys
+
+Jenkins deploys use two Compose slots:
+
+- `spritebot-blue`
+- `spritebot-green`
+
+Both slots run with `SPRITEBOT_INSTANCE_MODE=standby`. The standby runtime waits for the Postgres
+runtime lease before registering commands or connecting to Discord. During deploy, Jenkins starts the
+opposite slot from the new archive, stops the old active slot with the 90s grace period, then watches
+the new slot logs for runtime lease acquisition or Discord login.
+
+The original `spritebot` service remains in `docker-compose.yml` as the default local/single-container
+service and as a migration source for the first slot deploy. For deployment diagnostics on the remote
+host, include the `bluegreen` profile:
+
+```bash
+docker compose --profile bluegreen ps
+docker compose --profile bluegreen logs --tail=120 spritebot-blue
+docker compose --profile bluegreen logs --tail=120 spritebot-green
+```
 
 ### Secret Management (Infisical)
 
