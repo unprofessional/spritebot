@@ -62,7 +62,6 @@ describe('cleanup_scheduler', () => {
       cleanup,
       intervalHours: 1,
       logger,
-      registerSignals: false,
     });
 
     await flushPromises();

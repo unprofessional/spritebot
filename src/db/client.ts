@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { Pool, type QueryResult, type QueryResultRow } from 'pg';
 import { pgDb, pgHost, pgPass, pgPort, pgUser } from '../config/env_config';
+import { trackOperation } from '../runtime/lifecycle';
 import { getSql } from './sql-loader';
 
 type PgLite = {
@@ -26,6 +27,10 @@ export interface DbClient {
     params?: unknown[],
   ): Promise<QueryResult<T>>;
   close?(): Promise<void>;
+}
+
+export interface QueryOptions {
+  allowDuringDrain?: boolean;
 }
 
 type TestDbState = {
@@ -151,12 +156,28 @@ export async function initDb(): Promise<void> {
 export async function query<T extends QueryResultRow = QueryResultRow>(
   text: string,
   params?: unknown[],
+  options?: QueryOptions,
 ): Promise<QueryResult<T>> {
   if (!client) {
     await initDb();
   }
 
-  return client!.query<T>(text, params);
+  return trackOperation('db.query', () => client!.query<T>(text, params), {
+    allowDuringDrain: options?.allowDuringDrain,
+  });
+}
+
+export function getPoolStats(): {
+  totalCount: number;
+  idleCount: number;
+  waitingCount: number;
+} | null {
+  if (!pool) return null;
+  return {
+    totalCount: pool.totalCount,
+    idleCount: pool.idleCount,
+    waitingCount: pool.waitingCount,
+  };
 }
 
 export async function resetDb(): Promise<void> {

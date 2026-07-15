@@ -6,8 +6,20 @@ import { PerThreadBumpManager } from './per_thread_bump_manager';
 let manager: PerThreadBumpManager | null = null;
 let pollHandle: NodeJS.Timeout | null = null;
 
-export function startBumpScheduler(client: Client): void {
-  if (manager) return;
+export interface BumpSchedulerController {
+  stopAcceptingWork(): void;
+  drain(timeoutMs: number): Promise<boolean>;
+}
+
+const controller: BumpSchedulerController = {
+  stopAcceptingWork: stopBumpScheduler,
+  async drain(timeoutMs: number): Promise<boolean> {
+    return manager ? manager.drain(timeoutMs) : true;
+  },
+};
+
+export function startBumpScheduler(client: Client): BumpSchedulerController {
+  if (manager) return controller;
   manager = new PerThreadBumpManager(client);
   void manager.initialize();
 
@@ -70,14 +82,13 @@ export function startBumpScheduler(client: Client): void {
     }
   }, 30_000);
 
-  const stop = () => {
-    manager?.stop();
-    manager = null;
-    if (pollHandle) clearInterval(pollHandle);
-    pollHandle = null;
-  };
-  process.once('SIGINT', stop);
-  process.once('SIGTERM', stop);
+  return controller;
+}
+
+export function stopBumpScheduler(): void {
+  manager?.stop();
+  if (pollHandle) clearInterval(pollHandle);
+  pollHandle = null;
 }
 
 export async function rescheduleThread(threadId: string): Promise<void> {
