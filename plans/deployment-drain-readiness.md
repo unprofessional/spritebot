@@ -472,6 +472,45 @@ Deliverables:
     and safer.
   - Decision implemented: only the lease owner logs into Discord.
 
+### Phase 5: Slot-Based Deploy Handoff
+
+Deliverables:
+
+- Docker Compose slot topology.
+  - Keep the existing `spritebot` service as the default local/single-container
+    service.
+  - Add `spritebot-blue` and `spritebot-green` services behind the
+    `bluegreen` profile.
+  - Slot services start in `SPRITEBOT_INSTANCE_MODE=standby` with stable
+    `SPRITEBOT_INSTANCE_ID` values, so the runtime lease controls promotion.
+- Jenkins slot selection.
+  - Detect the currently running service from `spritebot-blue`,
+    `spritebot-green`, or the legacy `spritebot` service.
+  - Start the opposite slot from the newly extracted archive before stopping
+    the old active container.
+  - Stop the old active container with the existing 90s grace period.
+  - Wait up to 60s for the target slot to log runtime lease acquisition or
+    Discord login.
+- Legacy transition support.
+  - First deploy after this phase can hand off from the existing `spritebot`
+    service to `spritebot-blue`.
+  - Later deploys alternate between blue and green slots.
+
+Tests:
+
+- Compose config validates with the `bluegreen` profile.
+- CI/prettier catches Jenkins and docs formatting.
+
+Notes:
+
+- This is still single-active Discord ownership. It is a blue-green deployment
+  shape, not a request/load-balancer strategy.
+- The candidate standby container connects to Postgres while waiting, but does
+  not connect to Discord until it owns the lease.
+- If lease acquisition is not observed within 60s, Jenkins warns and prints
+  target slot logs for manual diagnosis instead of silently declaring the
+  handoff clean.
+
 ---
 
 ## Suggested Acceptance Criteria
