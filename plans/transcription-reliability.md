@@ -232,6 +232,63 @@ Tests:
 - Final dump includes segments that finished during drain.
 - Failure report counts match actual failures.
 
+### Phase 4: Progress UI Polish + Cleanup
+
+Deliverables:
+
+- Replace raw progress counter messages like
+  `done=5 failed=0 timeout=0 queued=12 transcribing=2` with a
+  SOULbot-style editable progress message.
+- Use one text-channel progress message during drain instead of sending a new
+  message every interval.
+- Render a compact progress bar and human-readable summary:
+
+  ```text
+  Transcription still processing...
+  ██████░░░░░░ 50% (18/36 segments)
+  12 queued, 2 in progress, 18 complete, 0 failed, 0 timed out.
+  ```
+
+- Throttle progress-message edits so Discord is not spammed during fast queue
+  movement; force the final update when processing completes or times out.
+- On final transcript post, either delete the progress message or edit it to a
+  final status such as `Transcription complete. Final transcript posted below.`
+- Replace raw queue-stat strings in transcript dump messages with the same
+  user-facing copy style.
+- Consolidate progress formatting into a small voice-local utility, taking the
+  useful parts of SOULbot's `progress_message.js` pattern without coupling the
+  repos.
+- Review Phase 1-3 cleanup/refactor opportunities:
+  - Keep `voice_manager.ts` focused on lifecycle orchestration by moving
+    transcript/progress presentation helpers out of the manager.
+  - Ensure session cleanup is single-path and idempotent across manual stop,
+    auto-stop, disconnect, drain timeout, and deployment shutdown.
+  - Re-check queue stats semantics after timeout so `pending` represents
+    user-visible unfinished records, not internal worker slots still unwinding.
+  - Consider whether `TranscriptionQueue` should expose a stable
+    `completedCount` / `totalCount` helper to prevent percentage math from
+    drifting between callers.
+  - Confirm progress output still behaves well when there are zero queued
+    segments, all failures, or a late completion after timeout.
+
+Suggested files:
+
+- `src/voice/progress_message.ts` (new)
+- `src/voice/transcript_formatter.ts`
+- `src/voice/transcription_queue.ts`
+- `src/voice/voice_manager.ts`
+
+Tests:
+
+- Progress formatter renders a readable bar and summary from queue stats.
+- Progress handle edits one message, throttles duplicate/rapid updates, and
+  forces final updates.
+- Final drain completion dismisses or finalizes the progress message.
+- Timeout finalization reports timed-out segments without leaving a misleading
+  in-progress count.
+- Transcript dump messages use user-facing queue wording instead of raw
+  `key=value` counters.
+
 ---
 
 ## Configuration
@@ -263,6 +320,10 @@ For the full implementation:
 - Segments survive a process restart (disk spooling).
 - The user sees progress during long drain waits.
 - Partial transcripts are available immediately on stop.
+- Long drain progress updates are readable, low-noise, and do not spam the
+  channel with repeated status messages.
+- Final transcript messages use the same user-facing status language as the
+  progress UI.
 
 ---
 
@@ -277,3 +338,8 @@ For the full implementation:
 - Should we add a max queue depth with a hard cap, beyond which we start
   dropping lowest-energy segments? Or is disk spool + patience always better?
 - Is 120s drain timeout reasonable, or should it scale with queue depth?
+- Should the Phase 4 progress message be deleted after the final transcript, or
+  edited into a compact completed/timed-out status for auditability?
+- Should the progress bar include failed/timed-out segments as "complete" for
+  percentage purposes? Current proposal counts them as resolved because no more
+  work remains for those records.
