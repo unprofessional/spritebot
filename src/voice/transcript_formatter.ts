@@ -1,4 +1,4 @@
-import type { TranscriptionQueueStats, TranscriptionSegmentRecord } from './transcription_queue';
+import type { TranscriptionSegmentRecord } from './transcription_queue';
 
 export type TranscriptEntry = {
   userId: string;
@@ -75,16 +75,6 @@ export function formatTranscript(
   }
 
   return `${lines.join('\n')}\n`;
-}
-
-export function formatQueueStats(stats: TranscriptionQueueStats): string {
-  return [
-    `done=${stats.done}`,
-    `failed=${stats.failed}`,
-    `timeout=${stats.timeout}`,
-    `queued=${stats.queued}`,
-    `transcribing=${stats.transcribing}`,
-  ].join(' ');
 }
 
 export function formatDuration(ms: number): string {
