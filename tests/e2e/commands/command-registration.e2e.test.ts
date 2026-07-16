@@ -4,6 +4,11 @@ import { Events, REST } from 'discord.js';
 
 import { beginDrain, DRAINING_REPLY, resetLifecycleForTests } from '../../../src/runtime/lifecycle';
 
+jest.mock('../../../src/access/guards', () => ({
+  guardCommand: jest.fn().mockResolvedValue(true),
+  guardComponent: jest.fn().mockResolvedValue(true),
+}));
+
 const commandDir = path.resolve(__dirname, '../../../src/commands');
 const opsOnlyCommands = new Set(['gift', 'toggle-bypass']);
 const supportOnlyCommands = new Set(['gift', 'verify', 'verify-greeting']);
@@ -155,9 +160,120 @@ describe('command registration', () => {
       ephemeral: true,
     });
   });
+
+  test('contains the production double-10062 command and fallback failure', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = {
+      on: jest.fn(),
+      once: jest.fn(),
+    };
+    await initializeCommands(client);
+
+    const expired = () =>
+      Object.assign(new Error('Unknown interaction'), {
+        name: 'DiscordAPIError',
+        code: 10062,
+        status: 404,
+        url: 'https://discord.com/api/interactions/id/secret-token/callback',
+      });
+    const execute = jest.fn().mockRejectedValue(expired());
+    client.commands?.set('create-character', { execute });
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      type: 2,
+      commandName: 'create-character',
+      token: 'secret-token',
+      isChatInputCommand: () => true,
+      isMessageContextMenuCommand: () => false,
+      isModalSubmit: () => false,
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isRepliable: () => true,
+      replied: false,
+      deferred: false,
+      reply: jest.fn().mockRejectedValue(expired()),
+      followUp: jest.fn(),
+    };
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    try {
+      interactionListener?.(interaction);
+      await flushPromises();
+
+      expect(execute).toHaveBeenCalledWith(interaction);
+      expect(interaction.reply).toHaveBeenCalledWith({
+        content: 'There was an error while executing this action.',
+        ephemeral: true,
+      });
+      expect(unhandled).not.toHaveBeenCalled();
+      const logs = [...errorSpy.mock.calls, ...warnSpy.mock.calls].flat().join(' ');
+      expect(logs).toContain('command=create-character');
+      expect(logs).toContain('code=10062');
+      expect(logs).toContain('status=404');
+      expect(logs).not.toContain('secret-token');
+      expect(logs).not.toContain('/callback');
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  test('contains a failed drain response', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = {
+      on: jest.fn(),
+      once: jest.fn(),
+    };
+    await initializeCommands(client);
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    beginDrain('test');
+    const interaction = {
+      type: 2,
+      isRepliable: () => true,
+      replied: false,
+      deferred: false,
+      reply: jest.fn().mockRejectedValue(new Error('drain response failed')),
+      followUp: jest.fn(),
+    };
+    const unhandled = jest.fn();
+    process.on('unhandledRejection', unhandled);
+
+    try {
+      interactionListener?.(interaction);
+      await flushPromises();
+
+      expect(interaction.reply).toHaveBeenCalledWith({
+        content: DRAINING_REPLY,
+        ephemeral: true,
+      });
+      expect(unhandled).not.toHaveBeenCalled();
+      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('context=drain-fallback'));
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
 });
 
 async function flushPromises(): Promise<void> {
-  await Promise.resolve();
-  await Promise.resolve();
+  await new Promise<void>((resolve) => setImmediate(resolve));
 }
