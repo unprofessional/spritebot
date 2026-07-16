@@ -12,12 +12,14 @@ import type {
   RpProxyContentResult,
   RpProxyMutationResult,
 } from '../services/rp_message_proxy.service';
+import { fetchProxyMessageContent } from '../services/rp_message_proxy.service';
 import { parseDiscordMessageReference } from '../utils/discord_message_reference';
 import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
   InteractionDispatchPolicySource,
 } from '../discord/interaction_dispatch';
+import { presentPreparedModal } from '../discord/prepared_modal';
 
 export function resultMessage(status: string, reason?: string): string {
   if (status === 'updated') return '✅ Updated your proxied RP message.';
@@ -86,6 +88,8 @@ module.exports = {
     interaction: ChatInputCommandInteraction<CacheType>,
     { responder }: InteractionCommandContext,
   ) {
+    if (responder.state === 'expired') return;
+
     const { channelId, guildId } = interaction;
 
     if (!guildId) {
@@ -106,7 +110,26 @@ module.exports = {
       });
     }
 
-    return responder.showModal(buildIcEditModal(reference.messageId));
+    const result = await fetchProxyMessageContent({
+      client: interaction.client,
+      guildId,
+      channelId: reference.channelId,
+      userId: interaction.user.id,
+      messageId: reference.messageId,
+    });
+
+    if (result.status !== 'found') {
+      return responder.respond({
+        content: resultMessage(result.status, resultReason(result)),
+        ephemeral: true,
+      });
+    }
+
+    return presentPreparedModal({
+      modal: buildIcEditModal(reference.messageId, result.content),
+      responder,
+      userId: interaction.user.id,
+    });
   },
   resultMessage,
   resultReason,
@@ -125,8 +148,8 @@ function resolveIcEditPolicy(
     (!reference.guildId || reference.guildId === interaction.guildId)
   ) {
     return {
-      mode: { kind: 'modal' },
-      acknowledgement: 'manual',
+      mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+      acknowledgement: 'auto-defer',
       authorization: 'modal-submit',
     };
   }

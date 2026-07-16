@@ -47,11 +47,12 @@ single Discord callback so a callback failure is never retried. The modal-openin
 routes remain isolated for the next review unit.
 
 The isolated Task 6 IC edit modal batch removes 7 more direct calls, bringing the current report
-to 347 findings. `/ic-edit` and the Edit IC Message context command use modal restructuring pattern
-3: they show a minimal replacement-content modal synchronously, perform no Discord/database read
-first, and defer feature authorization plus authoritative ownership/existence validation to modal
-submission. This intentionally replaces the former prefilled editor with a blank replacement
-field so `showModal()` can remain the first and only initial callback.
+to 347 findings. Its initial blank-modal pattern has since been superseded by the prepared-modal
+boundary: `/ic-edit` and the Edit IC Message context command fetch and preserve the original proxy
+content. Fast preparation opens the prefilled modal within the acknowledgement budget. Slow
+preparation safely defers ephemerally, then exposes the same prefilled modal through a short-lived,
+owner-bound **Open editor** button. Submission still performs authoritative ownership and existence
+validation.
 
 The Task 6 support/subscription/ops batch removes 17 more direct interaction calls, bringing the
 current report to 330 findings. `/support`, `/subscribe`, `/verify`, `/gift`, and `/toggle-bypass`
@@ -71,6 +72,10 @@ policies and route every source-level `reply()` through the responder. Their exi
 deferrals, reply edits, deferred error follow-up, channel fetch, and greeting send remain behind the
 dispatcher proxy pending the operation-executor migration.
 
+The first Task 7 component/handler batch removes 95 more direct interaction calls, bringing the
+current report to 200 findings. Seventeen non-modal button/select components plus their routed
+handler paths now use explicit reply or component-update policies.
+
 The rule uses TypeScript receiver provenance from discord.js/`@discordjs` declarations, imported
 REST/route symbols, and Discord URL construction. It intentionally does not flag arbitrary domain
 objects that happen to expose methods such as `send`, `edit`, `delete`, or `fetch`.
@@ -81,12 +86,13 @@ Tasks 2 and 3 established the allowlisted outbound-operation foundation. Tasks 4
 interaction state machine and deadline-aware dispatcher, then routed `/create-character` through
 the production responder policy:
 
-| Capability                            | Boundary modules                                                       | Status      |
-| ------------------------------------- | ---------------------------------------------------------------------- | ----------- |
-| Error classification and redaction    | `src/discord/errors.ts`, `src/discord/logging.ts`                      | Implemented |
-| Bounded policy and operation executor | `src/discord/operation_policy.ts`, `src/discord/operation_executor.ts` | Implemented |
-| Interaction response state machine    | `src/discord/interaction_responder.ts`                                 | Implemented |
-| Deadline-aware interaction dispatch   | `src/discord/interaction_dispatch.ts`                                  | Implemented |
+| Capability                             | Boundary modules                                                        | Status      |
+| -------------------------------------- | ----------------------------------------------------------------------- | ----------- |
+| Error classification and redaction     | `src/discord/errors.ts`, `src/discord/logging.ts`                       | Implemented |
+| Bounded policy and operation executor  | `src/discord/operation_policy.ts`, `src/discord/operation_executor.ts`  | Implemented |
+| Interaction response state machine     | `src/discord/interaction_responder.ts`                                  | Implemented |
+| Deadline-aware interaction dispatch    | `src/discord/interaction_dispatch.ts`                                   | Implemented |
+| Prefilled modal preparation/activation | `src/discord/prepared_modal.ts`, `src/discord/interaction_responder.ts` | Implemented |
 
 `/create-character` executes behind an ephemeral, auto-defer policy with authorization inside the
 1,750ms acknowledgement budget, and the mutation batch now routes its source-level responses
@@ -103,7 +109,9 @@ migrated outbound operation must name its timeout, total budget, and retry polic
 
 The first Task 7 component batch migrates 17 non-modal button and select-menu routes. Message
 replacement routes use component-update policies, while detail and verification routes use
-ephemeral reply policies; modal-opening routes remain on the reviewed legacy path.
+ephemeral reply policies; modal-opening component routes remain on the reviewed legacy path. The
+prepared-modal vertical slice restores IC edit prefill and establishes the required fast/slow
+pattern for the remaining prefilled editors without changing the audit count.
 
 ## Migration Matrix
 
@@ -135,8 +143,8 @@ command batches are recorded below; all other source call sites remain pending m
 
 ## Modal-First Routes
 
-The initial audit found 11 direct `showModal()` calls. The two command routes are now migrated with
-pattern 3 and modal-submission authorization:
+The initial audit found 11 direct `showModal()` calls. The two command routes now use the hybrid
+prepared-modal pattern with modal-submission authorization:
 
 - `src/commands/ic-edit-context.ts`
 - `src/commands/ic-edit.ts`
