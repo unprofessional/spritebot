@@ -7,7 +7,8 @@ export type InteractionMode =
   | { kind: 'reply'; visibility: 'ephemeral' | 'public' }
   | { kind: 'component-update' }
   | { kind: 'modal' }
-  | { kind: 'modal-or-reply'; visibility: 'ephemeral' | 'public' };
+  | { kind: 'modal-or-reply'; visibility: 'ephemeral' | 'public' }
+  | { kind: 'modal-or-component-update' };
 
 export type ModalPresentationOutcome = 'shown' | 'requires_activation' | 'expired';
 
@@ -54,7 +55,7 @@ export class DiscordInteractionResponder {
     this.callbacks = interaction as unknown as InteractionCallbacks;
     if (this.callbacks.replied) this.currentState = 'replied';
     else if (this.callbacks.deferred) {
-      this.currentState = mode.kind === 'component-update' ? 'deferred_update' : 'deferred_reply';
+      this.currentState = isComponentUpdateMode(mode) ? 'deferred_update' : 'deferred_reply';
     }
   }
 
@@ -80,12 +81,14 @@ export class DiscordInteractionResponder {
         );
       }
 
-      if (this.mode.kind === 'component-update') {
+      if (isComponentUpdateMode(this.mode)) {
         await this.invoke('deferUpdate', () => this.callbacks.deferUpdate(), 'deferred_update');
         return;
       }
 
-      const ephemeral = this.mode.visibility === 'ephemeral';
+      const ephemeral =
+        (this.mode.kind === 'reply' || this.mode.kind === 'modal-or-reply') &&
+        this.mode.visibility === 'ephemeral';
       await this.invoke(
         'deferReply',
         () => this.callbacks.deferReply({ ephemeral }),
@@ -104,8 +107,8 @@ export class DiscordInteractionResponder {
         );
       }
 
-      if (this.mode.kind === 'component-update') {
-        await this.respondToComponent(payload);
+      if (isComponentUpdateMode(this.mode)) {
+        await this.respondToComponent(payload, this.mode.kind === 'modal-or-component-update');
         return;
       }
 
@@ -154,9 +157,13 @@ export class DiscordInteractionResponder {
   showModal(modal: unknown): Promise<void> {
     return this.runSerialized(async () => {
       if (this.currentState === 'expired') return;
-      if (this.mode.kind !== 'modal' && this.mode.kind !== 'modal-or-reply') {
+      if (
+        this.mode.kind !== 'modal' &&
+        this.mode.kind !== 'modal-or-reply' &&
+        this.mode.kind !== 'modal-or-component-update'
+      ) {
         throw new InteractionResponseStateError(
-          'showModal() requires modal or modal-or-reply interaction mode.',
+          'showModal() requires modal or modal hybrid interaction mode.',
         );
       }
       if (this.currentState !== 'unacknowledged') {
@@ -172,12 +179,17 @@ export class DiscordInteractionResponder {
   presentModal(modal: unknown): Promise<ModalPresentationOutcome> {
     return this.runSerialized(async () => {
       if (this.currentState === 'expired') return 'expired';
-      if (this.mode.kind !== 'modal-or-reply') {
+      if (this.mode.kind !== 'modal-or-reply' && this.mode.kind !== 'modal-or-component-update') {
         throw new InteractionResponseStateError(
-          'presentModal() requires modal-or-reply interaction mode.',
+          'presentModal() requires a modal hybrid interaction mode.',
         );
       }
-      if (this.currentState === 'deferred_reply' || this.currentState === 'replied') {
+      if (
+        this.currentState === 'deferred_reply' ||
+        this.currentState === 'deferred_update' ||
+        this.currentState === 'replied' ||
+        this.currentState === 'updated'
+      ) {
         return 'requires_activation';
       }
       if (this.currentState !== 'unacknowledged') {
@@ -191,7 +203,10 @@ export class DiscordInteractionResponder {
     });
   }
 
-  private async respondToComponent(payload: InteractionPayload): Promise<void> {
+  private async respondToComponent(
+    payload: InteractionPayload,
+    allowInitialEphemeralReply: boolean,
+  ): Promise<void> {
     // When a component-update handler needs to send an ephemeral error instead
     // of updating the original message, route through followUp so the original
     // message stays intact and the user gets a private error.
@@ -199,6 +214,10 @@ export class DiscordInteractionResponder {
 
     if (this.currentState === 'unacknowledged') {
       if (wantsEphemeral) {
+        if (allowInitialEphemeralReply) {
+          await this.invoke('reply', () => this.callbacks.reply(payload), 'replied');
+          return;
+        }
         // Can't send an ephemeral update — acknowledge first, then follow up.
         await this.invoke('deferUpdate', () => this.callbacks.deferUpdate(), 'deferred_update');
         await this.invoke('followUp', () => this.callbacks.followUp(payload), 'updated');
@@ -285,8 +304,7 @@ export class DiscordInteractionResponder {
       return;
     }
     if (this.callbacks.deferred) {
-      this.currentState =
-        this.mode.kind === 'component-update' ? 'deferred_update' : 'deferred_reply';
+      this.currentState = isComponentUpdateMode(this.mode) ? 'deferred_update' : 'deferred_reply';
       return;
     }
 
@@ -320,4 +338,8 @@ function withoutEphemeral(payload: InteractionPayload): InteractionPayload {
   const result = { ...payload };
   delete result.ephemeral;
   return result;
+}
+
+function isComponentUpdateMode(mode: InteractionMode): boolean {
+  return mode.kind === 'component-update' || mode.kind === 'modal-or-component-update';
 }
