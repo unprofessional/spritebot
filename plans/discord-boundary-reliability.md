@@ -514,6 +514,14 @@ git commit -m "Migrate core commands to Discord responder"
 - Create/Modify: matching tests under `tests/integration/components/` and `tests/integration/handlers/`.
 - Update: `docs/discord-boundary-inventory.md`.
 
+**Completed: Batch 1 (simple components)**
+
+17 button/selector components migrated to the responder in commit `05ea316`. The dispatcher in `initial_commands.ts` now routes buttons and selects through `startTrackedInteractionDispatch` when the component exports an `interactionPolicy`. Handler indexes pass the responder through.
+
+**Responder design note (from batch 1 review):** Many components have mixed response patterns — `update()` for success, `reply({ ephemeral: true })` for errors. After `deferUpdate()`, `editReply()` would overwrite the original message with the error. The responder now handles this: when `respond()` is called with `ephemeral: true` in `component-update` mode, it routes to `followUp({ ephemeral: true })` instead, leaving the original message intact and sending a private error to the user. `followUp()` also preserves ephemeral in component-update mode. **All future component migrations should use `responder.respond({ ..., ephemeral: true })` for error paths — the responder does the right thing automatically.**
+
+**Remaining: Batch 2 (modal-opening components), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
+
 **Step 1: Classify before migration**
 
 Every component route must be one of:
