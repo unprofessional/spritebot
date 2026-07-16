@@ -207,6 +207,55 @@ describe('command registration', () => {
     expect(interaction.deferReply).not.toHaveBeenCalled();
   });
 
+  test('defers immediate component-modal authorization to the gated modal submission', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { guardComponent } = require('../../../src/access/guards') as {
+      guardComponent: jest.Mock;
+    };
+    guardComponent.mockClear();
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = { on: jest.fn(), once: jest.fn() };
+    await initializeCommands(client);
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      type: 3,
+      customId: 'selectStatType:game-1',
+      values: ['number'],
+      user: { id: 'user-1' },
+      guildId: 'guild-1',
+      guild: { id: 'guild-1' },
+      isChatInputCommand: () => false,
+      isMessageContextMenuCommand: () => false,
+      isModalSubmit: () => false,
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isRepliable: () => true,
+      replied: false,
+      deferred: false,
+      reply: jest.fn().mockResolvedValue(undefined),
+      deferReply: jest.fn().mockResolvedValue(undefined),
+      editReply: jest.fn().mockResolvedValue(undefined),
+      followUp: jest.fn().mockResolvedValue(undefined),
+      showModal: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(guardComponent).not.toHaveBeenCalled();
+    expect(interaction.showModal).toHaveBeenCalledTimes(1);
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+  });
+
   test('responds to new interactions with a drain message during shutdown', async () => {
     jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
     const { initializeCommands } = require('../../../src/client/initial_commands') as {

@@ -7,9 +7,12 @@ import {
   type StringSelectMenuInteraction,
 } from 'discord.js';
 
+import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { build as buildStatModal } from './create_stat_modal';
 
 const id = 'selectStatType';
+const interactionPolicy = gatedImmediateModalInteractionPolicy;
 
 function build(gameId: string): ActionRowBuilder<MessageActionRowComponentBuilder> {
   const select = new StringSelectMenuBuilder()
@@ -41,7 +44,10 @@ function build(gameId: string): ActionRowBuilder<MessageActionRowComponentBuilde
   return new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(select);
 }
 
-async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, gameId] = interaction.customId.split(':');
   const selectedType = interaction.values?.[0];
 
@@ -58,7 +64,7 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
       selectedType,
     });
 
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Invalid stat type selection.',
       ephemeral: true,
     });
@@ -71,7 +77,7 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
   });
 
   const modal = buildStatModal(gameId, selectedType);
-  await interaction.showModal(modal);
+  await responder.showModal(modal);
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };
