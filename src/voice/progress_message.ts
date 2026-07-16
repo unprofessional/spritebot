@@ -1,3 +1,5 @@
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod } from '../discord/sdk_operations';
 import type { TranscriptionQueueStats } from './transcription_queue';
 
 export type TranscriptionProgressPhase = 'processing' | 'complete' | 'timed-out';
@@ -17,6 +19,18 @@ type ProgressChannel = {
 
 const defaultBarWidth = 12;
 const defaultMinEditIntervalMs = 5_000;
+const progressSendPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.send-progress',
+  timeoutMs: 3_000,
+  totalBudgetMs: 3_000,
+});
+const progressEditPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.edit-progress',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'idempotent-write',
+  maxAttempts: 2,
+});
 
 export async function createTranscriptionProgressMessage(
   channel: ProgressChannel,
@@ -24,7 +38,9 @@ export async function createTranscriptionProgressMessage(
   { minEditIntervalMs = defaultMinEditIntervalMs }: { minEditIntervalMs?: number } = {},
 ): Promise<TranscriptionProgressMessage> {
   const initialContent = formatTranscriptionProgress(stats, { phase: 'processing' });
-  const message = await channel.send({ content: initialContent });
+  const message = await executeDiscordSdkMethod(progressSendPolicy, channel, 'send', {
+    content: initialContent,
+  });
   return buildTranscriptionProgressMessage(message, initialContent, { minEditIntervalMs });
 }
 
@@ -47,7 +63,7 @@ export function buildTranscriptionProgressMessage(
     if (content === lastContent) return;
     if (!force && Date.now() - lastEditAt < minEditIntervalMs) return;
 
-    await message.edit({ content });
+    await executeDiscordSdkMethod(progressEditPolicy, message, 'edit', { content });
     lastContent = content;
     lastEditAt = Date.now();
   };

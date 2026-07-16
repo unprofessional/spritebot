@@ -628,9 +628,9 @@ Keep modal routes separate from ordinary component-update routes to simplify rev
 
 **Objective:** Apply explicit operation policies to Discord API work outside the interaction callback state machine.
 
-**Progress:** Entitlement/authorization batch complete. The raw entitlement read now uses the
-operation executor's bounded safe-read policy and returns typed unavailable outcomes through the
-authorization guard. Command registration and the remaining SDK subsystems are pending.
+**Complete.** Entitlement authorization, command registration/bootstrap, lifecycle/support,
+thread bumps, RP proxy operations, and voice publication now use explicit operation policies.
+The boundary audit has no remaining non-interaction findings; Task 9 enforcement is next.
 
 **Files:**
 

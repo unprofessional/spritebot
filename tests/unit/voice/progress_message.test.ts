@@ -1,5 +1,6 @@
 import {
   buildTranscriptionProgressMessage,
+  createTranscriptionProgressMessage,
   formatQueueSummary,
   formatTranscriptionProgress,
 } from '../../../src/voice/progress_message';
@@ -85,6 +86,32 @@ describe('progress_message', () => {
         '0 queued, 0 in progress, 2 complete, 1 failed, 1 timed out',
       ].join('\n'),
     });
+  });
+
+  test('does not retry an indeterminate progress-message send', async () => {
+    const send = jest
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('reset'), { code: 'ECONNRESET' }));
+
+    await expect(
+      createTranscriptionProgressMessage({ send }, queueStats({ queued: 1 })),
+    ).rejects.toThrow();
+    expect(send).toHaveBeenCalledTimes(1);
+  });
+
+  test('retries an idempotent progress edit after a transient failure', async () => {
+    const edit = jest
+      .fn()
+      .mockRejectedValueOnce(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))
+      .mockResolvedValueOnce(undefined);
+    const progress = buildTranscriptionProgressMessage(
+      { edit },
+      formatTranscriptionProgress(queueStats({ queued: 1 }), { phase: 'processing' }),
+      { minEditIntervalMs: 0 },
+    );
+
+    await progress.complete(queueStats({ done: 1 }), { timedOut: false });
+    expect(edit).toHaveBeenCalledTimes(2);
   });
 });
 

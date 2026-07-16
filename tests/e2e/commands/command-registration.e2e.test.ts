@@ -109,6 +109,20 @@ describe('command registration', () => {
     );
   });
 
+  test('retries the idempotent command registration PUT after a transient failure', async () => {
+    const restPut = jest
+      .spyOn(REST.prototype, 'put')
+      .mockRejectedValueOnce(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))
+      .mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: { on: jest.Mock; once: jest.Mock }): Promise<unknown>;
+    };
+
+    await initializeCommands({ on: jest.fn(), once: jest.fn() });
+
+    expect(restPut).toHaveBeenCalledTimes(4);
+  });
+
   test('each command module has executable command data', () => {
     for (const file of commandFilesFromDisk()) {
       const command = require(path.join(commandDir, file)) as {

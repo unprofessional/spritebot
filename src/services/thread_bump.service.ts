@@ -2,15 +2,58 @@
 import {
   Channel,
   Client,
+  Collection,
   PermissionFlagsBits,
   ThreadChannel,
+  type Message,
   type MessageCreateOptions,
   type MessageMentionTypes,
 } from 'discord.js';
 import { bumpDefaultMinutes, bumpBufferMinutes } from '../config/env_config';
 import { ThreadBumpDAO, type BumpThreadRow } from '../dao/thread_bump.dao';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod, executeDiscordSdkMethodAs } from '../discord/sdk_operations';
+import { DiscordOperationError } from '../discord/operation_executor';
 
 const NO_MENTIONS: ReadonlyArray<MessageMentionTypes> = [];
+const threadChannelReadPolicy = defineDiscordOperationPolicy({
+  operation: 'thread-bump.fetch-channel',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const threadMessageReadPolicy = defineDiscordOperationPolicy({
+  operation: 'thread-bump.fetch-latest-message',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const threadArchiveWritePolicy = defineDiscordOperationPolicy({
+  operation: 'thread-bump.set-archived',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'idempotent-write',
+  maxAttempts: 2,
+});
+const threadLockWritePolicy = defineDiscordOperationPolicy({
+  operation: 'thread-bump.set-locked',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'idempotent-write',
+  maxAttempts: 2,
+});
+const threadSendPolicy = defineDiscordOperationPolicy({
+  operation: 'thread-bump.send',
+  timeoutMs: 3_000,
+  totalBudgetMs: 3_000,
+});
+const threadDeletePolicy = defineDiscordOperationPolicy({
+  operation: 'thread-bump.delete-message',
+  timeoutMs: 2_000,
+  totalBudgetMs: 2_000,
+});
 
 // === utils ===
 const DISCORD_EPOCH = 1420070400000n; // 2015-01-01T00:00:00.000Z
@@ -64,7 +107,12 @@ async function getThreadMeta(
   client: Client,
   threadId: string,
 ): Promise<{ autoArchiveMinutes: number | null; lastActivityAt: Date | null }> {
-  const chan = await client.channels.fetch(threadId).catch(() => null);
+  const chan = await executeDiscordSdkMethodAs<Channel | null>(
+    threadChannelReadPolicy,
+    client.channels,
+    'fetch',
+    threadId,
+  ).catch(() => null);
   const thread = asThread(chan);
   if (!thread) return { autoArchiveMinutes: null, lastActivityAt: null };
 
@@ -74,7 +122,12 @@ async function getThreadMeta(
     lastActivityAt = snowflakeToDate(thread.lastMessageId);
   } else {
     try {
-      const msgs = await thread.messages.fetch({ limit: 1 });
+      const msgs = await executeDiscordSdkMethodAs<Collection<string, Message>>(
+        threadMessageReadPolicy,
+        thread.messages,
+        'fetch',
+        { limit: 1 },
+      );
       const m = msgs.first();
       if (m?.createdTimestamp) lastActivityAt = new Date(m.createdTimestamp);
     } catch {
@@ -95,14 +148,14 @@ async function ensureWritable(thread: ThreadChannel): Promise<void> {
   }
   if (thread.archived) {
     try {
-      await thread.setArchived(false);
+      await executeDiscordSdkMethod(threadArchiveWritePolicy, thread, 'setArchived', false);
     } catch (e) {
       throw new Error(`Cannot unarchive thread (need ManageThreads?): ${String(e)}`);
     }
   }
   if (thread.locked) {
     try {
-      await thread.setLocked(false);
+      await executeDiscordSdkMethod(threadLockWritePolicy, thread, 'setLocked', false);
     } catch {
       /* non-fatal */
     }
@@ -128,7 +181,12 @@ export class ThreadBumpService {
     const deleteAfter = opts?.deleteAfter !== false; // default true
     const deleteDelayMs = Math.max(0, opts?.deleteDelayMs ?? 0);
 
-    const chan = await client.channels.fetch(threadId).catch(() => null);
+    const chan = await executeDiscordSdkMethodAs<Channel | null>(
+      threadChannelReadPolicy,
+      client.channels,
+      'fetch',
+      threadId,
+    ).catch(() => null);
     const thread = asThread(chan);
     if (!thread) throw new Error('Not a thread channel or cannot fetch thread.');
 
@@ -138,21 +196,35 @@ export class ThreadBumpService {
     const note = row?.note ?? null;
 
     // 1) Send and await ack from Discord (this updates thread activity)
-    const sent = await thread.send(buildBumpMessage(note));
+    let sent: Message;
+    try {
+      sent = await executeDiscordSdkMethod(
+        threadSendPolicy,
+        thread,
+        'send',
+        buildBumpMessage(note),
+      );
+    } catch (error) {
+      if (!isIndeterminateSendFailure(error)) throw error;
+
+      // Discord may have accepted the message before the connection failed. Advance the schedule
+      // without retrying the send, then let callers report the indeterminate result.
+      await this.dao.touchLastBumped(threadId, new Date());
+      throw new IndeterminateThreadBumpSendError(error);
+    }
 
     // 2) Update DB regardless of deletion outcome
     await this.dao.touchLastBumped(threadId, new Date());
-    // keep it visible for a brief moment so Discord’s lastMessageId advances during propagation
-    await new Promise((r) => setTimeout(r, 3000));
-    await sent.delete();
-
-    // 3) Optionally delete to keep thread clean
+    // 3) Optionally delete to keep thread clean. Never retry sends or deletes: a timeout leaves the
+    // result indeterminate, and retrying could duplicate the bump or race a successful deletion.
     if (deleteAfter) {
       try {
+        // Keep it visible briefly so Discord's lastMessageId advances during propagation.
+        await new Promise((r) => setTimeout(r, 3_000));
         if (deleteDelayMs > 0) {
           await new Promise((r) => setTimeout(r, deleteDelayMs));
         }
-        await sent.delete(); // deleting after ack still preserves the activity reset
+        await executeDiscordSdkMethod(threadDeletePolicy, sent, 'delete');
       } catch (e) {
         // Not fatal: the bump already reset activity and DB was updated
         // Common causes: missing perms to delete, message already deleted by mods, etc.
@@ -246,6 +318,13 @@ export class ThreadBumpService {
 }
 
 function isTerminalThreadError(err: unknown): boolean {
+  if (
+    err instanceof DiscordOperationError &&
+    (err.classified.category === 'authentication_or_permission' ||
+      err.classified.category === 'not_found')
+  ) {
+    return true;
+  }
   const msg =
     err instanceof Error
       ? err.message
@@ -257,4 +336,25 @@ function isTerminalThreadError(err: unknown): boolean {
     msg,
   );
 }
-export { isTerminalThreadError };
+
+class IndeterminateThreadBumpSendError extends Error {
+  constructor(cause: unknown) {
+    super('Thread bump send result was indeterminate; the send will not be retried.', { cause });
+    this.name = 'IndeterminateThreadBumpSendError';
+  }
+}
+
+function isIndeterminateSendFailure(error: unknown): boolean {
+  return (
+    error instanceof DiscordOperationError &&
+    (error.classified.category === 'timeout' || error.classified.category === 'transient_network')
+  );
+}
+
+function isIndeterminateThreadBumpSendError(
+  error: unknown,
+): error is IndeterminateThreadBumpSendError {
+  return error instanceof IndeterminateThreadBumpSendError;
+}
+
+export { isIndeterminateThreadBumpSendError, isTerminalThreadError };
