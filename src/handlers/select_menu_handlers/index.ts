@@ -43,11 +43,10 @@ export function getSelectMenuInteractionPolicy(
   if (customId.startsWith('createCharacterDropdown')) return characterFieldPolicy;
   if (customId.startsWith('editCharacterFieldDropdown')) return editCharacterFieldPolicy;
   if (customId.startsWith('editStatSelect:')) return editStatPolicy;
-  if (
-    customId.startsWith('deleteStatSelect:') ||
-    customId.startsWith('editCharacterStatDropdown:') ||
-    customId.startsWith('adjustStatSelect:')
-  ) {
+  if (customId.startsWith('editCharacterStatDropdown:')) {
+    return characterStatSelect.interactionPolicy;
+  }
+  if (customId.startsWith('deleteStatSelect:') || customId.startsWith('adjustStatSelect:')) {
     return undefined;
   }
   return undefined;
@@ -79,7 +78,7 @@ export async function handleSelectMenu(
   if (customId.startsWith('paragraphFieldSelect'))
     return handleParagraphFieldSelector(interaction, responder!);
   if (customId.startsWith('editCharacterStatDropdown:'))
-    return characterStatSelect.handle(interaction);
+    return characterStatSelect.handle(interaction, responder!);
   if (customId.startsWith('adjustStatSelect:'))
     return adjustNumericStatSelectHandler.handle(interaction);
   if (customId.startsWith('editInventoryItemSelect:'))

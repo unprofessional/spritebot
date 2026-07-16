@@ -548,6 +548,14 @@ owner-bound activation button. The modal submission remains the authoritative au
 boundary. The unrouted `stat_template_dropdown` duplicate was removed after confirming the live
 router has always used the dedicated edit and delete selector components.
 
+**Completed: Batch 2B.2 (prepared character field/stat editor)**
+
+`character_stat_select_menu` routes both core-field and game-stat selections through the shared
+gated prepared-modal policy. Fast character hydration preserves the immediate prefilled modal;
+slow hydration preserves the same values behind owner-bound activation. Existing missing-selection,
+missing-character, and missing-stat errors remain ephemeral, and both modal submission prefixes
+remain authoritative authorization boundaries.
+
 **Remaining: Batch 2B (I/O-dependent modal-opening routes), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 
 **Step 1: Classify before migration**
