@@ -4,6 +4,7 @@ import { EmbedBuilder, ActionRowBuilder, MessageActionRowComponentBuilder } from
 
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
+import { formatStatTemplateDefault } from '../utils/count_stat_defaults';
 
 import { build as buildDefineStats } from './define_stats_button';
 import { build as buildDeleteStats } from './delete_stat_button';
@@ -72,7 +73,8 @@ function buildEmbed(
   const fieldLines = fields.map((f) => {
     const isNew = highlightLabel && f.label?.toLowerCase() === highlightLabel.toLowerCase();
     const icon = f.field_type === 'paragraph' ? '📝' : '🔹';
-    const defaultStr = f.default_value ? ` _(default: ${f.default_value})_` : '';
+    const formattedDefault = formatStatTemplateDefault(f);
+    const defaultStr = formattedDefault ? ` _(default: ${formattedDefault})_` : '';
     const labelWithType = `${f.label} \`${f.field_type}\``;
     return `${icon} ${isNew ? '**🆕 ' : '**'}${labelWithType}**${defaultStr}`;
   });
