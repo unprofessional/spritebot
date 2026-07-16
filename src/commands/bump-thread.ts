@@ -413,17 +413,10 @@ module.exports = {
       }
     } catch (err) {
       console.error('bump-thread command error:', err);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.followUp({
-          content: '❌ Something went wrong.',
-          flags: MessageFlags.Ephemeral,
-        });
-      } else {
-        await responder.respond({
-          content: '❌ Something went wrong.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      await responder.respond({
+        content: '❌ Something went wrong.',
+        flags: MessageFlags.Ephemeral,
+      });
     }
   },
 };

@@ -162,7 +162,7 @@ module.exports = {
   meta: {
     type: 'problem',
     docs: {
-      description: 'Inventory direct Discord boundary operations',
+      description: 'Require Discord operations to pass through the repository boundary',
     },
     schema: [
       {
@@ -179,7 +179,7 @@ module.exports = {
     ],
     messages: {
       boundary:
-        'Discord boundary call family={{family}} method={{method}} status=unmigrated; route through src/discord.',
+        'Discord boundary call family={{family}} method={{method}} status=unmigrated; route through src/discord (or add a narrow documented exemption with an owner and expiry).',
     },
   },
 

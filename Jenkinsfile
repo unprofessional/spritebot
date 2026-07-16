@@ -228,6 +228,12 @@ pipeline {
       }
     }
 
+    stage('Discord Boundary') {
+      steps {
+        sh 'npm run check:discord-boundary'
+      }
+    }
+
     stage('Test') {
       when {
         expression { env.RUN_TESTS == 'true' }
