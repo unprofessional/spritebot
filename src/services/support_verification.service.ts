@@ -2,8 +2,17 @@ import type { GuildMember } from 'discord.js';
 
 import { SupportVerificationDAO, type SupportPlayerMatch } from '../dao/support_verification.dao';
 import { supportGuildId, supportPlayerRoleId, supportSubscriberRoleId } from '../config/env_config';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod } from '../discord/sdk_operations';
 
 const dao = new SupportVerificationDAO();
+const supportRoleWritePolicy = defineDiscordOperationPolicy({
+  operation: 'support.add-verification-roles',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'idempotent-write',
+  maxAttempts: 2,
+});
 
 export interface SupportVerificationEligibility {
   subscriberGuildIds: string[];
@@ -70,7 +79,13 @@ export async function verifySupportMember(member: GuildMember): Promise<SupportV
 
   const assignedRoleIds = [...roleIdsToAdd].filter((roleId) => !member.roles.cache.has(roleId));
   if (assignedRoleIds.length) {
-    await member.roles.add(assignedRoleIds, 'SPRITEbot support server verification');
+    await executeDiscordSdkMethod(
+      supportRoleWritePolicy,
+      member.roles,
+      'add',
+      assignedRoleIds,
+      'SPRITEbot support server verification',
+    );
   }
 
   return {

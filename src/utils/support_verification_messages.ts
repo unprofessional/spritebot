@@ -1,11 +1,26 @@
-import type { CacheType, ChatInputCommandInteraction, Client, Interaction } from 'discord.js';
+import type {
+  CacheType,
+  ChatInputCommandInteraction,
+  Client,
+  Guild,
+  Interaction,
+} from 'discord.js';
 
 import {
   hasSupportVerificationMatch,
   type SupportVerificationResult,
 } from '../services/support_verification.service';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethodAs } from '../discord/sdk_operations';
 
 type GuildLookupContext = ChatInputCommandInteraction<CacheType> | Interaction | { client: Client };
+const supportGuildReadPolicy = defineDiscordOperationPolicy({
+  operation: 'support.fetch-guild-name',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 export async function buildSupportVerificationMessage(
   context: GuildLookupContext,
@@ -55,7 +70,12 @@ async function guildNames(context: GuildLookupContext, guildIds: string[]): Prom
       const cached = context.client.guilds.cache.get(guildId);
       if (cached) return cached.name;
 
-      const fetched = await context.client.guilds.fetch(guildId).catch(() => null);
+      const fetched = await executeDiscordSdkMethodAs<Guild>(
+        supportGuildReadPolicy,
+        context.client.guilds,
+        'fetch',
+        guildId,
+      ).catch(() => null);
       return fetched?.name ?? guildId;
     }),
   );

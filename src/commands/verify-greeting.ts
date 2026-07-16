@@ -13,8 +13,15 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../discord/interaction_dispatch';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod } from '../discord/sdk_operations';
 
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
+const verificationGreetingSendPolicy = defineDiscordOperationPolicy({
+  operation: 'support.send-verification-greeting',
+  timeoutMs: 3_000,
+  totalBudgetMs: 3_000,
+});
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -57,7 +64,12 @@ module.exports = {
       });
     }
 
-    const message = await (channel as TextChannel).send(buildGreeting());
+    const message = await executeDiscordSdkMethod(
+      verificationGreetingSendPolicy,
+      channel as TextChannel,
+      'send',
+      buildGreeting(),
+    );
 
     return responder.respond({
       content: `✅ Sent the verification greeting to ${message.url}`,
