@@ -565,7 +565,15 @@ not-found results continue replacing the original message, including after autom
 deferral, and the unknown-selection fallback remains an immediate ephemeral reply. The adjustment
 modal submission remains the authoritative authorization boundary.
 
-**Remaining: Batch 2B (inventory modal-opening route), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
+**Completed: Batch 2B.4 (prepared inventory add/edit modals)**
+
+The inventory add and edit buttons use the shared gated prepared-modal policy. Fast ownership and
+item lookups preserve the immediate blank add modal and prefilled edit modal, including the
+existing immediate ownership denial. Slow lookups preserve the same modal behind owner-bound
+activation. Both modal submissions repeat ownership validation and remain the authoritative
+inventory-entitlement boundary.
+
+**Remaining: Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 
 **Step 1: Classify before migration**
 

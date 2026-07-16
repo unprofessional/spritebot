@@ -86,9 +86,14 @@ export function getButtonInteractionPolicy(
 ): InteractionDispatchPolicy | undefined {
   const directPolicy = directRoutes.find(([pattern]) => pattern.test(customId))?.[2];
   if (directPolicy) return directPolicy;
+  if (isInventoryModalButton(customId)) return inventoryButtons.interactionPolicy;
   if (isInventoryButton(customId)) return undefined;
   if (customId.startsWith('goBackToCharacter:')) return characterViewButtons.interactionPolicy;
   return fallbackButtons.interactionPolicy;
+}
+
+function isInventoryModalButton(customId: string): boolean {
+  return /^(?:add_inventory_item|invEdit|edit_inventory_item):/.test(customId);
 }
 
 function isInventoryButton(customId: string): boolean {
@@ -108,7 +113,7 @@ export async function handleButton(
   }
 
   if (isInventoryButton(customId)) {
-    return inventoryButtons.handle(interaction);
+    return inventoryButtons.handle(interaction, responder);
   }
 
   if (customId.startsWith('goBackToCharacter:')) {
