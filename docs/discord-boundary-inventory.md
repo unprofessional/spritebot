@@ -100,6 +100,12 @@ private owner-bound activation, and both fast and deferred not-found paths prese
 original-message replacement behavior. Authorization remains on the gated adjustment-modal
 submission.
 
+Task 7 Batch 2B.4 removes 2 more findings, bringing the current report to 169. The inventory add
+and edit button routes now share the gated prepared-modal policy. Fast ownership/item lookups keep
+the immediate blank add modal, prefilled edit modal, and ownership denial unchanged. Slow lookups
+preserve the same modal behind owner-bound activation, while the gated modal submissions repeat
+ownership validation before mutation.
+
 The rule uses TypeScript receiver provenance from discord.js/`@discordjs` declarations, imported
 REST/route symbols, and Discord URL construction. It intentionally does not flag arbitrary domain
 objects that happen to expose methods such as `send`, `edit`, `delete`, or `fetch`.
@@ -152,6 +158,10 @@ Task 7 Batch 2B.3 adds a component-update-aware prepared-modal mode for numeric-
 This keeps immediate modal and original-message update behavior unchanged while safely handling
 slow hydration with either a deferred original-message edit or private prepared activation.
 
+Task 7 Batch 2B.4 migrates the inventory add and edit modal-opening buttons through prepared-modal
+activation. This completes the direct modal-first inventory review without changing either modal's
+fields or prefilled values.
+
 ## Migration Matrix
 
 `Retry-safe?` describes the intended policy, not current automatic retry behavior. The completed
@@ -168,7 +178,7 @@ command batches are recorded below; all other source call sites remain pending m
 | Components with direct interaction calls                      | `src/components/*.ts`                                                                                                                                                                                                                                     | Replies, updates, deferrals, edits, follow-ups, and modal acknowledgements                       | Yes                                                   | No callback retries                                                                     | Interaction responder with explicit reply/component-update/modal modes | Task 7 batches 1, 2A, and prepared stat-template editor complete                   |
 | Builder-only components reviewed with no direct boundary call | `src/components/rebuild_list_characters_response.ts`, `src/components/stat_type_select.ts`, `src/components/view_character_card.ts`, `src/components/view_game_card.ts`, `src/components/view_game_stat_card.ts`, `src/components/view_inventory_card.ts` | Discord payload construction only                                                                | No                                                    | Not applicable                                                                          | Keep outside the controlled call-method rule                           | No migration required unless behavior changes                                      |
 | Mixed component SDK operation                                 | `src/components/support_verify_button.ts`                                                                                                                                                                                                                 | Support-guild member fetch plus interaction response                                             | Yes                                                   | Member fetch is a safe-read candidate                                                   | Operation executor plus responder                                      | Task 7 responder complete; member fetch remains in Task 8                          |
-| Handlers with direct interaction calls                        | `src/handlers/**/*.ts` (17 direct-call files; 100 findings)                                                                                                                                                                                               | Replies, component updates, deferrals, edits, follow-ups, and modal acknowledgements             | Yes                                                   | No callback retries                                                                     | Interaction responder with route-specific mode                         | Task 7                                                                             |
+| Handlers with direct interaction calls                        | `src/handlers/**/*.ts` (17 direct-call files; 98 findings)                                                                                                                                                                                                | Replies, component updates, deferrals, edits, follow-ups, and modal acknowledgements             | Yes                                                   | No callback retries                                                                     | Interaction responder with route-specific mode                         | Task 7                                                                             |
 | Handler routers reviewed with no direct boundary call         | `src/handlers/button_handlers.ts`, `src/handlers/button_handlers/index.ts`, `src/handlers/modal_handlers.ts`, `src/handlers/select_menu_handlers.ts`                                                                                                      | Local routing only                                                                               | No                                                    | Not applicable                                                                          | Keep as routers around the dispatcher-owned responder                  | Tasks 5 and 7                                                                      |
 | Mixed handler SDK operation                                   | `src/handlers/admin_orphans.handler.ts`                                                                                                                                                                                                                   | Guild-member fetch plus deferred interaction responses                                           | Yes                                                   | Member fetch is a safe-read candidate                                                   | Operation executor plus responder                                      | Tasks 7-8                                                                          |
 | Entitlement HTTP client                                       | `src/services/discord_entitlements_api.ts`                                                                                                                                                                                                                | Raw Discord REST `GET` through native `fetch`                                                    | Yes when authorization is interactive                 | Safe-read only, bounded inside the two-second total budget                              | Operation executor with `AbortSignal`                                  | Task 8, entitlement batch                                                          |
@@ -182,21 +192,18 @@ command batches are recorded below; all other source call sites remain pending m
 
 ## Modal-First Routes
 
-The initial audit found 11 direct `showModal()` calls. The two command routes now use the hybrid
-prepared-modal pattern with modal-submission authorization:
+The initial audit found 11 direct `showModal()` calls. Every inventoried route now uses an explicit
+modal policy. The two command routes use the hybrid prepared-modal pattern with modal-submission
+authorization:
 
 - `src/commands/ic-edit-context.ts`
 - `src/commands/ic-edit.ts`
 
-The remaining call requires explicit modal-first review because
-Discord does not permit deferring and then opening a modal:
-
-- `src/handlers/button_handlers/inventory_buttons.ts`
-
 The numeric-stat selector now uses the component-update-aware prepared-modal pattern: fast
 hydration opens its modal immediately, while slow hydration offers owner-bound activation without
-replacing the original message. Task 7 must record the selected restructuring pattern for the
-remaining inventory route before migration.
+replacing the original message. Inventory add/edit buttons use the reply-aware prepared-modal
+pattern so fast ownership/item lookups retain the original modal UX and slow lookups retain the
+same modal behind owner-bound activation. No unreviewed direct `showModal()` calls remain.
 
 ## Rule Scope and Allowlist
 
