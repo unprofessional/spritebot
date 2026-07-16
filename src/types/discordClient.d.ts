@@ -8,9 +8,11 @@ import type {
   MessageContextMenuCommandInteraction,
   SlashCommandBuilder,
 } from 'discord.js';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 
 type CommandModule = {
   data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  interactionPolicy?: InteractionDispatchPolicy;
   execute: (
     interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
   ) => Promise<unknown>;
