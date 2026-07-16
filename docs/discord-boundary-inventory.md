@@ -31,6 +31,19 @@ The rule uses TypeScript receiver provenance from discord.js/`@discordjs` declar
 REST/route symbols, and Discord URL construction. It intentionally does not flag arbitrary domain
 objects that happen to expose methods such as `send`, `edit`, `delete`, or `fetch`.
 
+## Boundary Foundation Status
+
+Tasks 2 and 3 established the allowlisted outbound-operation foundation without migrating a
+production call site, so the audit remains at 413 findings:
+
+| Capability                            | Boundary modules                                                       | Status      |
+| ------------------------------------- | ---------------------------------------------------------------------- | ----------- |
+| Error classification and redaction    | `src/discord/errors.ts`, `src/discord/logging.ts`                      | Implemented |
+| Bounded policy and operation executor | `src/discord/operation_policy.ts`, `src/discord/operation_executor.ts` | Implemented |
+
+Call-site counts will begin changing with the interaction dispatcher and subsystem migration
+batches. Every migrated operation must name its timeout, total budget, and retry policy.
+
 ## Migration Matrix
 
 `Retry-safe?` describes the intended policy, not current automatic retry behavior. Every operation
