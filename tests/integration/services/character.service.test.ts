@@ -123,6 +123,34 @@ describe('character.service', () => {
     ]);
   });
 
+  test('hydrates a missing count stat from template max and current defaults', async () => {
+    const game = await createGame();
+    const hp = await templateDAO.create({
+      game_id: game.id,
+      label: 'HP',
+      field_type: 'count',
+      default_value: '10',
+      meta: { default_current: 4 },
+    });
+    const character = await characterDAO.create({
+      user_id: 'player-1',
+      game_id: game.id,
+      name: 'Robin Sage',
+      bio: null,
+      avatar_url: null,
+    });
+
+    const hydrated = await getCharacterWithStats(character.id);
+
+    expect(hydrated?.stats).toContainEqual(
+      expect.objectContaining({
+        template_id: hp.id,
+        field_type: 'count',
+        meta: { current: 4, max: 10 },
+      }),
+    );
+  });
+
   test('persists roleplay display fields on character metadata', async () => {
     const game = await createGame();
 

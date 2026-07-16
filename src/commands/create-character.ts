@@ -8,6 +8,7 @@ import { getUserDefinedFields } from '../services/character.service';
 import { initDraft, getTempCharacterData } from '../services/character_draft.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateCharacterResponse } from '../utils/rebuild_create_character_response';
+import { applyCountStatDefaultsToDraft } from '../utils/count_stat_defaults';
 
 import type { StatTemplate } from '../types/stat_template';
 import type { UserDefinedField } from '../types/character';
@@ -94,6 +95,7 @@ module.exports = {
     }
 
     draft.game_id = gameId;
+    applyCountStatDefaultsToDraft(draft.data, statTemplates);
     console.log(`🧾 Draft initialized for user ${userId} with game_id: ${gameId}`);
 
     const coreFields: LabeledField[] = [
