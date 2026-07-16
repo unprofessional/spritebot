@@ -1,7 +1,10 @@
 import { LifecycleNotificationChannelDAO } from '../../../src/dao/lifecycle_notification_channel.dao';
 
 const command = require('../../../src/commands/bot-announcements') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(
+    interaction: unknown,
+    context: { responder: { respond(payload: unknown): Promise<unknown> } },
+  ): Promise<void>;
 };
 
 const lifecycleNotificationChannelDAO = new LifecycleNotificationChannelDAO();
@@ -40,7 +43,7 @@ describe('/bot-announcements', () => {
     };
     const { interaction, reply } = createInteraction({ subcommand: 'set', channel });
 
-    await command.execute(interaction);
+    await executeCommand(interaction);
 
     await expect(lifecycleNotificationChannelDAO.findByGuild('guild-1')).resolves.toEqual(
       expect.objectContaining({
@@ -65,7 +68,7 @@ describe('/bot-announcements', () => {
     });
 
     const status = createInteraction({ subcommand: 'status' });
-    await command.execute(status.interaction);
+    await executeCommand(status.interaction);
     expect(status.reply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: 'Bot announcements are currently set to <#channel-1>.',
@@ -74,7 +77,7 @@ describe('/bot-announcements', () => {
     );
 
     const clear = createInteraction({ subcommand: 'clear' });
-    await command.execute(clear.interaction);
+    await executeCommand(clear.interaction);
     await expect(lifecycleNotificationChannelDAO.findByGuild('guild-1')).resolves.toBeNull();
     expect(clear.reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -92,7 +95,7 @@ describe('/bot-announcements', () => {
     };
     const { interaction, reply } = createInteraction({ subcommand: 'set', channel });
 
-    await command.execute(interaction);
+    await executeCommand(interaction);
 
     await expect(lifecycleNotificationChannelDAO.findByGuild('guild-1')).resolves.toBeNull();
     expect(reply).toHaveBeenCalledWith(
@@ -103,3 +106,9 @@ describe('/bot-announcements', () => {
     );
   });
 });
+
+async function executeCommand(interaction: ReturnType<typeof createInteraction>['interaction']) {
+  await command.execute(interaction, {
+    responder: { respond: interaction.reply },
+  });
+}
