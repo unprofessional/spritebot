@@ -5,7 +5,13 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../../../src/discord/interaction_dispatch';
+import { dispatchInteractionWithDeadline } from '../../../src/discord/interaction_dispatch';
 import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
+import { preparedModalInteractionPolicy } from '../../../src/discord/prepared_modal';
+import {
+  getButtonInteractionPolicy,
+  handleButton,
+} from '../../../src/handlers/button_handlers/index';
 
 jest.mock('../../../src/services/rp_message_proxy.service', () => ({
   editRoleplayProxyMessage: jest.fn(),
@@ -43,7 +49,8 @@ describe('IC message editing commands', () => {
     jest.clearAllMocks();
   });
 
-  test('/ic-edit shows a minimal paragraph modal as its first callback without prefetching', async () => {
+  test('/ic-edit preserves the prefilled paragraph editor on the fast path', async () => {
+    fetchContentMock.mockResolvedValue({ status: 'found', content: 'Original IC content' });
     const interaction = commandInteraction();
 
     await executeModalCommand(icEditCommand, interaction);
@@ -51,11 +58,18 @@ describe('IC message editing commands', () => {
     expect(icEditCommand.data.toJSON().options).toEqual([
       expect.objectContaining({ name: 'message', required: true }),
     ]);
-    expect(fetchContentMock).not.toHaveBeenCalled();
-    expectOnlyModalCallback(interaction, '123456789012345678');
+    expect(fetchContentMock).toHaveBeenCalledWith({
+      client: interaction.client,
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'user-1',
+      messageId: '123456789012345678',
+    });
+    expectOnlyModalCallback(interaction, '123456789012345678', 'Original IC content');
   });
 
-  test('Edit IC Message shows a minimal modal as its first callback without prefetching', async () => {
+  test('Edit IC Message preserves the prefilled editor on the fast path', async () => {
+    fetchContentMock.mockResolvedValue({ status: 'found', content: 'Context IC content' });
     const interaction = commandInteraction();
 
     await executeModalCommand(icEditContextCommand, interaction);
@@ -66,8 +80,78 @@ describe('IC message editing commands', () => {
         type: ApplicationCommandType.Message,
       }),
     );
-    expect(fetchContentMock).not.toHaveBeenCalled();
-    expectOnlyModalCallback(interaction, 'proxy-1');
+    expect(fetchContentMock).toHaveBeenCalledWith({
+      client: interaction.client,
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'user-1',
+      messageId: 'proxy-1',
+    });
+    expectOnlyModalCallback(interaction, 'proxy-1', 'Context IC content');
+  });
+
+  test('/ic-edit prepares an owner-bound prefilled editor when acknowledgement wins the race', async () => {
+    jest.useFakeTimers();
+    let resolveFetch!: (result: { status: 'found'; content: string }) => void;
+    fetchContentMock.mockReturnValue(
+      new Promise((resolve) => {
+        resolveFetch = resolve;
+      }),
+    );
+
+    try {
+      const interaction = commandInteraction();
+      const policy = resolvePolicy(icEditCommand, interaction);
+      const dispatch = dispatchInteractionWithDeadline({
+        interaction: interaction as never,
+        policy,
+        acknowledgementBudgetMs: 10,
+        handler: (routedInteraction, responder) =>
+          icEditCommand.execute(routedInteraction as never, { responder }),
+      });
+      await Promise.resolve();
+      await jest.advanceTimersByTimeAsync(10);
+
+      expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      resolveFetch({ status: 'found', content: 'Prepared IC content' });
+      await dispatch;
+
+      expect(interaction.showModal).not.toHaveBeenCalled();
+      const preparedPayload = interaction.editReply.mock.calls[0][0];
+      expect(preparedPayload.content).toBe(
+        'Discord needed a moment. Select **Open editor** to continue where you left off.',
+      );
+      const customId = preparedPayload.components[0].toJSON().components[0].custom_id;
+      expect(customId).toMatch(/^preparedModal:/);
+
+      const intruder = commandInteraction();
+      intruder.customId = customId;
+      intruder.user.id = 'other-user';
+      const intruderResponder = new DiscordInteractionResponder(
+        intruder as never,
+        preparedModalInteractionPolicy.mode,
+      );
+      await handleButton(intruder as never, intruderResponder);
+      expect(intruder.reply).toHaveBeenCalledWith({
+        content: '⚠️ This prepared editor expired. Please start the edit again.',
+        ephemeral: true,
+      });
+      expect(intruder.showModal).not.toHaveBeenCalled();
+
+      const activation = commandInteraction();
+      activation.customId = customId;
+      const activationResponder = new DiscordInteractionResponder(
+        activation as never,
+        preparedModalInteractionPolicy.mode,
+      );
+      expect(getButtonInteractionPolicy(customId)).toBe(preparedModalInteractionPolicy);
+      expect(preparedModalInteractionPolicy.acknowledgement).toBe('manual');
+      await handleButton(activation as never, activationResponder);
+
+      expectOnlyModalCallback(activation, '123456789012345678', 'Prepared IC content');
+    } finally {
+      jest.useRealTimers();
+    }
   });
 
   test('/ic-edit preserves invalid-reference feedback through an ephemeral reply policy', async () => {
@@ -149,8 +233,8 @@ async function executeModalCommand(
 ): Promise<void> {
   const policy = resolvePolicy(command, interaction);
   expect(policy).toEqual({
-    mode: { kind: 'modal' },
-    acknowledgement: 'manual',
+    mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
     authorization: 'modal-submit',
   });
   const responder = new DiscordInteractionResponder(interaction as never, policy.mode);
@@ -169,6 +253,7 @@ function resolvePolicy(
 function expectOnlyModalCallback(
   interaction: ReturnType<typeof commandInteraction>,
   messageId: string,
+  content: string,
 ): void {
   expect(interaction.reply).not.toHaveBeenCalled();
   expect(interaction.deferReply).not.toHaveBeenCalled();
@@ -183,15 +268,16 @@ function expectOnlyModalCallback(
       max_length: 2000,
       required: true,
       style: TextInputStyle.Paragraph,
+      value: content,
     }),
   );
-  expect(modal.components[0].components[0]).not.toHaveProperty('value');
 }
 
 function commandInteraction({ message = '123456789012345678' }: { message?: string } = {}) {
   return {
     type: 2,
     commandName: 'ic-edit',
+    customId: '',
     channelId: 'channel-1',
     client: {},
     guildId: 'guild-1',

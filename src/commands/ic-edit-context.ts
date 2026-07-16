@@ -10,7 +10,9 @@ import type {
   InteractionDispatchPolicy,
   InteractionDispatchPolicySource,
 } from '../discord/interaction_dispatch';
-import { buildIcEditModal } from './ic-edit';
+import { presentPreparedModal } from '../discord/prepared_modal';
+import { fetchProxyMessageContent } from '../services/rp_message_proxy.service';
+import { buildIcEditModal, resultMessage, resultReason } from './ic-edit';
 
 module.exports = {
   data: new ContextMenuCommandBuilder()
@@ -26,7 +28,9 @@ module.exports = {
     interaction: MessageContextMenuCommandInteraction<CacheType>,
     { responder }: InteractionCommandContext,
   ) {
-    const { guildId, targetMessage } = interaction;
+    if (responder.state === 'expired') return;
+
+    const { guildId, targetMessage, user } = interaction;
 
     if (!guildId) {
       return responder.respond({
@@ -35,7 +39,26 @@ module.exports = {
       });
     }
 
-    return responder.showModal(buildIcEditModal(targetMessage.id));
+    const result = await fetchProxyMessageContent({
+      client: interaction.client,
+      guildId,
+      channelId: targetMessage.channelId,
+      userId: user.id,
+      messageId: targetMessage.id,
+    });
+
+    if (result.status !== 'found') {
+      return responder.respond({
+        content: resultMessage(result.status, resultReason(result)),
+        ephemeral: true,
+      });
+    }
+
+    return presentPreparedModal({
+      modal: buildIcEditModal(targetMessage.id, result.content),
+      responder,
+      userId: user.id,
+    });
   },
 };
 
@@ -44,8 +67,8 @@ function resolveIcEditContextPolicy(
 ): InteractionDispatchPolicy {
   if (interaction.guildId) {
     return {
-      mode: { kind: 'modal' },
-      acknowledgement: 'manual',
+      mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+      acknowledgement: 'auto-defer',
       authorization: 'modal-submit',
     };
   }
