@@ -3,8 +3,14 @@
 import { ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
 
 import { getCharacterWithStats, deleteCharacter } from '../services/character.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 const id = 'confirmDeleteCharacter';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
@@ -13,14 +19,17 @@ function build(characterId: string): ButtonBuilder {
     .setStyle(ButtonStyle.Danger);
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId, user } = interaction;
   const [, characterId] = customId.split(':');
 
   try {
     const character = await getCharacterWithStats(characterId);
     if (!character || character.user_id !== user.id) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ You do not have permission to delete this character.',
         ephemeral: true,
       });
@@ -30,7 +39,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     console.log(`🚨 Deleting character ${characterId} on user confirm`);
     await deleteCharacter(characterId);
 
-    await interaction.update({
+    await responder.respond({
       content:
         '🗑️ Character deleted.\n⚠️ You have **30 days** to restore it before it is permanently removed. Use `/restore-character` to recover it.',
       embeds: [],
@@ -38,11 +47,11 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     });
   } catch (err) {
     console.error('❌ Failed to delete character:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Something went wrong while deleting the character.',
       ephemeral: true,
     });
   }
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };

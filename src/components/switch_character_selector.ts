@@ -15,7 +15,14 @@ import { validateGameAccess } from '../utils/validate_game_access';
 import { formatTimeAgo } from '../utils/time_ago';
 import { isActiveCharacter } from '../utils/is_active_character';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { build as buildCharacterCard } from './view_character_card';
+
+export const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 export const id = 'switchCharacterDropdown';
 
@@ -135,12 +142,15 @@ export async function build(
   };
 }
 
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const selected = interaction.values?.[0];
   const { user, guildId } = interaction;
 
   if (!selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No selection made.',
       ephemeral: true,
     });
@@ -149,7 +159,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
 
   try {
     if (!guildId) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ This action must be used in a server.',
         ephemeral: true,
       });
@@ -163,7 +173,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     ]);
 
     if (!currentGameId || !picked) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Invalid selection.',
         ephemeral: true,
       });
@@ -171,7 +181,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     }
 
     if (picked.user_id !== user.id) {
-      await interaction.reply({
+      await responder.respond({
         content: '🚫 You can only switch to your own characters.',
         ephemeral: true,
       });
@@ -179,7 +189,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     }
 
     if (picked.game_id !== currentGameId) {
-      await interaction.reply({
+      await responder.respond({
         content: '🚫 That character is not in your current game.',
         ephemeral: true,
       });
@@ -190,7 +200,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     const character = await getCharacterWithStats(selected);
 
     if (!character) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Could not find the selected character.',
         ephemeral: true,
       });
@@ -209,13 +219,13 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
       'switch-character',
     );
 
-    await interaction.update({
+    await responder.respond({
       ...view,
       content: appendNudge(`✅ Switched to **${character.name}**!`, nudge),
     });
   } catch (err) {
     console.error('Error switching character:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to switch character.',
       ephemeral: true,
     });

@@ -8,8 +8,14 @@ import {
 } from 'discord.js';
 import { getCharacterWithStats } from '../services/character.service';
 import { CharacterWithStats, CharacterStatWithLabel } from '../types/character';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 const id = 'paragraphFieldSelect';
+const interactionPolicy = {
+  mode: { kind: 'reply', visibility: 'ephemeral' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function truncateForDescription(text: string): string {
   if (!text) return '';
@@ -56,13 +62,16 @@ function build(character: CharacterWithStats): ActionRowBuilder<StringSelectMenu
 /**
  * Handles dropdown selection of paragraph fields.
  */
-async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId] = interaction.customId.split(':');
   const selected = interaction.values?.[0];
 
   const character: CharacterWithStats | null = await getCharacterWithStats(characterId);
   if (!character || !selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Unable to load character or field.',
       ephemeral: true,
     });
@@ -85,7 +94,7 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
   }
 
   if (!fullText.trim()) {
-    await interaction.reply({
+    await responder.respond({
       content: `ℹ️ No content available for **${label}**.`,
       ephemeral: true,
     });
@@ -110,24 +119,24 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
   if (current) chunks.push(current);
 
   if (chunks.length === 0) {
-    await interaction.reply({
+    await responder.respond({
       content: `ℹ️ No usable content found for **${label}**.`,
       ephemeral: true,
     });
     return;
   }
 
-  await interaction.reply({
+  await responder.respond({
     content: `**${label}**\n\n${chunks[0]}`,
     ephemeral: true,
   });
 
   for (let i = 1; i < chunks.length; i++) {
-    await interaction.followUp({
+    await responder.followUp({
       content: chunks[i],
       ephemeral: true,
     });
   }
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };

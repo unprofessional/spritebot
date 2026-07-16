@@ -19,9 +19,9 @@ import type { RESTPostAPIApplicationCommandsJSONBody } from 'discord-api-types/v
 import dotenv = require('dotenv');
 dotenv.config();
 
-import { handleButton } from '../handlers/button_handlers';
+import { getButtonInteractionPolicy, handleButton } from '../handlers/button_handlers';
 import { handleModal } from '../handlers/modal_handlers';
-import { handleSelectMenu } from '../handlers/select_menu_handlers';
+import { getSelectMenuInteractionPolicy, handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardCommand, guardComponent } from '../access/guards';
 import { supportGuildId } from '../config/env_config';
 import {
@@ -211,6 +211,32 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
         guard: policy.authorization === 'modal-submit' ? undefined : guardCommand,
         handler: (routedInteraction, responder) =>
           command.execute(routedInteraction, { responder }),
+      });
+      return;
+    }
+  }
+
+  if (interaction.isButton()) {
+    const policy = getButtonInteractionPolicy(interaction.customId);
+    if (policy) {
+      await startTrackedInteractionDispatch({
+        interaction,
+        policy,
+        guard: guardComponent,
+        handler: handleButton,
+      });
+      return;
+    }
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    const policy = getSelectMenuInteractionPolicy(interaction.customId);
+    if (policy) {
+      await startTrackedInteractionDispatch({
+        interaction,
+        policy,
+        guard: guardComponent,
+        handler: handleSelectMenu,
       });
       return;
     }
