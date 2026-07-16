@@ -2,10 +2,10 @@ const createGameCommand = require('../../../src/commands/create-game') as {
   execute(interaction: unknown): Promise<void>;
 };
 const listGamesCommand = require('../../../src/commands/list-games') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const viewGameCommand = require('../../../src/commands/view-game') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const icCommand = require('../../../src/commands/ic') as {
   execute(interaction: unknown): Promise<void>;
@@ -42,6 +42,7 @@ function createInteraction({
       reply,
     },
     reply,
+    responderContext: { responder: { respond: reply } },
   };
 }
 
@@ -70,7 +71,7 @@ describe('app command flows', () => {
     await createGameCommand.execute(created.interaction);
 
     const listed = createInteraction();
-    await listGamesCommand.execute(listed.interaction);
+    await listGamesCommand.execute(listed.interaction, listed.responderContext);
 
     expect(listed.reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -81,7 +82,7 @@ describe('app command flows', () => {
     expect(listed.reply.mock.calls[0][0].content).toEqual(expect.stringContaining('Active'));
 
     const viewed = createInteraction();
-    await viewGameCommand.execute(viewed.interaction);
+    await viewGameCommand.execute(viewed.interaction, viewed.responderContext);
 
     expect(viewed.reply).toHaveBeenCalledWith(
       expect.objectContaining({
