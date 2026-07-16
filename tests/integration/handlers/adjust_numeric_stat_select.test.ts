@@ -3,6 +3,8 @@ import type { StringSelectMenuInteraction } from 'discord.js';
 import { dispatchInteractionWithDeadline } from '../../../src/discord/interaction_dispatch';
 import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
 import { preparedModalInteractionPolicy } from '../../../src/discord/prepared_modal';
+import { resolvePreparedModalSubmission } from '../../../src/discord/prepared_modal';
+import { getModalInteractionPolicy } from '../../../src/handlers/modal_handlers';
 import { getButtonInteractionPolicy, handleButton } from '../../../src/handlers/button_handlers';
 import {
   getSelectMenuInteractionPolicy,
@@ -142,7 +144,44 @@ describe('numeric stat adjustment modal boundary', () => {
       expect(getButtonInteractionPolicy(customId)).toBe(preparedModalInteractionPolicy);
       await handleButton(activation as never, responder);
 
-      expectAdjustmentModal(activation.showModal as jest.Mock);
+      const preparedModal = expectSingleModal(activation.showModal as jest.Mock);
+      expect(preparedModal.custom_id).toMatch(/^preparedSubmit:/);
+      expect(preparedModal.title).toBe('Adjust Stat Value');
+
+      const submission = modalSubmission(preparedModal.custom_id);
+      const intruderSubmission = modalSubmission(preparedModal.custom_id);
+      intruderSubmission.user = { id: 'user-2' };
+      const intruderResolution = resolvePreparedModalSubmission(intruderSubmission as never);
+      expect(intruderResolution.interaction.customId).toBe(preparedModal.custom_id);
+      expect(intruderResolution.updateOriginal).toBeUndefined();
+
+      const resolved = resolvePreparedModalSubmission(submission as never);
+      expect(resolved.interaction.customId).toBe('adjustStatModal:character-1:stat-hp');
+      const submissionPolicy = getModalInteractionPolicy(resolved.interaction);
+      await dispatchInteractionWithDeadline({
+        interaction: resolved.interaction,
+        policy: submissionPolicy,
+        preparedComponentUpdateTarget: resolved.updateOriginal,
+        handler: async (_routed, submissionResponder) => {
+          await submissionResponder.respond({
+            content: '✅ Updated **Hit Points**.',
+            embeds: [{ title: 'Mara' }],
+            components: [{ type: 1 }],
+          });
+        },
+      });
+
+      expect(interaction.editReply).toHaveBeenCalledWith({
+        content: '✅ Updated **Hit Points**.',
+        embeds: [{ title: 'Mara' }],
+        components: [{ type: 1 }],
+      });
+      expect(submission.deferUpdate).toHaveBeenCalledTimes(1);
+      expect(submission.editReply).toHaveBeenCalledWith({
+        content: '✅ Updated **Hit Points**.\n\nThe original message has been refreshed.',
+        embeds: [],
+        components: [],
+      });
     } finally {
       jest.useRealTimers();
     }
@@ -199,4 +238,17 @@ function expectAdjustmentModal(showModal: jest.Mock): void {
       (row: { components: Array<{ custom_id: string }> }) => row.components[0].custom_id,
     ),
   ).toEqual(['deltaOperator', 'deltaValue']);
+}
+
+function expectSingleModal(showModal: jest.Mock) {
+  expect(showModal).toHaveBeenCalledTimes(1);
+  return showModal.mock.calls[0][0].toJSON();
+}
+
+function modalSubmission(customId: string) {
+  return {
+    ...selectInteraction(),
+    customId,
+    message: { id: 'prepared-activation-message' },
+  };
 }

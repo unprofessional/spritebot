@@ -4,7 +4,10 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../../../src/discord/interaction_dispatch';
-import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
+import {
+  DiscordInteractionResponder,
+  InteractionCallbackError,
+} from '../../../src/discord/interaction_responder';
 import {
   getOrCreatePlayer,
   setCurrentCharacter,
@@ -58,8 +61,8 @@ describe('non-modal inventory and RP command responder migration', () => {
     const interaction = commandInteraction();
     interaction.editReply.mockRejectedValue(new Error('socket closed'));
 
-    await expect(executePreDeferred(inventoryCommand, interaction)).rejects.toThrow(
-      'socket closed',
+    await expect(executePreDeferred(inventoryCommand, interaction)).rejects.toBeInstanceOf(
+      InteractionCallbackError,
     );
 
     expect(interaction.editReply).toHaveBeenCalledTimes(1);

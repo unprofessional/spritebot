@@ -20,6 +20,7 @@ dotenv.config();
 
 import { getButtonInteractionPolicy, handleButton } from '../handlers/button_handlers';
 import { getModalInteractionPolicy, handleModal } from '../handlers/modal_handlers';
+import { resolvePreparedModalSubmission } from '../discord/prepared_modal';
 import { getSelectMenuInteractionPolicy, handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardCommand, guardComponent } from '../access/guards';
 import { supportGuildId } from '../config/env_config';
@@ -283,12 +284,15 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
   }
 
   if (interaction.isModalSubmit()) {
-    const policy = getModalInteractionPolicy(interaction);
+    const preparedSubmission = resolvePreparedModalSubmission(interaction);
+    const routedInteraction = preparedSubmission.interaction;
+    const policy = getModalInteractionPolicy(routedInteraction);
     await startTrackedInteractionDispatch({
-      interaction,
+      interaction: routedInteraction,
       policy,
       guard: guardComponent,
       handler: handleModal,
+      preparedComponentUpdateTarget: preparedSubmission.updateOriginal,
     });
     return;
   }

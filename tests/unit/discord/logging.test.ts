@@ -1,4 +1,8 @@
-import { formatDiscordFailureLog, logDiscordFailure } from '../../../src/discord/logging';
+import {
+  formatDiscordFailureLog,
+  formatDiscordOperationTelemetryLog,
+  logDiscordFailure,
+} from '../../../src/discord/logging';
 
 describe('Discord failure logging', () => {
   test('emits useful classified metadata without logging secrets or request details', () => {
@@ -80,5 +84,28 @@ describe('Discord failure logging', () => {
     expect(line).toContain('category=rate_limited');
     expect(line).toContain('retryable=true');
     expect(line).toContain('retryAfterMs=750');
+  });
+
+  test('emits safe interaction acknowledgement telemetry', () => {
+    const line = formatDiscordOperationTelemetryLog({
+      phase: 'final',
+      outcome: 'success',
+      operation: 'interaction.deferReply',
+      attempt: 1,
+      elapsedMs: 12,
+      interactionKind: 'chat-input-command',
+      commandName: 'create-character',
+      customId: 'inventory-edit:secret-item-id',
+      acknowledgementMethod: 'deferReply',
+      acknowledgementMs: 1_742,
+    });
+
+    expect(line).toContain('operation=interaction.deferReply');
+    expect(line).toContain('interactionKind=chat-input-command');
+    expect(line).toContain('command=create-character');
+    expect(line).toContain('customIdPrefix=inventory-edit');
+    expect(line).toContain('acknowledgementMethod=deferReply');
+    expect(line).toContain('acknowledgementMs=1742');
+    expect(line).not.toContain('secret-item-id');
   });
 });

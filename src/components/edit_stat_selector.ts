@@ -2,7 +2,7 @@
 
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
 
-import { gatedPreparedModalInteractionPolicy } from '../discord/interaction_dispatch';
+import { gatedPreparedComponentModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { presentPreparedModal } from '../discord/prepared_modal';
 import { getStatTemplates } from '../services/game.service';
@@ -10,7 +10,7 @@ import { buildStatTemplateModal } from '../handlers/modal_handlers/stat_template
 import type { StatTemplate } from '../types/stat_template';
 
 const id = 'editStatSelect';
-const interactionPolicy = gatedPreparedModalInteractionPolicy;
+const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
 
 /**
  * Build the select menu row to edit a stat.

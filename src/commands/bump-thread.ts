@@ -4,7 +4,6 @@ import {
   CacheType,
   ChannelType,
   ChatInputCommandInteraction,
-  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
   ThreadChannel,
@@ -261,7 +260,7 @@ module.exports = {
         console.log('[bump-thread] exec: missing ManageThreads/Admin on invoker');
         await responder.respond({
           content: '❌ You need **Manage Threads** to do that.',
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -272,7 +271,7 @@ module.exports = {
         if (rows.length === 0) {
           await responder.respond({
             content: 'ℹ️ No registered threads in this server.',
-            flags: MessageFlags.Ephemeral,
+            ephemeral: true,
           });
           return;
         }
@@ -290,7 +289,7 @@ module.exports = {
 
         await responder.respond({
           content: `📋 **Registered bump threads:**\n${lines.join('\n')}`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -304,7 +303,7 @@ module.exports = {
         await responder.respond({
           content:
             '⚠️ You must run this in a thread or specify a valid thread with `/bump-thread … thread:`.',
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -316,7 +315,7 @@ module.exports = {
         );
         await responder.respond({
           content: '⚠️ That thread is not in this server.',
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -345,7 +344,7 @@ module.exports = {
             (note ? `\n📝 Note: _${note}_` : '') +
             `\n⏱️ Interval: **${defaultMinutes}m**` +
             (target.autoArchiveDuration ? ` (auto-archive: ${target.autoArchiveDuration}m)` : ''),
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -359,7 +358,7 @@ module.exports = {
           content: ok
             ? `🗑️ Unregistered <#${target.id}>.`
             : `ℹ️ <#${target.id}> was not registered.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -376,7 +375,7 @@ module.exports = {
               ? `📝 Updated note for <#${target.id}>: _${note}_`
               : `🧹 Cleared note for <#${target.id}>.`
             : `⚠️ <#${target.id}> is not registered.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -397,7 +396,7 @@ module.exports = {
                 ? `\n⚠️ Heads up: this is ≥ the thread’s auto-archive window (${archive}m). The bot will need **Manage Threads** to unarchive before bumping.`
                 : '')
             : `⚠️ <#${target.id}> is not registered.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -407,7 +406,7 @@ module.exports = {
         await service.bumpNow(interaction.client, target.id, { deleteAfter: false });
         await responder.respond({
           content: `🔔 Bumped <#${target.id}>.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -415,7 +414,7 @@ module.exports = {
       console.error('bump-thread command error:', err);
       await responder.respond({
         content: '❌ Something went wrong.',
-        flags: MessageFlags.Ephemeral,
+        ephemeral: true,
       });
     }
   },
