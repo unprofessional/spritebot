@@ -1,4 +1,4 @@
-import { classifyDiscordError } from './errors';
+import { classifyDiscordError, type ClassifiedDiscordError } from './errors';
 
 export interface DiscordFailureLogInput {
   operation: string;
@@ -10,6 +10,15 @@ export interface DiscordFailureLogInput {
 }
 
 export type DiscordLogSink = (line: string) => void;
+
+export interface DiscordOperationTelemetryLogInput {
+  phase: 'attempt' | 'final';
+  outcome: 'success' | 'failure';
+  operation: string;
+  attempt: number;
+  elapsedMs: number;
+  classified?: ClassifiedDiscordError;
+}
 
 const safeLabel = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
 
@@ -39,6 +48,39 @@ export function logDiscordFailure(
   sink: DiscordLogSink = console.warn,
 ): void {
   sink(formatDiscordFailureLog(input));
+}
+
+export function formatDiscordOperationTelemetryLog(
+  input: DiscordOperationTelemetryLogInput,
+): string {
+  const operation = safeMetadata(input.operation);
+
+  return [
+    '[discord-operation]',
+    `phase=${input.phase}`,
+    `outcome=${input.outcome}`,
+    `operation=${operation ?? 'unknown'}`,
+    `attempt=${safeNonNegativeInteger(input.attempt)}`,
+    `elapsedMs=${safeNonNegativeInteger(input.elapsedMs)}`,
+    ...(input.classified
+      ? [
+          `category=${input.classified.category}`,
+          `retryable=${input.classified.retryable}`,
+          `code=${input.classified.code ?? 'unknown'}`,
+          `status=${input.classified.status ?? 'unknown'}`,
+          ...(input.classified.retryAfterMs === undefined
+            ? []
+            : [`retryAfterMs=${input.classified.retryAfterMs}`]),
+        ]
+      : []),
+  ].join(' ');
+}
+
+export function logDiscordOperationTelemetry(
+  input: DiscordOperationTelemetryLogInput,
+  sink: DiscordLogSink = input.outcome === 'failure' ? console.warn : console.debug,
+): void {
+  sink(formatDiscordOperationTelemetryLog(input));
 }
 
 function safeMetadata(value: string | undefined): string | undefined {
