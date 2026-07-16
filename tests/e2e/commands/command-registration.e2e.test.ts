@@ -163,6 +163,50 @@ describe('command registration', () => {
     expect(interaction.deferReply).not.toHaveBeenCalled();
   });
 
+  test('defers modal command authorization to the gated modal submission', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { guardCommand } = require('../../../src/access/guards') as {
+      guardCommand: jest.Mock;
+    };
+    guardCommand.mockClear();
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = { on: jest.fn(), once: jest.fn() };
+    await initializeCommands(client);
+
+    const command = client.commands?.get('ic-edit') as {
+      execute: jest.Mock;
+    };
+    command.execute = jest.fn(async (_interaction, { responder }) => {
+      await responder.showModal({ customId: 'ic-edit-modal:message-1' });
+    });
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      ...commandInteraction(),
+      commandName: 'ic-edit',
+      guildId: 'guild-1',
+      guild: { id: 'guild-1' },
+      channelId: 'channel-1',
+      options: { getString: jest.fn().mockReturnValue('123456789012345678') },
+      showModal: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(guardCommand).not.toHaveBeenCalled();
+    expect(interaction.showModal).toHaveBeenCalledTimes(1);
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+  });
+
   test('responds to new interactions with a drain message during shutdown', async () => {
     jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
     const { initializeCommands } = require('../../../src/client/initial_commands') as {
