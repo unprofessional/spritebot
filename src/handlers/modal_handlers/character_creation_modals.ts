@@ -1,6 +1,7 @@
 // src/handlers/modal_handlers/character_creation_modals.ts
 
 import type { ModalSubmitInteraction } from 'discord.js';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 
 import { getUserDefinedFields } from '../../services/character.service';
 import {
@@ -17,6 +18,7 @@ import type { StatTemplate } from '../../types/stat_template';
 
 async function processCharacterFieldModal(
   interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
   fieldKey: string,
   label: string,
   value: string | null,
@@ -29,7 +31,7 @@ async function processCharacterFieldModal(
 
   if (!draft || !draft.game_id) {
     console.warn('⚠️ Draft missing game_id');
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Your draft session is invalid or expired.',
       ephemeral: true,
     });
@@ -48,7 +50,7 @@ async function processCharacterFieldModal(
 
     if (isNaN(max)) {
       console.warn('⚠️ Max value not a number:', maxRaw);
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Max value must be a number.',
         ephemeral: true,
       });
@@ -86,21 +88,23 @@ async function processCharacterFieldModal(
       : `✅ Saved **${label}**. Choose next field:\n\n`;
 
   try {
-    await interaction.deferUpdate();
-    await interaction.editReply({
+    await responder.respond({
       ...response,
       content: contentPrefix + (response.content || ''),
     });
   } catch (err) {
     console.error('❌ Failed to update ephemeral response:', err);
-    await interaction.followUp({
+    await responder.followUp({
       content: '⚠️ Failed to update your character builder. Please rerun `/create-character`.',
       ephemeral: true,
     });
   }
 }
 
-export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
+export async function handle(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId, user, guildId } = interaction;
 
   const prefixes = ['createDraftCharacterField:', 'setCharacterField:'];
@@ -116,7 +120,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   console.log(`[${prefix}] fieldType:`, fieldType);
 
   if (!fieldKey || !fieldKey.includes(':')) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Invalid field key. Please restart character creation.',
       ephemeral: true,
     });
@@ -129,7 +133,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
     console.log(`🧾 Draft state before processing:`, draft);
 
     if (!draft?.game_id) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Your draft session is invalid or expired.',
         ephemeral: true,
       });
@@ -141,7 +145,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       value = interaction.fields.getTextInputValue(fieldKey)?.trim() ?? null;
       if (!value) {
         console.warn('⚠️ No value entered for field:', fieldKey);
-        await interaction.reply({
+        await responder.respond({
           content: '⚠️ No value was entered.',
           ephemeral: true,
         });
@@ -150,10 +154,10 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
     }
 
     await getOrCreatePlayer(userId, guildId ?? 'unknown');
-    await processCharacterFieldModal(interaction, fieldKey, label, value, fieldType);
+    await processCharacterFieldModal(interaction, responder, fieldKey, label, value, fieldType);
   } catch (err) {
     console.error(`[${prefix}] Error processing modal for "${fieldKey}":`, err);
-    await interaction.reply({
+    await responder.respond({
       content: `❌ Failed to process field \`${fieldKey}\`. Please restart character creation.`,
       ephemeral: true,
     });

@@ -11,7 +11,10 @@ import {
 } from 'discord.js';
 
 import { build as buildInventoryCard } from '../../components/view_inventory_card';
-import { gatedPreparedModalInteractionPolicy } from '../../discord/interaction_dispatch';
+import {
+  gatedPreparedModalInteractionPolicy,
+  type InteractionDispatchPolicy,
+} from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import { presentPreparedModal } from '../../discord/prepared_modal';
 import { belongsToUser } from '../../services/character.service';
@@ -24,17 +27,33 @@ import {
 import { buildEditModal } from '../select_menu_handlers/inventory_item_select';
 
 export const interactionPolicy = gatedPreparedModalInteractionPolicy;
+const componentUpdateInteractionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
+const viewInventoryInteractionPolicy = {
+  mode: { kind: 'reply', visibility: 'ephemeral' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
+
+export function getInteractionPolicy(customId: string): InteractionDispatchPolicy {
+  if (/^(?:add_inventory_item|invEdit|edit_inventory_item):/.test(customId)) {
+    return interactionPolicy;
+  }
+  if (customId.startsWith('view_inventory:')) return viewInventoryInteractionPolicy;
+  return componentUpdateInteractionPolicy;
+}
 
 export async function handle(
   interaction: ButtonInteraction,
-  responder?: DiscordInteractionResponder,
+  responder: DiscordInteractionResponder,
 ): Promise<void> {
   const { customId } = interaction;
 
   if (customId.startsWith('add_inventory_item:')) {
     const [, characterId, rawPage] = customId.split(':');
 
-    if (!(await canUseInventory(interaction, characterId, responder))) return;
+    if (!(await canUseInventory(interaction, responder, characterId))) return;
 
     const page = parseInt(rawPage, 10) || 0;
     const modal = new ModalBuilder()
@@ -72,19 +91,19 @@ export async function handle(
         ),
       );
 
-    await presentPreparedModal({ modal, responder: responder!, userId: interaction.user.id });
+    await presentPreparedModal({ modal, responder, userId: interaction.user.id });
     return;
   }
 
   if (customId.startsWith('view_inventory:')) {
     const [, characterId] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId))) return;
+      if (!(await canUseInventory(interaction, responder, characterId))) return;
 
       const character = await getCharacterWithInventory(characterId);
 
       if (!character) {
-        await interaction.reply({
+        await responder.respond({
           content: '❌ Character not found.',
           ephemeral: true,
         });
@@ -92,10 +111,10 @@ export async function handle(
       }
 
       const { embeds, components } = buildInventoryCard(character);
-      await interaction.reply({ embeds, components, ephemeral: true });
+      await responder.respond({ embeds, components, ephemeral: true });
     } catch (err) {
       console.error('Error viewing inventory:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to load inventory.',
         ephemeral: true,
       });
@@ -106,12 +125,12 @@ export async function handle(
   if (customId.startsWith('inventoryPage:')) {
     const [, direction, characterId, rawPage] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId))) return;
+      if (!(await canUseInventory(interaction, responder, characterId))) return;
 
       const character = await getCharacterWithInventory(characterId);
 
       if (!character) {
-        await interaction.reply({
+        await responder.respond({
           content: '❌ Character not found.',
           ephemeral: true,
         });
@@ -121,10 +140,10 @@ export async function handle(
       const currentPage = parseInt(rawPage, 10) || 0;
       const nextPage = direction === 'next' ? currentPage + 1 : Math.max(0, currentPage - 1);
       const { embeds, components } = buildInventoryCard(character, nextPage);
-      await interaction.update({ embeds, components });
+      await responder.respond({ embeds, components });
     } catch (err) {
       console.error('Error paging inventory:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to change inventory page.',
         ephemeral: true,
       });
@@ -135,12 +154,12 @@ export async function handle(
   if (customId.startsWith('invEq:') || customId.startsWith('toggle_inventory_item_equipped:')) {
     const [, characterId, itemId, rawPage, mode] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId))) return;
+      if (!(await canUseInventory(interaction, responder, characterId))) return;
 
       const equipped = mode === 'on';
       const item = await setEquippedForCharacter(characterId, itemId, equipped);
       if (!item) {
-        await interaction.reply({
+        await responder.respond({
           content: '❌ Inventory item not found.',
           ephemeral: true,
         });
@@ -150,13 +169,14 @@ export async function handle(
       const page = parseInt(rawPage, 10) || 0;
       await updateInventoryMessage(
         interaction,
+        responder,
         characterId,
         page,
         `${equipped ? '✅ Equipped' : '▫️ Unequipped'} **${item.name}**.`,
       );
     } catch (err) {
       console.error('Error toggling inventory item equipped state:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to update inventory item.',
         ephemeral: true,
       });
@@ -167,13 +187,13 @@ export async function handle(
   if (customId.startsWith('invEdit:') || customId.startsWith('edit_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId, responder))) return;
+      if (!(await canUseInventory(interaction, responder, characterId))) return;
 
       const page = parseInt(rawPage, 10) || 0;
-      await buildEditModal(responder!, interaction.user.id, characterId, itemId, page);
+      await buildEditModal(responder, interaction.user.id, characterId, itemId, page);
     } catch (err) {
       console.error('Error preparing inventory item edit:', err);
-      await responder!.respond({
+      await responder.respond({
         content: '❌ Failed to edit inventory item.',
         ephemeral: true,
       });
@@ -184,7 +204,7 @@ export async function handle(
   if (customId.startsWith('invDel:') || customId.startsWith('delete_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
 
-    if (!(await canUseInventory(interaction, characterId))) return;
+    if (!(await canUseInventory(interaction, responder, characterId))) return;
 
     const page = parseInt(rawPage, 10) || 0;
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -198,7 +218,7 @@ export async function handle(
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.update({
+    await responder.respond({
       content: '⚠️ Delete this inventory item?',
       components: [confirmRow],
     });
@@ -208,14 +228,20 @@ export async function handle(
   if (customId.startsWith('invDelOk:') || customId.startsWith('confirm_delete_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId))) return;
+      if (!(await canUseInventory(interaction, responder, characterId))) return;
 
       await deleteItemForCharacter(characterId, itemId);
       const page = parseInt(rawPage, 10) || 0;
-      await updateInventoryMessage(interaction, characterId, page, '🗑️ Inventory item deleted.');
+      await updateInventoryMessage(
+        interaction,
+        responder,
+        characterId,
+        page,
+        '🗑️ Inventory item deleted.',
+      );
     } catch (err) {
       console.error('Error deleting inventory item:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to delete inventory item.',
         ephemeral: true,
       });
@@ -226,14 +252,14 @@ export async function handle(
   if (customId.startsWith('cancel_inventory_item_action:')) {
     const [, characterId, rawPage] = customId.split(':');
     const page = parseInt(rawPage, 10) || 0;
-    await updateInventoryMessage(interaction, characterId, page);
+    await updateInventoryMessage(interaction, responder, characterId, page);
     return;
   }
 
   if (customId.startsWith('clear_inventory:')) {
     const [, characterId, rawPage] = customId.split(':');
 
-    if (!(await canUseInventory(interaction, characterId))) return;
+    if (!(await canUseInventory(interaction, responder, characterId))) return;
 
     const page = parseInt(rawPage, 10) || 0;
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -247,7 +273,7 @@ export async function handle(
         .setStyle(ButtonStyle.Secondary),
     );
 
-    await interaction.update({
+    await responder.respond({
       content: '⚠️ Are you sure you want to delete all inventory items for this character?',
       components: [confirmRow],
     });
@@ -257,14 +283,20 @@ export async function handle(
   if (customId.startsWith('confirm_clear_inventory:')) {
     const [, characterId, rawPage] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId))) return;
+      if (!(await canUseInventory(interaction, responder, characterId))) return;
 
       await deleteInventoryByCharacter(characterId);
       const page = parseInt(rawPage, 10) || 0;
-      await updateInventoryMessage(interaction, characterId, page, '🗑️ Inventory cleared.');
+      await updateInventoryMessage(
+        interaction,
+        responder,
+        characterId,
+        page,
+        '🗑️ Inventory cleared.',
+      );
     } catch (err) {
       console.error('Error clearing inventory:', err);
-      await interaction.update({
+      await responder.respond({
         content: '❌ Failed to clear inventory.',
         components: [],
       });
@@ -275,20 +307,21 @@ export async function handle(
   if (customId.startsWith('cancel_clear_inventory:')) {
     const [, characterId, rawPage] = customId.split(':');
     const page = parseInt(rawPage, 10) || 0;
-    await updateInventoryMessage(interaction, characterId, page);
+    await updateInventoryMessage(interaction, responder, characterId, page);
     return;
   }
 }
 
 export async function updateInventoryMessage(
   interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
   characterId: string,
   page = 0,
   content: string | null = null,
 ): Promise<void> {
   const character = await getCharacterWithInventory(characterId);
   if (!character) {
-    await interaction.update({
+    await responder.respond({
       content: '❌ Character not found.',
       embeds: [],
       components: [],
@@ -297,7 +330,7 @@ export async function updateInventoryMessage(
   }
 
   const { embeds, components } = buildInventoryCard(character, page);
-  await interaction.update({
+  await responder.respond({
     content,
     embeds,
     components,
@@ -306,16 +339,15 @@ export async function updateInventoryMessage(
 
 async function canUseInventory(
   interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
   characterId: string | undefined,
-  responder?: DiscordInteractionResponder,
 ): Promise<boolean> {
   if (!characterId) {
     const payload = {
       content: '⚠️ Invalid inventory action.',
       ephemeral: true as const,
     };
-    if (responder) await responder.respond(payload);
-    else await interaction.reply(payload);
+    await responder.respond(payload);
     return false;
   }
 
@@ -325,8 +357,7 @@ async function canUseInventory(
       content: '❌ You can only manage inventory for your own characters.',
       ephemeral: true as const,
     };
-    if (responder) await responder.respond(payload);
-    else await interaction.reply(payload);
+    await responder.respond(payload);
     return false;
   }
 
