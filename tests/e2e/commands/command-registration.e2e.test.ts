@@ -124,6 +124,45 @@ describe('command registration', () => {
     }
   });
 
+  test('routes the create-character production command through its responder policy', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = {
+      on: jest.fn(),
+      once: jest.fn(),
+    };
+    await initializeCommands(client);
+
+    const command = client.commands?.get('create-character') as {
+      interactionPolicy?: unknown;
+      execute: jest.Mock;
+    };
+    expect(command.interactionPolicy).toEqual({
+      mode: { kind: 'reply', visibility: 'ephemeral' },
+      acknowledgement: 'auto-defer',
+    });
+    command.execute = jest.fn(async (interaction) => {
+      await interaction.reply({ content: 'routed', ephemeral: true });
+    });
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = commandInteraction();
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(command.execute).toHaveBeenCalledTimes(1);
+    expect(interaction.reply).toHaveBeenCalledWith({ content: 'routed', ephemeral: true });
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+  });
+
   test('responds to new interactions with a drain message during shutdown', async () => {
     jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
     const { initializeCommands } = require('../../../src/client/initial_commands') as {
@@ -184,7 +223,8 @@ describe('command registration', () => {
         url: 'https://discord.com/api/interactions/id/secret-token/callback',
       });
     const execute = jest.fn().mockRejectedValue(expired());
-    client.commands?.set('create-character', { execute });
+    const command = client.commands?.get('create-character') as Record<string, unknown>;
+    client.commands?.set('create-character', { ...command, execute });
 
     const interactionListener = client.on.mock.calls.find(
       ([event]) => event === Events.InteractionCreate,
@@ -211,7 +251,7 @@ describe('command registration', () => {
       interactionListener?.(interaction);
       await flushPromises();
 
-      expect(execute).toHaveBeenCalledWith(interaction);
+      expect(execute).toHaveBeenCalledTimes(1);
       expect(interaction.reply).toHaveBeenCalledWith({
         content: 'There was an error while executing this action.',
         ephemeral: true,
@@ -267,7 +307,9 @@ describe('command registration', () => {
         ephemeral: true,
       });
       expect(unhandled).not.toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('context=drain-fallback'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('operation=interaction.drain-fallback'),
+      );
     } finally {
       process.off('unhandledRejection', unhandled);
     }
@@ -276,4 +318,24 @@ describe('command registration', () => {
 
 async function flushPromises(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+function commandInteraction() {
+  return {
+    type: 2,
+    commandName: 'create-character',
+    token: 'secret-token',
+    isChatInputCommand: () => true,
+    isMessageContextMenuCommand: () => false,
+    isModalSubmit: () => false,
+    isButton: () => false,
+    isStringSelectMenu: () => false,
+    isRepliable: () => true,
+    replied: false,
+    deferred: false,
+    reply: jest.fn().mockResolvedValue(undefined),
+    deferReply: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue(undefined),
+    followUp: jest.fn().mockResolvedValue(undefined),
+  };
 }

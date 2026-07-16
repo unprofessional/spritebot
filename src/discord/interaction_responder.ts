@@ -49,6 +49,10 @@ export class DiscordInteractionResponder {
     readonly mode: InteractionMode,
   ) {
     this.callbacks = interaction as unknown as InteractionCallbacks;
+    if (this.callbacks.replied) this.currentState = 'replied';
+    else if (this.callbacks.deferred) {
+      this.currentState = mode.kind === 'component-update' ? 'deferred_update' : 'deferred_reply';
+    }
   }
 
   get state(): InteractionResponseState {
@@ -57,6 +61,10 @@ export class DiscordInteractionResponder {
 
   get acknowledged(): boolean {
     return this.currentState !== 'unacknowledged' && this.currentState !== 'expired';
+  }
+
+  expire(): void {
+    this.currentState = 'expired';
   }
 
   acknowledge(): Promise<void> {
@@ -206,7 +214,7 @@ export class DiscordInteractionResponder {
     const startedAt = Date.now();
     try {
       await callback();
-      this.currentState = successState;
+      if (this.currentState !== 'expired') this.currentState = successState;
     } catch (error) {
       const classified = classifyDiscordError(error);
       if (
@@ -263,8 +271,9 @@ export class DiscordInteractionResponder {
 }
 
 function withoutEphemeral(payload: InteractionPayload): InteractionPayload {
-  const { ephemeral: _ephemeral, ...rest } = payload;
-  return rest;
+  const result = { ...payload };
+  delete result.ephemeral;
+  return result;
 }
 
 function interactionString(interaction: BaseInteraction, key: string): string | undefined {
