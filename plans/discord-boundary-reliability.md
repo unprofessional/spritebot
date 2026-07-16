@@ -573,7 +573,16 @@ existing immediate ownership denial. Slow lookups preserve the same modal behind
 activation. Both modal submissions repeat ownership validation and remain the authoritative
 inventory-entitlement boundary.
 
-**Remaining: Batch 3 (button/select handler files), Batch 4 (modal handler files)**
+**Completed: Batches 3-4 (remaining components, buttons/selects, and modal submissions)**
+
+All remaining component and handler routes now declare explicit responder policies. Message
+replacement actions and message-backed modal submissions use component-update auto-deferral;
+read-only inventory view and IC edit submission use ephemeral reply auto-deferral; inventory modal
+submissions select between those contracts based on whether Discord supplies a source message.
+Every button, select, and modal now enters the deadline-aware dispatcher, including unknown-route
+fallbacks. Inventory routing uses one non-overlapping family predicate with per-action policies.
+
+**Task 7 complete. Remaining implementation begins with Task 8 entitlement/authorization work.**
 
 **Step 1: Classify before migration**
 

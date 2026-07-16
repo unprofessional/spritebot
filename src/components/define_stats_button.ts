@@ -9,12 +9,18 @@ import {
 } from 'discord.js';
 
 import { getGame } from '../services/game.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { Game } from '../types/game';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { build as buildCancelButton } from './finish_stat_setup_button';
 import { build as buildStatTypeDropdown } from './stat_type_selector';
 
 const id = 'defineStats';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
@@ -23,12 +29,15 @@ function build(gameId: string): ButtonBuilder {
     .setStyle(ButtonStyle.Primary);
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, gameId] = interaction.customId.split(':');
   const game = (await getGame({ id: gameId })) as Game | null;
 
   if (!game || game.created_by !== interaction.user.id) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Only the GM can define new stat fields.',
       ephemeral: true,
     });
@@ -49,7 +58,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     'define-stat',
   );
 
-  await interaction.update({
+  await responder.respond({
     content: appendNudge(
       [
         `## Define a new GAME stat field`,
@@ -82,4 +91,4 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   });
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };

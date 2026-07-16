@@ -1,4 +1,5 @@
 import type { ModalSubmitInteraction } from 'discord.js';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import {
   getCharacterWithStats,
   updateStat,
@@ -11,7 +12,10 @@ import { build as buildCharacterCard } from '../../components/view_character_car
 /**
  * Handles modal for adjusting stats (add/subtract/multiply/divide flow).
  */
-export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
+export async function handle(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId } = interaction;
   if (!customId.startsWith('adjustStatModal:')) return;
 
@@ -21,7 +25,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   const value = parseInt(valueRaw ?? '', 10);
 
   if (!['+', '-', '*', '/'].includes(operator)) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Invalid operator. Use one of: +, -, *, /',
       ephemeral: true,
     });
@@ -29,7 +33,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   }
 
   if (isNaN(value)) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Invalid number entered.',
       ephemeral: true,
     });
@@ -38,7 +42,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
   const character = await getCharacterWithStats(characterId);
   if (!character) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Character not found.',
       ephemeral: true,
     });
@@ -47,7 +51,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
   const stat = character.stats.find((s) => s.template_id === statId);
   if (!stat) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Stat not found.',
       ephemeral: true,
     });
@@ -60,7 +64,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   } else if (stat.field_type === 'number') {
     current = parseInt(stat.value ?? '0', 10);
   } else {
-    await interaction.reply({
+    await responder.respond({
       content: `⚠️ Cannot adjust stat of type: ${stat.field_type}`,
       ephemeral: true,
     });
@@ -93,7 +97,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
   const updated = await getCharacterWithStats(characterId);
   if (!updated) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Could not refresh character data.',
       ephemeral: true,
     });
@@ -107,8 +111,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
   );
   const view = buildCharacterCard(updated, isSelf);
 
-  await interaction.deferUpdate();
-  await interaction.editReply({
+  await responder.respond({
     ...view,
     content: `✅ Updated **${stat.label}**: ${current} ${operator} ${value} → ${next}`,
   });

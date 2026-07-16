@@ -10,9 +10,15 @@ import {
 } from 'discord.js';
 
 import { getCharacterWithStats } from '../services/character.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { isActiveCharacter } from '../utils/is_active_character';
 
 const id = 'calculateCharacterStats';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 type CharacterWithStats = {
   id: string;
@@ -43,12 +49,15 @@ function build(characterId: string): ButtonBuilder {
 /**
  * Handles the button interaction to adjust numeric character stats.
  */
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId] = interaction.customId.split(':');
 
   const characterRaw = await getCharacterWithStats(characterId);
   if (!characterRaw || typeof characterRaw !== 'object' || !('id' in characterRaw)) {
-    await interaction.update({
+    await responder.respond({
       content: '⚠️ Character not found.',
       embeds: [],
       components: [],
@@ -70,7 +79,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   );
 
   if (!adjustableStats.length) {
-    await interaction.update(base);
+    await responder.respond(base);
     return;
   }
 
@@ -99,11 +108,11 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
 
   const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton);
 
-  await interaction.update({
+  await responder.respond({
     ...base,
     content: '🧮 *Perform quick math on numeric stats using +, -, ×, or ÷.*',
     components: [dropdownRow, cancelRow],
   });
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };

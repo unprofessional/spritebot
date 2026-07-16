@@ -26,10 +26,16 @@ import { handle as handleToggleCharacterVisibilityButton } from '../../component
 import { handle as handleTogglePublishButton } from '../../components/toggle_publish_button';
 import { handle as handleViewParagraphFieldsButton } from '../../components/view_paragraph_fields_button';
 import { interactionPolicy as charPagePolicy } from '../../components/character_page_buttons';
+import { interactionPolicy as calculateStatsPolicy } from '../../components/calculate_character_stats_button';
 import { interactionPolicy as confirmDeleteCharacterPolicy } from '../../components/confirm_delete_character_button';
 import { interactionPolicy as confirmIcDeletePolicy } from '../../components/confirm_ic_delete_button';
 import { interactionPolicy as confirmDeleteStatPolicy } from '../../components/confirm_delete_stat_button';
 import { interactionPolicy as confirmPurgePolicy } from '../../components/confirm_purge_button';
+import { interactionPolicy as defineStatsPolicy } from '../../components/define_stats_button';
+import { interactionPolicy as deleteCharacterPolicy } from '../../components/delete_character_button';
+import { interactionPolicy as deleteStatsPolicy } from '../../components/delete_stat_button';
+import { interactionPolicy as editCharacterStatsPolicy } from '../../components/edit_character_stats_button';
+import { interactionPolicy as editGameStatsPolicy } from '../../components/edit_game_stat_button';
 import { interactionPolicy as finishStatSetupPolicy } from '../../components/finish_stat_setup_button';
 import { interactionPolicy as submitCharacterPolicy } from '../../components/submit_character_button';
 import { interactionPolicy as supportVerifyPolicy } from '../../components/support_verify_button';
@@ -43,21 +49,21 @@ import * as inventoryButtons from './inventory_buttons';
 
 type ButtonRoute = [
   RegExp,
-  (i: ButtonInteraction, responder?: DiscordInteractionResponder) => Promise<void>,
-  InteractionDispatchPolicy?,
+  (i: ButtonInteraction, responder: DiscordInteractionResponder) => Promise<void>,
+  InteractionDispatchPolicy,
 ];
 
 const directRoutes: ButtonRoute[] = [
   [/^preparedModal:/, (i, r) => activatePreparedModal(i, r!), preparedModalInteractionPolicy],
-  [/^defineStats:/, handleDefineStats],
-  [/^editGameStats:/, handleEditGameStats],
-  [/^deleteStats:/, handleDeleteStats],
+  [/^defineStats:/, (i, r) => handleDefineStats(i, r!), defineStatsPolicy],
+  [/^editGameStats:/, (i, r) => handleEditGameStats(i, r!), editGameStatsPolicy],
+  [/^deleteStats:/, (i, r) => handleDeleteStats(i, r!), deleteStatsPolicy],
   [/^finishStatSetup:/, (i, r) => handleFinishStatSetup(i, r!), finishStatSetupPolicy],
   [/^togglePublishGame:/, (i, r) => handleTogglePublishButton(i, r!), togglePublishPolicy],
   [/^confirmDeleteStat:/, (i, r) => handleConfirmDeleteStat(i, r!), confirmDeleteStatPolicy],
   [/^confirmPurgeOrphans:/, (i, r) => handleConfirmPurgeButton(i, r!), confirmPurgePolicy],
   [/^submitNewCharacter/, (i, r) => handleSubmitCharacter(i, r!), submitCharacterPolicy],
-  [/^deleteCharacter/, handleDeleteCharacter],
+  [/^deleteCharacter/, (i, r) => handleDeleteCharacter(i, r!), deleteCharacterPolicy],
   [
     /^confirmDeleteCharacter/,
     (i, r) => handleConfirmDeleteCharacterButton(i, r!),
@@ -67,8 +73,8 @@ const directRoutes: ButtonRoute[] = [
   [/^cancelIcDelete:/, (i, r) => handleConfirmIcDeleteButton(i, r!), confirmIcDeletePolicy],
   [/^supportVerify:/, (i, r) => handleSupportVerifyButton(i, r!), supportVerifyPolicy],
   [/^charPage:/, (i, r) => handleCharPageButton(i, r!), charPagePolicy],
-  [/^editCharacterStat/, handleEditCharacterStatsButton],
-  [/^calculateCharacterStats:/, handleCalculateStatsButton],
+  [/^editCharacterStat/, (i, r) => handleEditCharacterStatsButton(i, r!), editCharacterStatsPolicy],
+  [/^calculateCharacterStats:/, (i, r) => handleCalculateStatsButton(i, r!), calculateStatsPolicy],
   [
     /^handleToggleCharacterVisibilityButton:/,
     (i, r) => handleToggleCharacterVisibilityButton(i, r!),
@@ -81,19 +87,12 @@ const directRoutes: ButtonRoute[] = [
   ],
 ];
 
-export function getButtonInteractionPolicy(
-  customId: string,
-): InteractionDispatchPolicy | undefined {
-  const directPolicy = directRoutes.find(([pattern]) => pattern.test(customId))?.[2];
-  if (directPolicy) return directPolicy;
-  if (isInventoryModalButton(customId)) return inventoryButtons.interactionPolicy;
-  if (isInventoryButton(customId)) return undefined;
+export function getButtonInteractionPolicy(customId: string): InteractionDispatchPolicy {
+  const directRoute = directRoutes.find(([pattern]) => pattern.test(customId));
+  if (directRoute) return directRoute[2];
+  if (isInventoryButton(customId)) return inventoryButtons.getInteractionPolicy(customId);
   if (customId.startsWith('goBackToCharacter:')) return characterViewButtons.interactionPolicy;
   return fallbackButtons.interactionPolicy;
-}
-
-function isInventoryModalButton(customId: string): boolean {
-  return /^(?:add_inventory_item|invEdit|edit_inventory_item):/.test(customId);
 }
 
 function isInventoryButton(customId: string): boolean {
@@ -104,7 +103,7 @@ function isInventoryButton(customId: string): boolean {
 
 export async function handleButton(
   interaction: ButtonInteraction,
-  responder?: DiscordInteractionResponder,
+  responder: DiscordInteractionResponder,
 ): Promise<void> {
   const { customId } = interaction;
 
@@ -117,8 +116,8 @@ export async function handleButton(
   }
 
   if (customId.startsWith('goBackToCharacter:')) {
-    return characterViewButtons.handle(interaction, responder!);
+    return characterViewButtons.handle(interaction, responder);
   }
 
-  return fallbackButtons.handle(interaction, responder!);
+  return fallbackButtons.handle(interaction, responder);
 }

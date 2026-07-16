@@ -20,7 +20,7 @@ import dotenv = require('dotenv');
 dotenv.config();
 
 import { getButtonInteractionPolicy, handleButton } from '../handlers/button_handlers';
-import { handleModal } from '../handlers/modal_handlers';
+import { getModalInteractionPolicy, handleModal } from '../handlers/modal_handlers';
 import { getSelectMenuInteractionPolicy, handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardCommand, guardComponent } from '../access/guards';
 import { supportGuildId } from '../config/env_config';
@@ -242,6 +242,17 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
     }
   }
 
+  if (interaction.isModalSubmit()) {
+    const policy = getModalInteractionPolicy(interaction);
+    await startTrackedInteractionDispatch({
+      interaction,
+      policy,
+      guard: guardComponent,
+      handler: handleModal,
+    });
+    return;
+  }
+
   try {
     await trackOperation(`interaction:${interaction.type}`, async () => {
       if (interaction.isChatInputCommand()) {
@@ -262,24 +273,6 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
         if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
         await cmd.execute(interaction);
         return;
-      }
-
-      if (interaction.isModalSubmit()) {
-        const auth = await guardComponent(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-        return handleModal(interaction);
-      }
-
-      if (interaction.isButton()) {
-        const auth = await guardComponent(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-        return handleButton(interaction);
-      }
-
-      if (interaction.isStringSelectMenu()) {
-        const auth = await guardComponent(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-        return handleSelectMenu(interaction);
       }
 
       console.warn('⚠️ Unhandled interaction:', interaction.type);
