@@ -42,6 +42,18 @@ export const gatedPreparedModalInteractionPolicy = {
   authorization: 'modal-submit',
 } satisfies InteractionDispatchPolicy;
 
+/**
+ * Policy for component editors whose non-modal outcomes replace the original message.
+ *
+ * Fast modal preparation keeps the one-click editor, while a slow preparation defers the
+ * component update and offers private prepared-modal activation without changing the original.
+ */
+export const gatedPreparedComponentModalInteractionPolicy = {
+  mode: { kind: 'modal-or-component-update' },
+  acknowledgement: 'auto-defer',
+  authorization: 'modal-submit',
+} satisfies InteractionDispatchPolicy;
+
 export type InteractionDispatchPolicySource<I extends BaseInteraction = BaseInteraction> =
   | InteractionDispatchPolicy
   | ((interaction: I) => InteractionDispatchPolicy);

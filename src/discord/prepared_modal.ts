@@ -39,9 +39,12 @@ export async function presentPreparedModal({
   responder: DiscordInteractionResponder;
   userId: string;
 }): Promise<void> {
-  if (responder.mode.kind !== 'modal-or-reply') {
+  if (
+    responder.mode.kind !== 'modal-or-reply' &&
+    responder.mode.kind !== 'modal-or-component-update'
+  ) {
     throw new InteractionResponseStateError(
-      'Prepared modals require modal-or-reply interaction mode.',
+      'Prepared modals require a modal hybrid interaction mode.',
     );
   }
 

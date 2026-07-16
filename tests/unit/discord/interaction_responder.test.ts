@@ -169,6 +169,85 @@ describe('DiscordInteractionResponder', () => {
     expect(interaction.editReply).toHaveBeenCalledWith({ content: 'Editor ready.' });
   });
 
+  test('supports immediate modal or original-message update from component hybrid mode', async () => {
+    const modalInteraction = componentInteraction();
+    const modalResponder = new DiscordInteractionResponder(modalInteraction as never, {
+      kind: 'modal-or-component-update',
+    });
+    const modal = { customId: 'adjust:modal' };
+
+    await expect(modalResponder.presentModal(modal)).resolves.toBe('shown');
+    expect(modalInteraction.showModal).toHaveBeenCalledWith(modal);
+    expect(modalInteraction.deferUpdate).not.toHaveBeenCalled();
+
+    const updateInteraction = componentInteraction();
+    const updateResponder = new DiscordInteractionResponder(updateInteraction as never, {
+      kind: 'modal-or-component-update',
+    });
+    await updateResponder.respond({ content: 'not found', components: [] });
+
+    expect(updateInteraction.update).toHaveBeenCalledWith({
+      content: 'not found',
+      components: [],
+    });
+    expect(updateInteraction.showModal).not.toHaveBeenCalled();
+  });
+
+  test('defers component hybrid mode and requests private prepared activation', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'modal-or-component-update',
+    });
+
+    await responder.acknowledge();
+    await expect(responder.presentModal({ customId: 'adjust:modal' })).resolves.toBe(
+      'requires_activation',
+    );
+    await responder.respond({ content: 'Editor ready.', ephemeral: true });
+
+    expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
+    expect(interaction.showModal).not.toHaveBeenCalled();
+    expect(interaction.followUp).toHaveBeenCalledWith({
+      content: 'Editor ready.',
+      ephemeral: true,
+    });
+    expect(interaction.editReply).not.toHaveBeenCalled();
+  });
+
+  test('edits the original message after component hybrid deferral', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'modal-or-component-update',
+    });
+
+    await responder.acknowledge();
+    await responder.respond({ content: 'not found', embeds: [], components: [] });
+
+    expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: 'not found',
+      embeds: [],
+      components: [],
+    });
+    expect(interaction.followUp).not.toHaveBeenCalled();
+  });
+
+  test('preserves a direct ephemeral reply before component hybrid deferral', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'modal-or-component-update',
+    });
+
+    await responder.respond({ content: 'unknown selection', ephemeral: true });
+
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content: 'unknown selection',
+      ephemeral: true,
+    });
+    expect(interaction.deferUpdate).not.toHaveBeenCalled();
+    expect(interaction.followUp).not.toHaveBeenCalled();
+  });
+
   test('marks an expired session and suppresses every later callback', async () => {
     const interaction = replyInteraction();
     interaction.reply.mockRejectedValueOnce({ code: 10062, status: 404 });
