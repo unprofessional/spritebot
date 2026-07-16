@@ -2,7 +2,10 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../../../src/discord/interaction_dispatch';
-import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
+import {
+  DiscordInteractionResponder,
+  InteractionCallbackError,
+} from '../../../src/discord/interaction_responder';
 import * as joinGameSelector from '../../../src/components/join_game_selector';
 import * as restoreCharacterSelector from '../../../src/components/restore_character_selector';
 import * as switchCharacterSelector from '../../../src/components/switch_character_selector';
@@ -56,8 +59,8 @@ describe('character and game mutation command responder migration', () => {
     const interaction = commandInteraction({ strings: { name: 'Lanternfall' } });
     interaction.editReply.mockRejectedValue(new Error('socket closed'));
 
-    await expect(executePreDeferred(createGameCommand, interaction)).rejects.toThrow(
-      'socket closed',
+    await expect(executePreDeferred(createGameCommand, interaction)).rejects.toBeInstanceOf(
+      InteractionCallbackError,
     );
 
     expect(interaction.editReply).toHaveBeenCalledTimes(1);

@@ -7,6 +7,9 @@ export interface DiscordFailureLogInput {
   elapsedMs: number;
   commandName?: string;
   customId?: string;
+  interactionKind?: string;
+  acknowledgementMethod?: string;
+  acknowledgementMs?: number;
 }
 
 export type DiscordLogSink = (line: string) => void;
@@ -18,6 +21,11 @@ export interface DiscordOperationTelemetryLogInput {
   attempt: number;
   elapsedMs: number;
   classified?: ClassifiedDiscordError;
+  commandName?: string;
+  customId?: string;
+  interactionKind?: string;
+  acknowledgementMethod?: string;
+  acknowledgementMs?: number;
 }
 
 const safeLabel = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
@@ -27,6 +35,8 @@ export function formatDiscordFailureLog(input: DiscordFailureLogInput): string {
   const operation = safeMetadata(input.operation);
   const commandName = safeMetadata(input.commandName);
   const customIdPrefix = safeCustomIdPrefix(input.customId);
+  const interactionKind = safeMetadata(input.interactionKind);
+  const acknowledgementMethod = safeMetadata(input.acknowledgementMethod);
 
   return [
     '[discord-operation] failure',
@@ -40,6 +50,11 @@ export function formatDiscordFailureLog(input: DiscordFailureLogInput): string {
     ...(error.retryAfterMs === undefined ? [] : [`retryAfterMs=${error.retryAfterMs}`]),
     ...(commandName ? [`command=${commandName}`] : []),
     ...(customIdPrefix ? [`customIdPrefix=${customIdPrefix}`] : []),
+    ...(interactionKind ? [`interactionKind=${interactionKind}`] : []),
+    ...(acknowledgementMethod ? [`acknowledgementMethod=${acknowledgementMethod}`] : []),
+    ...(input.acknowledgementMs === undefined
+      ? []
+      : [`acknowledgementMs=${safeNonNegativeInteger(input.acknowledgementMs)}`]),
   ].join(' ');
 }
 
@@ -54,6 +69,10 @@ export function formatDiscordOperationTelemetryLog(
   input: DiscordOperationTelemetryLogInput,
 ): string {
   const operation = safeMetadata(input.operation);
+  const commandName = safeMetadata(input.commandName);
+  const customIdPrefix = safeCustomIdPrefix(input.customId);
+  const interactionKind = safeMetadata(input.interactionKind);
+  const acknowledgementMethod = safeMetadata(input.acknowledgementMethod);
 
   return [
     '[discord-operation]',
@@ -62,6 +81,13 @@ export function formatDiscordOperationTelemetryLog(
     `operation=${operation ?? 'unknown'}`,
     `attempt=${safeNonNegativeInteger(input.attempt)}`,
     `elapsedMs=${safeNonNegativeInteger(input.elapsedMs)}`,
+    ...(interactionKind ? [`interactionKind=${interactionKind}`] : []),
+    ...(commandName ? [`command=${commandName}`] : []),
+    ...(customIdPrefix ? [`customIdPrefix=${customIdPrefix}`] : []),
+    ...(acknowledgementMethod ? [`acknowledgementMethod=${acknowledgementMethod}`] : []),
+    ...(input.acknowledgementMs === undefined
+      ? []
+      : [`acknowledgementMs=${safeNonNegativeInteger(input.acknowledgementMs)}`]),
     ...(input.classified
       ? [
           `category=${input.classified.category}`,
@@ -90,6 +116,25 @@ export function interactionMetadataString(
   if (!interaction || typeof interaction !== 'object') return undefined;
   const value = (interaction as Record<string, unknown>)[key];
   return typeof value === 'string' ? value : undefined;
+}
+
+export function interactionKind(interaction: unknown): string {
+  if (!interaction || typeof interaction !== 'object') return 'unknown';
+  const candidate = interaction as Record<string, unknown>;
+  const checks: Array<[string, string]> = [
+    ['isChatInputCommand', 'chat-input-command'],
+    ['isMessageContextMenuCommand', 'message-context-command'],
+    ['isButton', 'button'],
+    ['isStringSelectMenu', 'string-select'],
+    ['isModalSubmit', 'modal-submit'],
+  ];
+  for (const [method, kind] of checks) {
+    const check = candidate[method];
+    if (typeof check === 'function' && check.call(interaction)) return kind;
+  }
+
+  const type = candidate.type;
+  return typeof type === 'number' ? `type-${type}` : 'unknown';
 }
 
 function safeMetadata(value: string | undefined): string | undefined {

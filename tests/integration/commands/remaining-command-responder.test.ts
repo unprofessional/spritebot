@@ -60,7 +60,6 @@ describe('remaining command responder migration', () => {
     expectEphemeralDeferral(interaction);
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: '❌ You need **Manage Threads** to do that.',
-      flags: 64,
     });
   });
 

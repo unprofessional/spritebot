@@ -1,7 +1,11 @@
 import type { BaseInteraction } from 'discord.js';
 
 import { classifyDiscordError } from './errors';
-import { interactionMetadataString, logDiscordFailure } from './logging';
+import {
+  interactionKind,
+  interactionMetadataString,
+  logDiscordOperationTelemetry,
+} from './logging';
 
 export type InteractionMode =
   | { kind: 'reply'; visibility: 'ephemeral' | 'public' }
@@ -22,6 +26,7 @@ export type InteractionResponseState =
   | 'expired';
 
 type InteractionPayload = Record<string, unknown>;
+export type PreparedComponentUpdateTarget = (payload: InteractionPayload) => Promise<unknown>;
 
 type InteractionCallbacks = {
   replied: boolean;
@@ -42,15 +47,29 @@ export class InteractionResponseStateError extends Error {
   }
 }
 
+export class InteractionCallbackError extends Error {
+  constructor(
+    readonly operation: string,
+    options: { cause: unknown },
+  ) {
+    super(`Discord interaction callback ${operation} had an indeterminate outcome.`, options);
+    this.name = 'InteractionCallbackError';
+  }
+}
+
 export class DiscordInteractionResponder {
   private readonly callbacks: InteractionCallbacks;
   private currentState: InteractionResponseState = 'unacknowledged';
   private serialized: Promise<void> = Promise.resolve();
   private terminalFailureLogged = false;
+  private readonly createdAt = Date.now();
+  private acknowledgementMethod?: string;
+  private acknowledgementMs?: number;
 
   constructor(
     private readonly interaction: BaseInteraction,
     readonly mode: InteractionMode,
+    private readonly preparedComponentUpdateTarget?: PreparedComponentUpdateTarget,
   ) {
     this.callbacks = interaction as unknown as InteractionCallbacks;
     if (this.callbacks.replied) this.currentState = 'replied';
@@ -69,6 +88,11 @@ export class DiscordInteractionResponder {
 
   expire(): void {
     this.currentState = 'expired';
+  }
+
+  preparedOriginalMessageUpdateTarget(): PreparedComponentUpdateTarget | undefined {
+    if (!isComponentUpdateMode(this.mode)) return undefined;
+    return (payload) => this.callbacks.editReply(withoutEphemeral(payload));
   }
 
   acknowledge(): Promise<void> {
@@ -100,6 +124,7 @@ export class DiscordInteractionResponder {
   respond(payload: InteractionPayload): Promise<void> {
     return this.runSerialized(async () => {
       if (this.currentState === 'expired') return;
+      assertNoEphemeralFlag(payload);
 
       if (this.mode.kind === 'modal') {
         throw new InteractionResponseStateError(
@@ -139,6 +164,7 @@ export class DiscordInteractionResponder {
   followUp(payload: InteractionPayload): Promise<void> {
     return this.runSerialized(async () => {
       if (this.currentState === 'expired') return;
+      assertNoEphemeralFlag(payload);
       if (this.currentState === 'unacknowledged') {
         throw new InteractionResponseStateError(
           'Cannot follow up before acknowledging an interaction.',
@@ -213,6 +239,16 @@ export class DiscordInteractionResponder {
     const wantsEphemeral = 'ephemeral' in payload && payload.ephemeral === true;
 
     if (this.currentState === 'unacknowledged') {
+      if (this.preparedComponentUpdateTarget && !wantsEphemeral) {
+        const acknowledged = await this.invoke(
+          'deferUpdate',
+          () => this.callbacks.deferUpdate(),
+          'deferred_update',
+        );
+        if (!acknowledged) return;
+        await this.respondToPreparedTarget(payload);
+        return;
+      }
       if (wantsEphemeral) {
         if (allowInitialEphemeralReply) {
           await this.invoke('reply', () => this.callbacks.reply(payload), 'replied');
@@ -237,6 +273,10 @@ export class DiscordInteractionResponder {
         await this.invoke('followUp', () => this.callbacks.followUp(payload), 'updated');
         return;
       }
+      if (this.preparedComponentUpdateTarget) {
+        await this.respondToPreparedTarget(payload);
+        return;
+      }
       await this.invoke(
         'editReply',
         () => this.callbacks.editReply(withoutEphemeral(payload)),
@@ -258,6 +298,20 @@ export class DiscordInteractionResponder {
     );
   }
 
+  private async respondToPreparedTarget(payload: InteractionPayload): Promise<void> {
+    const updatedOriginal = await this.invoke(
+      'preparedOriginal.editReply',
+      () => this.preparedComponentUpdateTarget!(withoutEphemeral(payload)),
+      'deferred_update',
+    );
+    if (!updatedOriginal) return;
+    await this.invoke(
+      'editReply',
+      () => this.callbacks.editReply(preparedCompletionPayload(payload)),
+      'updated',
+    );
+  }
+
   private replyPayload(payload: InteractionPayload): InteractionPayload {
     const ephemeral =
       (this.mode.kind === 'reply' || this.mode.kind === 'modal-or-reply') &&
@@ -274,27 +328,39 @@ export class DiscordInteractionResponder {
     operation: string,
     callback: () => Promise<unknown>,
     successState: InteractionResponseState,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const startedAt = Date.now();
+    const acknowledging = this.currentState === 'unacknowledged';
     try {
       await callback();
       if (this.currentState !== 'expired') this.currentState = successState;
+      if (acknowledging && this.acknowledgementMethod === undefined) {
+        this.acknowledgementMethod = operation;
+        this.acknowledgementMs = Date.now() - this.createdAt;
+      }
+      this.logTelemetry(operation, 'success', Date.now() - startedAt);
+      return true;
     } catch (error) {
       const classified = classifyDiscordError(error);
-      if (
-        classified.category !== 'interaction_expired' &&
-        classified.category !== 'interaction_already_acknowledged'
-      ) {
-        throw error;
+      if (acknowledging && this.acknowledgementMethod === undefined) {
+        this.acknowledgementMethod = operation;
+        this.acknowledgementMs = Date.now() - this.createdAt;
       }
-
-      this.logTerminalFailure(operation, error, Date.now() - startedAt);
+      this.logTelemetry(operation, 'failure', Date.now() - startedAt, error);
       if (classified.category === 'interaction_expired') {
         this.currentState = 'expired';
-        return;
+        return false;
+      }
+      if (classified.category === 'interaction_already_acknowledged') {
+        this.reconcileAcknowledgementState(successState);
+        return true;
       }
 
-      this.reconcileAcknowledgementState(successState);
+      // Callback failures are indeterminate: Discord may have accepted the request even when the
+      // client observed a timeout or reset. Make the responder terminal so surrounding business
+      // catches cannot blindly attempt the same callback again.
+      this.currentState = 'expired';
+      throw new InteractionCallbackError(operation, { cause: error });
     }
   }
 
@@ -311,16 +377,26 @@ export class DiscordInteractionResponder {
     this.currentState = fallbackState;
   }
 
-  private logTerminalFailure(operation: string, error: unknown, elapsedMs: number): void {
-    if (this.terminalFailureLogged) return;
-    this.terminalFailureLogged = true;
-    logDiscordFailure({
+  private logTelemetry(
+    operation: string,
+    outcome: 'success' | 'failure',
+    elapsedMs: number,
+    error?: unknown,
+  ): void {
+    if (outcome === 'failure' && this.terminalFailureLogged) return;
+    if (outcome === 'failure') this.terminalFailureLogged = true;
+    logDiscordOperationTelemetry({
+      phase: 'final',
+      outcome,
       operation: `interaction.${operation}`,
-      error,
       attempt: 1,
       elapsedMs,
+      classified: error === undefined ? undefined : classifyDiscordError(error),
       commandName: interactionMetadataString(this.interaction, 'commandName'),
       customId: interactionMetadataString(this.interaction, 'customId'),
+      interactionKind: interactionKind(this.interaction),
+      acknowledgementMethod: this.acknowledgementMethod,
+      acknowledgementMs: this.acknowledgementMs,
     });
   }
 
@@ -338,6 +414,26 @@ function withoutEphemeral(payload: InteractionPayload): InteractionPayload {
   const result = { ...payload };
   delete result.ephemeral;
   return result;
+}
+
+function assertNoEphemeralFlag(payload: InteractionPayload): void {
+  const flags = payload.flags;
+  if (typeof flags === 'number' && (flags & 64) === 64) {
+    throw new InteractionResponseStateError(
+      'Use the ephemeral response property instead of MessageFlags.Ephemeral.',
+    );
+  }
+}
+
+function preparedCompletionPayload(payload: InteractionPayload): InteractionPayload {
+  return {
+    content:
+      typeof payload.content === 'string' && payload.content.length > 0
+        ? `${payload.content}\n\nThe original message has been refreshed.`
+        : '✅ Saved. The original message has been refreshed.',
+    components: [],
+    embeds: [],
+  };
 }
 
 function isComponentUpdateMode(mode: InteractionMode): boolean {
