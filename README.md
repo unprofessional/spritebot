@@ -119,8 +119,9 @@ When proxying, the bot uses the character's optional RP display fields first:
 If those fields are blank, it falls back to the character's normal name and avatar URL.
 
 Spritebot tracks the ownership of every proxied webhook message. Players can pass a proxied message
-ID or Discord message link to `/ic-edit`, which opens a multi-line editor pre-filled from the
-current Discord message. They can also right-click a message and choose `Apps` →
+ID or Discord message link to `/ic-edit`, which opens a multi-line replacement editor. They enter
+the complete replacement message, and Spritebot validates ownership when the modal is submitted.
+They can also right-click a message and choose `Apps` →
 `Edit IC Message`. `/ic-delete` accepts the same ID or link format, and players can also
 right-click a message and choose `Apps` → `Delete IC Message`. The bot only updates or deletes
 messages originally proxied by that same Discord user.
