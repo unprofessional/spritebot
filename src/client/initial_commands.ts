@@ -30,7 +30,12 @@ import {
   isDraining,
   trackOperation,
 } from '../runtime/lifecycle';
-import { bestEffortInteractionResponse } from './interaction_responses';
+import {
+  respondBestEffort,
+  startTrackedInteractionDispatch,
+  type InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
+import { logDiscordFailure } from '../discord/logging';
 
 const { DISCORD_CLIENT_ID, DISCORD_BOT_TOKEN } = process.env;
 // Allow override via env; default to the provided ops guild id
@@ -46,6 +51,7 @@ const requireCommand = createRequire(__filename);
 // --- Types ---
 type CommandModule = {
   data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  interactionPolicy?: InteractionDispatchPolicy;
   execute: (
     interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
   ) => Promise<unknown>;
@@ -152,7 +158,7 @@ const safeFallback = async (interaction: BaseInteraction) => {
     content: 'There was an error while executing this action.',
     ephemeral: true as const,
   };
-  await bestEffortInteractionResponse(interaction, reply, 'error-fallback');
+  await respondBestEffort(interaction, reply, 'error-fallback');
 };
 
 const drainFallback = async (interaction: BaseInteraction) => {
@@ -160,53 +166,25 @@ const drainFallback = async (interaction: BaseInteraction) => {
     content: DRAINING_REPLY,
     ephemeral: true as const,
   };
-  await bestEffortInteractionResponse(interaction, reply, 'drain-fallback');
+  await respondBestEffort(interaction, reply, 'drain-fallback');
 };
-
-type ErrorMetadata = {
-  name: string;
-  message: string;
-  code: string;
-  status: string;
-};
-
-function metadataValue(value: unknown): string {
-  return typeof value === 'string' || typeof value === 'number' ? String(value) : 'unknown';
-}
-
-function errorMetadata(error: unknown): ErrorMetadata {
-  if (!(error instanceof Error)) {
-    return { name: 'unknown', message: 'unknown', code: 'unknown', status: 'unknown' };
-  }
-
-  const discordError = error as Error & { code?: unknown; status?: unknown };
-  return {
-    name: error.name || 'Error',
-    message: error.message || 'unknown',
-    code: metadataValue(discordError.code),
-    status: metadataValue(discordError.status),
-  };
-}
-
-function interactionMetadata(interaction: BaseInteraction): string {
-  const metadata = interaction as BaseInteraction & {
-    commandName?: unknown;
-    customId?: unknown;
-  };
-  const command = metadataValue(metadata.commandName);
-  const customId = metadataValue(metadata.customId);
-  return `type=${interaction.type} command=${command} customId=${customId}`;
-}
 
 function logInteractionFailure(
   context: 'interaction-error' | 'terminal',
   interaction: BaseInteraction,
   error: unknown,
 ): void {
-  const metadata = errorMetadata(error);
-  console.error(
-    `[interaction] ${context} ${interactionMetadata(interaction)} name=${metadata.name} ` +
-      `message=${metadata.message} code=${metadata.code} status=${metadata.status}`,
+  const metadata = interaction as BaseInteraction & { commandName?: string; customId?: string };
+  logDiscordFailure(
+    {
+      operation: `interaction.${context}`,
+      error,
+      attempt: 1,
+      elapsedMs: 0,
+      commandName: metadata.commandName,
+      customId: metadata.customId,
+    },
+    console.error,
   );
 }
 
@@ -214,6 +192,19 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
   if (isDraining()) {
     await drainFallback(interaction);
     return;
+  }
+
+  if (interaction.isChatInputCommand() || interaction.isMessageContextMenuCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (command?.interactionPolicy) {
+      await startTrackedInteractionDispatch({
+        interaction,
+        policy: command.interactionPolicy,
+        guard: guardCommand,
+        handler: (routedInteraction) => command.execute(routedInteraction),
+      });
+      return;
+    }
   }
 
   try {
@@ -309,6 +300,7 @@ export async function initializeCommands(client: Client): Promise<Client> {
   client.on(Events.InteractionCreate, (interaction) => {
     void dispatchInteraction(client, interaction).catch((err) => {
       logInteractionFailure('terminal', interaction, err);
+      void safeFallback(interaction);
     });
   });
 

@@ -11,6 +11,7 @@ import { rebuildCreateCharacterResponse } from '../utils/rebuild_create_characte
 
 import type { StatTemplate } from '../types/stat_template';
 import type { UserDefinedField } from '../types/character';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 
 interface LabeledField {
   name: string;
@@ -21,6 +22,11 @@ module.exports = {
   data: new SlashCommandBuilder()
     .setName('create-character')
     .setDescription('Create a character for your current game.'),
+
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
 
   async execute(interaction: ChatInputCommandInteraction<CacheType>) {
     const userId = interaction.user.id;

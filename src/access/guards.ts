@@ -9,9 +9,9 @@ import { CommandPolicy } from './features';
 import { ComponentPolicy } from './components_policy';
 import { authorizeInteraction } from './authorize';
 
-const UPGRADE_MSG =
+export const UPGRADE_MSG =
   '⚠️ This feature requires an active server subscription. Ask a server admin to enable it or visit the bot’s upgrade page.';
-const NEED_GUILD_MSG =
+export const NEED_GUILD_MSG =
   '⚠️ This action only works in a server. Please use this in a Discord server where the bot is installed.';
 
 export async function guardCommand(interaction: CommandInteraction): Promise<true | string> {
