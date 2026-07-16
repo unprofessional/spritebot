@@ -10,11 +10,17 @@ import {
 } from 'discord.js';
 
 import { getCharacterWithStats } from '../services/character.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { CharacterStatWithLabel } from '../types/character';
 import { isActiveCharacter } from '../utils/is_active_character';
 import { build as buildCharacterCard } from './view_character_card';
 
 const id = 'editCharacterStat';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 type EditableStat = CharacterStatWithLabel & { name?: string };
 
@@ -25,12 +31,15 @@ function build(characterId: string): ButtonBuilder {
     .setStyle(ButtonStyle.Primary);
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId] = interaction.customId.split(':');
   const character = await getCharacterWithStats(characterId);
 
   if (!character) {
-    await interaction.update({
+    await responder.respond({
       content: '⚠️ Character not found.',
       embeds: [],
       components: [],
@@ -94,7 +103,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   const base = buildCharacterCard(character, isSelf);
 
   if (options.length === 0) {
-    await interaction.update({
+    await responder.respond({
       content: '⚠️ No editable fields found.',
       ...base,
     });
@@ -123,11 +132,11 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   );
   const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelButton);
 
-  await interaction.update({
+  await responder.respond({
     ...base,
     content: '🛠️ *Manually update a stat or core field by selecting it below.*',
     components: [dropdownRow, cancelRow],
   });
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };

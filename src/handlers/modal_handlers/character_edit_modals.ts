@@ -1,6 +1,7 @@
 // src/handlers/modal_handlers/character_edit_modals.ts
 
 import type { ModalSubmitInteraction } from 'discord.js';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 
 import {
   getCharacterWithStats,
@@ -11,7 +12,10 @@ import {
 import { isActiveCharacter } from '../../utils/is_active_character';
 import { build as buildCharacterCard } from '../../components/view_character_card';
 
-export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
+export async function handle(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   try {
     const { customId } = interaction;
 
@@ -28,7 +32,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
         const current = currentRaw ? parseInt(currentRaw, 10) : max;
 
         if (isNaN(max)) {
-          await interaction.reply({
+          await responder.respond({
             content: '⚠️ Invalid MAX value entered.',
             ephemeral: true,
           });
@@ -40,7 +44,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       } else {
         const newValue = interaction.fields.getTextInputValue(fieldKey)?.trim() ?? '';
         if (!newValue) {
-          await interaction.reply({
+          await responder.respond({
             content: '⚠️ Invalid stat update.',
             ephemeral: true,
           });
@@ -49,11 +53,9 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
         await updateStat(characterId, fieldKey, newValue);
       }
 
-      await interaction.deferUpdate();
-
       const updated = await getCharacterWithStats(characterId);
       if (!updated) {
-        await interaction.editReply({ content: '⚠️ Could not load updated character data.' });
+        await responder.respond({ content: '⚠️ Could not load updated character data.' });
         return;
       }
 
@@ -64,7 +66,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       );
       const view = buildCharacterCard(updated, isSelf);
 
-      await interaction.editReply({ ...view, content: null });
+      await responder.respond({ ...view, content: null });
       return;
     }
 
@@ -82,7 +84,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
         '';
 
       if (!coreField || !newValue) {
-        await interaction.reply({
+        await responder.respond({
           content: '⚠️ Invalid core field update.',
           ephemeral: true,
         });
@@ -91,11 +93,9 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
 
       await updateCharacterMeta(characterId, { [coreField]: newValue });
 
-      await interaction.deferUpdate();
-
       const updated = await getCharacterWithStats(characterId);
       if (!updated) {
-        await interaction.editReply({ content: '⚠️ Could not load updated character.' });
+        await responder.respond({ content: '⚠️ Could not load updated character.' });
         return;
       }
 
@@ -106,7 +106,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       );
       const view = buildCharacterCard(updated, isSelf);
 
-      await interaction.editReply({ ...view, content: null });
+      await responder.respond({ ...view, content: null });
       return;
     }
 
@@ -120,7 +120,7 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       const level = parseInt(levelRaw, 10);
 
       if (!name || !className || isNaN(level)) {
-        await interaction.reply({
+        await responder.respond({
           content: '⚠️ Invalid input. Please provide valid name, class, and level.',
           ephemeral: true,
         });
@@ -130,11 +130,9 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       // Currently only name is supported in updateCharacterMeta
       await updateCharacterMeta(characterId, { name });
 
-      await interaction.deferUpdate();
-
       const updated = await getCharacterWithStats(characterId);
       if (!updated) {
-        await interaction.editReply({ content: '⚠️ Could not load updated character.' });
+        await responder.respond({ content: '⚠️ Could not load updated character.' });
         return;
       }
 
@@ -145,20 +143,20 @@ export async function handle(interaction: ModalSubmitInteraction): Promise<void>
       );
       const view = buildCharacterCard(updated, isSelf);
 
-      await interaction.editReply({
+      await responder.respond({
         ...view,
         content: `📝 Character **${name}** updated successfully.`,
       });
       return;
     }
 
-    await interaction.reply({
+    await responder.respond({
       content: '❓ Unrecognized modal submission.',
       ephemeral: true,
     });
   } catch (err) {
     console.error('[character_edit_modals] Uncaught exception in modal handler:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ An unexpected error occurred while processing your request.',
       ephemeral: true,
     });

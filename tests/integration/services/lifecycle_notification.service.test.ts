@@ -61,4 +61,44 @@ describe('lifecycle_notification.service', () => {
       allowedMentions: { parse: [] },
     });
   });
+
+  test('does not retry a lifecycle notification send after an indeterminate failure', async () => {
+    process.env.LIFECYCLE_NOTIFY_GUILD_ID = '';
+    process.env.LIFECYCLE_NOTIFY_CHANNEL_ID = '';
+    const { sendLifecycleNotification } =
+      require('../../../src/services/lifecycle_notification.service') as {
+        sendLifecycleNotification(
+          client: unknown,
+          event: 'online',
+        ): Promise<{
+          sent: number;
+          failed: number;
+          skipped: number;
+        }>;
+      };
+    await lifecycleNotificationChannelDAO.upsert({
+      guildId: 'guild-failure',
+      channelId: 'channel-failure',
+      updatedBy: 'admin-1',
+    });
+    const send = jest
+      .fn()
+      .mockRejectedValue(Object.assign(new Error('reset'), { code: 'ECONNRESET' }));
+    const client = {
+      guilds: {
+        fetch: jest.fn().mockResolvedValue({
+          channels: {
+            fetch: jest.fn().mockResolvedValue({ isTextBased: () => true, send }),
+          },
+        }),
+      },
+    };
+
+    await expect(sendLifecycleNotification(client, 'online')).resolves.toEqual({
+      sent: 0,
+      failed: 1,
+      skipped: 0,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+  });
 });

@@ -10,13 +10,24 @@ import {
 
 import { belongsToUser } from '../../services/character.service';
 import { getItemForCharacter } from '../../services/inventory.service';
+import type { InteractionDispatchPolicy } from '../../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
+import { presentPreparedModal } from '../../discord/prepared_modal';
 
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
+
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId, rawPage] = interaction.customId.split(':');
   const itemId = interaction.values?.[0];
 
   if (!itemId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No inventory item selected.',
       ephemeral: true,
     });
@@ -25,7 +36,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
 
   const ownsCharacter = await belongsToUser(characterId, interaction.user.id);
   if (!ownsCharacter) {
-    await interaction.reply({
+    await responder.respond({
       content: '❌ You can only manage inventory for your own characters.',
       ephemeral: true,
     });
@@ -34,7 +45,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
 
   const item = await getItemForCharacter(characterId, itemId);
   if (!item) {
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Inventory item not found.',
       ephemeral: true,
     });
@@ -61,24 +72,22 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
       .setStyle(ButtonStyle.Secondary),
   );
 
-  await interaction.update({
+  await responder.respond({
     content: `Selected **${item.name}**.`,
     components: [actionRow],
   });
 }
 
 export async function buildEditModal(
-  interaction: {
-    showModal(modal: ModalBuilder): Promise<void>;
-    reply(options: { content: string; ephemeral: true }): Promise<unknown>;
-  },
+  responder: DiscordInteractionResponder,
+  userId: string,
   characterId: string,
   itemId: string,
   page: number,
 ): Promise<void> {
   const item = await getItemForCharacter(characterId, itemId);
   if (!item) {
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Inventory item not found.',
       ephemeral: true,
     });
@@ -123,7 +132,7 @@ export async function buildEditModal(
       ),
     );
 
-  await interaction.showModal(modal);
+  await presentPreparedModal({ modal, responder, userId });
 }
 
 function truncate(value: string, maxLength = 45): string {

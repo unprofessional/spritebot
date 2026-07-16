@@ -109,6 +109,20 @@ describe('command registration', () => {
     );
   });
 
+  test('retries the idempotent command registration PUT after a transient failure', async () => {
+    const restPut = jest
+      .spyOn(REST.prototype, 'put')
+      .mockRejectedValueOnce(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))
+      .mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: { on: jest.Mock; once: jest.Mock }): Promise<unknown>;
+    };
+
+    await initializeCommands({ on: jest.fn(), once: jest.fn() });
+
+    expect(restPut).toHaveBeenCalledTimes(4);
+  });
+
   test('each command module has executable command data', () => {
     for (const file of commandFilesFromDisk()) {
       const command = require(path.join(commandDir, file)) as {
@@ -122,6 +136,187 @@ describe('command registration', () => {
         expect.objectContaining({ name: command.data?.name }),
       );
     }
+  });
+
+  test('routes the create-character production command through its responder policy', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = {
+      on: jest.fn(),
+      once: jest.fn(),
+    };
+    await initializeCommands(client);
+
+    const command = client.commands?.get('create-character') as {
+      interactionPolicy?: unknown;
+      execute: jest.Mock;
+    };
+    expect(command.interactionPolicy).toEqual({
+      mode: { kind: 'reply', visibility: 'ephemeral' },
+      acknowledgement: 'auto-defer',
+    });
+    command.execute = jest.fn(async (interaction) => {
+      await interaction.reply({ content: 'routed', ephemeral: true });
+    });
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = commandInteraction();
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(command.execute).toHaveBeenCalledTimes(1);
+    expect(interaction.reply).toHaveBeenCalledWith({ content: 'routed', ephemeral: true });
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+  });
+
+  test('defers modal command authorization to the gated modal submission', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { guardCommand } = require('../../../src/access/guards') as {
+      guardCommand: jest.Mock;
+    };
+    guardCommand.mockClear();
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = { on: jest.fn(), once: jest.fn() };
+    await initializeCommands(client);
+
+    const command = client.commands?.get('ic-edit') as {
+      execute: jest.Mock;
+    };
+    command.execute = jest.fn(async (_interaction, { responder }) => {
+      await responder.showModal({ customId: 'ic-edit-modal:message-1' });
+    });
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      ...commandInteraction(),
+      commandName: 'ic-edit',
+      guildId: 'guild-1',
+      guild: { id: 'guild-1' },
+      channelId: 'channel-1',
+      options: { getString: jest.fn().mockReturnValue('123456789012345678') },
+      showModal: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(guardCommand).not.toHaveBeenCalled();
+    expect(interaction.showModal).toHaveBeenCalledTimes(1);
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+  });
+
+  test('defers immediate component-modal authorization to the gated modal submission', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { guardComponent } = require('../../../src/access/guards') as {
+      guardComponent: jest.Mock;
+    };
+    guardComponent.mockClear();
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = { on: jest.fn(), once: jest.fn() };
+    await initializeCommands(client);
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      type: 3,
+      customId: 'selectStatType:game-1',
+      values: ['number'],
+      user: { id: 'user-1' },
+      guildId: 'guild-1',
+      guild: { id: 'guild-1' },
+      isChatInputCommand: () => false,
+      isMessageContextMenuCommand: () => false,
+      isModalSubmit: () => false,
+      isButton: () => false,
+      isStringSelectMenu: () => true,
+      isRepliable: () => true,
+      replied: false,
+      deferred: false,
+      reply: jest.fn().mockResolvedValue(undefined),
+      deferReply: jest.fn().mockResolvedValue(undefined),
+      editReply: jest.fn().mockResolvedValue(undefined),
+      followUp: jest.fn().mockResolvedValue(undefined),
+      showModal: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(guardComponent).not.toHaveBeenCalled();
+    expect(interaction.showModal).toHaveBeenCalledTimes(1);
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+  });
+
+  test('routes modal submissions through the production responder dispatcher', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { guardComponent } = require('../../../src/access/guards') as {
+      guardComponent: jest.Mock;
+    };
+    guardComponent.mockClear();
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = { on: jest.fn(), once: jest.fn() };
+    await initializeCommands(client);
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      type: 5,
+      customId: 'unknown:modal',
+      message: null,
+      user: { id: 'user-1' },
+      isChatInputCommand: () => false,
+      isMessageContextMenuCommand: () => false,
+      isModalSubmit: () => true,
+      isButton: () => false,
+      isStringSelectMenu: () => false,
+      isRepliable: () => true,
+      replied: false,
+      deferred: false,
+      reply: jest.fn().mockResolvedValue(undefined),
+      deferReply: jest.fn().mockResolvedValue(undefined),
+      editReply: jest.fn().mockResolvedValue(undefined),
+      followUp: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(guardComponent).toHaveBeenCalledTimes(1);
+    expect(interaction.reply).toHaveBeenCalledWith({
+      content: '❓ Unknown modal submission.',
+      ephemeral: true,
+    });
+    expect(interaction.deferReply).not.toHaveBeenCalled();
   });
 
   test('responds to new interactions with a drain message during shutdown', async () => {
@@ -184,7 +379,8 @@ describe('command registration', () => {
         url: 'https://discord.com/api/interactions/id/secret-token/callback',
       });
     const execute = jest.fn().mockRejectedValue(expired());
-    client.commands?.set('create-character', { execute });
+    const command = client.commands?.get('create-character') as Record<string, unknown>;
+    client.commands?.set('create-character', { ...command, execute });
 
     const interactionListener = client.on.mock.calls.find(
       ([event]) => event === Events.InteractionCreate,
@@ -211,7 +407,7 @@ describe('command registration', () => {
       interactionListener?.(interaction);
       await flushPromises();
 
-      expect(execute).toHaveBeenCalledWith(interaction);
+      expect(execute).toHaveBeenCalledTimes(1);
       expect(interaction.reply).toHaveBeenCalledWith({
         content: 'There was an error while executing this action.',
         ephemeral: true,
@@ -267,7 +463,9 @@ describe('command registration', () => {
         ephemeral: true,
       });
       expect(unhandled).not.toHaveBeenCalled();
-      expect(warnSpy).toHaveBeenCalledWith(expect.stringContaining('context=drain-fallback'));
+      expect(warnSpy).toHaveBeenCalledWith(
+        expect.stringContaining('operation=interaction.drain-fallback'),
+      );
     } finally {
       process.off('unhandledRejection', unhandled);
     }
@@ -276,4 +474,24 @@ describe('command registration', () => {
 
 async function flushPromises(): Promise<void> {
   await new Promise<void>((resolve) => setImmediate(resolve));
+}
+
+function commandInteraction() {
+  return {
+    type: 2,
+    commandName: 'create-character',
+    token: 'secret-token',
+    isChatInputCommand: () => true,
+    isMessageContextMenuCommand: () => false,
+    isModalSubmit: () => false,
+    isButton: () => false,
+    isStringSelectMenu: () => false,
+    isRepliable: () => true,
+    replied: false,
+    deferred: false,
+    reply: jest.fn().mockResolvedValue(undefined),
+    deferReply: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue(undefined),
+    followUp: jest.fn().mockResolvedValue(undefined),
+  };
 }

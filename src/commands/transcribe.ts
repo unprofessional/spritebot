@@ -8,6 +8,10 @@ import {
 } from 'discord.js';
 
 import { PlayerDAO } from '../dao/player.dao';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 import {
   formatMissingTranscriptionPermissions,
   getMissingTranscriptionPermissions,
@@ -53,16 +57,24 @@ module.exports = {
       sub.setName('status').setDescription('Show the active transcription session.'),
     ),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     if (!interaction.guild) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
     }
 
     if (!(await isServerGm(interaction.user.id, interaction.guild.id))) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ Only a GM can manage transcription sessions.',
         ephemeral: true,
       });
@@ -71,7 +83,6 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === 'start') {
-      await interaction.deferReply({ ephemeral: true });
       const voiceChannel = interaction.options.getChannel('voice-channel', true);
       const textChannel = interaction.options.getChannel('text-channel', true);
 
@@ -80,7 +91,7 @@ module.exports = {
           voiceChannel.type !== ChannelType.GuildStageVoice) ||
         !('joinable' in voiceChannel)
       ) {
-        return interaction.editReply('⚠️ Choose a voice channel I can join.');
+        return responder.respond({ content: '⚠️ Choose a voice channel I can join.' });
       }
 
       if (
@@ -90,7 +101,9 @@ module.exports = {
         textChannel.type !== ChannelType.PrivateThread &&
         textChannel.type !== ChannelType.AnnouncementThread
       ) {
-        return interaction.editReply('⚠️ Choose a text channel for transcript output.');
+        return responder.respond({
+          content: '⚠️ Choose a text channel for transcript output.',
+        });
       }
 
       const missingPermissions = await getMissingTranscriptionPermissions(
@@ -99,7 +112,9 @@ module.exports = {
         textChannel as GuildTextBasedChannel,
       );
       if (missingPermissions.length > 0) {
-        return interaction.editReply(formatMissingTranscriptionPermissions(missingPermissions));
+        return responder.respond({
+          content: formatMissingTranscriptionPermissions(missingPermissions),
+        });
       }
 
       const status = await voiceManager.start({
@@ -109,38 +124,37 @@ module.exports = {
         textChannel: textChannel as GuildTextBasedChannel,
       });
 
-      return interaction.editReply(
-        `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
-      );
+      return responder.respond({
+        content: `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
+      });
     }
 
     if (subcommand === 'stop') {
-      await interaction.deferReply({ ephemeral: true });
       const result = await voiceManager.stop(interaction.guild.id);
       if (!result.stopped) {
-        return interaction.editReply('⚠️ No transcription session is active.');
+        return responder.respond({ content: '⚠️ No transcription session is active.' });
       }
 
       if (result.final) {
-        return interaction.editReply(
-          `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
-        );
+        return responder.respond({
+          content: `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+        });
       }
 
-      return interaction.editReply(
-        `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
-      );
+      return responder.respond({
+        content: `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
+      });
     }
 
     const status = voiceManager.status(interaction.guild.id);
     if (!status) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ No transcription session is active.',
         ephemeral: true,
       });
     }
 
-    return interaction.reply({
+    return responder.respond({
       content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}.`,
       ephemeral: true,
     });

@@ -8,8 +8,16 @@ import {
 
 import { getCharacterWithStats } from '../../services/character.service';
 import type { CharacterWithStats, CharacterStatWithLabel } from '../../types/character';
+import { gatedPreparedComponentModalInteractionPolicy } from '../../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
+import { presentPreparedModal } from '../../discord/prepared_modal';
 
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
+
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId, values } = interaction;
   const [selected] = values;
   const [, statId] = selected.split(':');
@@ -18,7 +26,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   const character: CharacterWithStats | null = await getCharacterWithStats(characterId);
 
   if (!character || !Array.isArray(character.stats)) {
-    await interaction.update({
+    await responder.respond({
       content: '❌ Character or stat not found.',
       embeds: [],
       components: [],
@@ -31,7 +39,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   );
 
   if (!stat) {
-    await interaction.update({
+    await responder.respond({
       content: '❌ Stat not found on character.',
       embeds: [],
       components: [],
@@ -63,11 +71,11 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
       new ActionRowBuilder<TextInputBuilder>().addComponents(valueInput),
     );
 
-    await interaction.showModal(modal);
+    await presentPreparedModal({ modal, responder, userId: interaction.user.id });
     return;
   }
 
-  await interaction.reply({
+  await responder.respond({
     content: '❌ Unknown stat adjustment selection.',
     ephemeral: true,
   });

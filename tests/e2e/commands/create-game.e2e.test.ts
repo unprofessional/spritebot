@@ -1,5 +1,5 @@
 const createGameCommand = require('../../../src/commands/create-game') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 import { GameDAO } from '../../../src/dao/game.dao';
 import { PlayerDAO } from '../../../src/dao/player.dao';
@@ -20,6 +20,7 @@ function createInteraction(overrides: { name?: string | null; guildId?: string |
       reply,
     },
     reply,
+    responderContext: { responder: { respond: reply } },
   };
 }
 
@@ -35,9 +36,9 @@ describe('/create-game', () => {
   });
 
   test('creates a game, creates a GM player link, and sets current game', async () => {
-    const { interaction, reply } = createInteraction();
+    const { interaction, reply, responderContext } = createInteraction();
 
-    await createGameCommand.execute(interaction);
+    await createGameCommand.execute(interaction, responderContext);
 
     const games = await new GameDAO().findByGuild('guild-1');
     const currentGameId = await new PlayerDAO().getCurrentGame('user-1', 'guild-1');
@@ -55,9 +56,9 @@ describe('/create-game', () => {
   });
 
   test('rejects use outside a server', async () => {
-    const { interaction, reply } = createInteraction({ guildId: null });
+    const { interaction, reply, responderContext } = createInteraction({ guildId: null });
 
-    await createGameCommand.execute(interaction);
+    await createGameCommand.execute(interaction, responderContext);
 
     expect(await new GameDAO().findAll()).toHaveLength(0);
     expect(reply).toHaveBeenCalledWith({

@@ -1,13 +1,34 @@
-import type { Client } from 'discord.js';
+import type { Channel, Client, Guild } from 'discord.js';
 
 import { lifecycleNotifyChannelId, lifecycleNotifyGuildId } from '../config/env_config';
 import { LifecycleNotificationChannelDAO } from '../dao/lifecycle_notification_channel.dao';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod, executeDiscordSdkMethodAs } from '../discord/sdk_operations';
 
 type LifecycleEvent = 'online' | 'shutdown';
 type NotificationTarget = { guildId: string; channelId: string; source: 'db' | 'env' };
 type NotificationSummary = { sent: number; failed: number; skipped: number };
 
 const lifecycleNotificationChannelDAO = new LifecycleNotificationChannelDAO();
+const lifecycleGuildReadPolicy = defineDiscordOperationPolicy({
+  operation: 'lifecycle.fetch-guild',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const lifecycleChannelReadPolicy = defineDiscordOperationPolicy({
+  operation: 'lifecycle.fetch-channel',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const lifecycleSendPolicy = defineDiscordOperationPolicy({
+  operation: 'lifecycle.send-notification',
+  timeoutMs: 3_000,
+  totalBudgetMs: 3_000,
+});
 
 const EVENT_COPY: Record<LifecycleEvent, { marker: string; text: string }> = {
   online: {
@@ -70,8 +91,18 @@ export async function sendLifecycleNotification(
   const results = await Promise.all(
     targets.map(async (target): Promise<keyof NotificationSummary> => {
       try {
-        const guild = await client.guilds.fetch(target.guildId);
-        const channel = await guild.channels.fetch(target.channelId);
+        const guild = await executeDiscordSdkMethodAs<Guild>(
+          lifecycleGuildReadPolicy,
+          client.guilds,
+          'fetch',
+          target.guildId,
+        );
+        const channel = await executeDiscordSdkMethodAs<Channel | null>(
+          lifecycleChannelReadPolicy,
+          guild.channels,
+          'fetch',
+          target.channelId,
+        );
 
         if (!channel?.isTextBased() || !('send' in channel)) {
           console.warn(
@@ -80,7 +111,7 @@ export async function sendLifecycleNotification(
           return 'skipped';
         }
 
-        await channel.send({
+        await executeDiscordSdkMethod(lifecycleSendPolicy, channel, 'send', {
           content,
           allowedMentions: { parse: [] },
         });

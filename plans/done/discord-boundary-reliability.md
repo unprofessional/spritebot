@@ -1,5 +1,7 @@
 # Discord Boundary Reliability Implementation Plan
 
+> **Status:** Complete — Tasks 1-10 shipped, Task 11 (production rollout) pending deploy.
+>
 > **For Codex:** Use TDD and implement this plan in phased pull requests. Do not combine the migration into one release. The expired-interaction hotfix must land first.
 
 **Goal:** Establish one durable boundary for Discord interaction contracts and outbound Discord API behavior so slow, expired, rate-limited, or failed Discord calls cannot silently violate acknowledgement deadlines or crash SPRITEbot.
@@ -362,7 +364,8 @@ Do not use a single ambiguous boolean. Support modes such as:
 type InteractionMode =
   | { kind: 'reply'; visibility: 'ephemeral' | 'public' }
   | { kind: 'component-update' }
-  | { kind: 'modal' };
+  | { kind: 'modal' }
+  | { kind: 'modal-or-reply'; visibility: 'ephemeral' | 'public' };
 ```
 
 Expose narrow methods rather than the raw interaction:
@@ -514,6 +517,75 @@ git commit -m "Migrate core commands to Discord responder"
 - Create/Modify: matching tests under `tests/integration/components/` and `tests/integration/handlers/`.
 - Update: `docs/discord-boundary-inventory.md`.
 
+**Completed: Batch 1 (simple components)**
+
+17 button/selector components migrated to the responder in commit `05ea316`. The dispatcher in `initial_commands.ts` now routes buttons and selects through `startTrackedInteractionDispatch` when the component exports an `interactionPolicy`. Handler indexes pass the responder through.
+
+**Responder design note (from batch 1 review):** Many components have mixed response patterns — `update()` for success, `reply({ ephemeral: true })` for errors. After `deferUpdate()`, `editReply()` would overwrite the original message with the error. The responder now handles this: when `respond()` is called with `ephemeral: true` in `component-update` mode, it routes to `followUp({ ephemeral: true })` instead, leaving the original message intact and sending a private error to the user. `followUp()` also preserves ephemeral in component-update mode. **All future component migrations should use `responder.respond({ ..., ephemeral: true })` for error paths — the responder does the right thing automatically.**
+
+**Prepared-modal design note:** Prefilled editors must preserve their existing values. Use
+`modal-or-reply` mode with `presentPreparedModal()`: preparation that completes inside the
+acknowledgement budget opens the prefilled modal immediately; if the dispatcher has already
+deferred ephemerally, the prepared modal is retained behind a short-lived, owner-bound opaque
+token and an **Open editor** button. Modal data must never be encoded in `customId`. A slow path may
+add one activation click, but it must never replace a prefilled editor with a blank modal. Prepared
+state is process-local and bounded; activation after a restart returns explicit retry guidance.
+Prepared-modal activation uses manual acknowledgement because opening the modal consumes the button
+interaction's initial response; auto-defer would compete with the only successful response path.
+Token lookup and expired-token feedback must remain process-local and immediately available.
+
+**Completed: Batch 2A (synchronous modal-opening selectors)**
+
+`character_field_selector`, `edit_character_field_selector`, and `stat_type_selector` use the
+shared manual `modal-or-reply` policy. They build and show their existing modals synchronously, or
+send their existing ephemeral validation reply. Their activating component authorization is
+deferred to the already-gated modal submission so a remote entitlement lookup cannot consume the
+only response that can open the modal.
+
+**Completed: Batch 2B.1 (prepared stat-template editor)**
+
+`edit_stat_selector` uses the shared gated prepared-modal policy. A fast stat-template lookup opens
+the existing prefilled editor immediately; a slow lookup preserves the same editor behind the
+owner-bound activation button. The modal submission remains the authoritative authorization
+boundary. The unrouted `stat_template_dropdown` duplicate was removed after confirming the live
+router has always used the dedicated edit and delete selector components.
+
+**Completed: Batch 2B.2 (prepared character field/stat editor)**
+
+`character_stat_select_menu` routes both core-field and game-stat selections through the shared
+gated prepared-modal policy. Fast character hydration preserves the immediate prefilled modal;
+slow hydration preserves the same values behind owner-bound activation. Existing missing-selection,
+missing-character, and missing-stat errors remain ephemeral, and both modal submission prefixes
+remain authoritative authorization boundaries.
+
+**Completed: Batch 2B.3 (prepared numeric-stat adjustment editor)**
+
+`adjust_numeric_stat_select` uses a component-update-aware prepared-modal policy. Fast stat
+hydration opens the existing adjustment modal immediately, while slow hydration keeps the original
+message intact and presents the same modal behind private owner-bound activation. Existing
+not-found results continue replacing the original message, including after automatic component
+deferral, and the unknown-selection fallback remains an immediate ephemeral reply. The adjustment
+modal submission remains the authoritative authorization boundary.
+
+**Completed: Batch 2B.4 (prepared inventory add/edit modals)**
+
+The inventory add and edit buttons use the shared gated prepared-modal policy. Fast ownership and
+item lookups preserve the immediate blank add modal and prefilled edit modal, including the
+existing immediate ownership denial. Slow lookups preserve the same modal behind owner-bound
+activation. Both modal submissions repeat ownership validation and remain the authoritative
+inventory-entitlement boundary.
+
+**Completed: Batches 3-4 (remaining components, buttons/selects, and modal submissions)**
+
+All remaining component and handler routes now declare explicit responder policies. Message
+replacement actions and message-backed modal submissions use component-update auto-deferral;
+read-only inventory view and IC edit submission use ephemeral reply auto-deferral; inventory modal
+submissions select between those contracts based on whether Discord supplies a source message.
+Every button, select, and modal now enters the deadline-aware dispatcher, including unknown-route
+fallbacks. Inventory routing uses one non-overlapping family predicate with per-action policies.
+
+**Task 7 complete. Task 8 entitlement/authorization migration is complete.**
+
 **Step 1: Classify before migration**
 
 Every component route must be one of:
@@ -531,6 +603,8 @@ Mixed routes must choose their contract synchronously before database/network wo
 1. Fetch the required values while building the earlier message/component and carry only a safe opaque lookup key into the modal-opening interaction.
 2. Add an intermediate loading/setup interaction that performs the I/O, then renders a new button whose next click can show the modal synchronously.
 3. Show a minimal modal immediately and perform authoritative lookup/validation on modal submission when prefilled values are not required.
+4. For an editor that requires prefetched values, use the prepared-modal boundary so the fast path
+   opens immediately and the slow path safely presents an owner-bound activation button.
 
 Do not encode secrets or oversized state in `customId`, and do not use stale prefetched data without revalidation on submission. Record the selected restructuring pattern for each affected route in `docs/discord-boundary-inventory.md`.
 
@@ -555,6 +629,10 @@ Keep modal routes separate from ordinary component-update routes to simplify rev
 ### Task 8: Migrate Raw Discord HTTP and Non-Interaction SDK Operations
 
 **Objective:** Apply explicit operation policies to Discord API work outside the interaction callback state machine.
+
+**Complete.** Entitlement authorization, command registration/bootstrap, lifecycle/support,
+thread bumps, RP proxy operations, and voice publication now use explicit operation policies.
+The boundary audit has no remaining non-interaction findings; Task 9 enforcement is next.
 
 **Files:**
 
@@ -622,6 +700,10 @@ Run focused tests plus full quality gates after each subsystem.
 
 **Objective:** Prevent new direct Discord contract/API calls from bypassing the wrapper.
 
+**Complete.** The last proxy-intercepted callbacks now use the responder, the audit reports zero,
+the local rule is an error with only `src/discord/**` allowlisted, and GitHub/Jenkins run the
+dedicated enforcement check. Task 10 fault-injection coverage is next.
+
 **Files:**
 
 - Modify: `eslint-rules/discord-boundary.cjs`
@@ -672,6 +754,10 @@ git commit -m "Enforce Discord boundary usage in CI"
 ### Task 10: Add Contract and Fault-Injection Coverage
 
 **Objective:** Verify boundary behavior under timing and failure modes that ordinary happy-path mocks miss.
+
+**Complete.** Deterministic interaction and operation integration suites cover every listed timing,
+Discord error, retry, duplicate-prevention, and process-drain fixture. Every case asserts clean
+unhandled-rejection listeners and fake timers. Task 11 production rollout and verification is next.
 
 **Files:**
 
@@ -726,7 +812,12 @@ git commit -m "Test Discord boundary failure contracts"
 
 **Files:**
 
-- Modify only existing operational documentation if deployment reveals a missing verified step.
+- `src/discord/interaction_responder.ts`
+- `src/discord/logging.ts`
+- `src/discord/prepared_modal.ts`
+- interaction routing/policies required to preserve prepared-modal update targets
+- focused unit/integration tests for callback containment, telemetry, and slow modal submission
+- existing operational documentation when verification reveals a missing step
 
 **Step 1: Complete all quality gates**
 
@@ -741,9 +832,22 @@ git diff --check
 
 All must exit 0.
 
-**Step 2: Deploy in phases**
+**Step 2: Perform one controlled deployment**
 
-Do not deploy the full migration as one unreviewed change. Deploy after each subsystem phase and observe at least one normal operating window before continuing.
+The subsystem phases were implemented and reviewed independently on `develop`. Promote the complete
+boundary to `master` as one internally consistent deployment rather than recreating partially
+migrated production states. Before promotion:
+
+- confirm the interaction acknowledgement telemetry in Step 3 is present;
+- record the current container restart count and recent `10062`, `40060`, timeout, rate-limit, and
+  transient-network counts as the comparison baseline;
+- confirm the previous production image remains available for immediate rollback; and
+- assign an operator to run the representative flows in Step 4 immediately after deployment.
+
+Rollback if a boundary-related unhandled rejection occurs, interaction failures increase
+materially, visibility changes, duplicate callbacks/messages are observed, or representative flows
+cannot be completed. Otherwise, observe one normal operating window before declaring the migration
+complete.
 
 **Step 3: Verify safe telemetry**
 
@@ -793,7 +897,8 @@ Any `10062` should be a contained, redacted event. Any boundary-related unhandle
 
 - Every interaction entry point uses the responder/dispatcher contract.
 - Potentially slow deferable interactions acknowledge within the configured margin below three seconds.
-- Modal-first paths call `showModal()` before any deferral or slow work.
+- Immediate modal paths call `showModal()` before any deferral or slow work. Prefilled modal paths
+  either show within the acknowledgement budget or defer ephemerally and use prepared activation.
 - Commands/components no longer choose raw `reply` versus `editReply` versus `followUp` themselves.
 - `10062` and `40060` are classified, logged safely, never blindly retried, and never escape as unhandled rejections.
 - Every inventoried outbound Discord operation has an explicit timeout and retry policy.
@@ -818,3 +923,10 @@ Implement as reviewable phases rather than a monolith:
 7. ESLint enforcement and fault-injection suite (Tasks 9+10 may share a PR).
 
 Each PR must update `docs/discord-boundary-inventory.md`, include focused RED/GREEN evidence, and pass existing repository quality gates.
+
+## Resolved Regressions
+
+- **IC edit prefill restored through prepared-modal activation.** `/ic-edit` and Edit IC Message
+  fetch and prefill the original proxy content. Fast preparation opens the modal immediately; slow
+  preparation completes the deferred ephemeral response with an owner-bound **Open editor** button.
+  Modal submission still performs authoritative ownership and existence validation.

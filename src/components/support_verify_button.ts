@@ -4,13 +4,29 @@ import {
   ButtonInteraction,
   ButtonStyle,
   CacheType,
+  type GuildMember,
 } from 'discord.js';
 
 import { supportGuildId } from '../config/env_config';
 import { verifySupportMember } from '../services/support_verification.service';
 import { buildSupportVerificationMessage } from '../utils/support_verification_messages';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethodAs } from '../discord/sdk_operations';
 
 const id = 'supportVerify';
+const interactionPolicy = {
+  mode: { kind: 'reply', visibility: 'ephemeral' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
+const supportMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'support.verify-button.fetch-member',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 function build(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -38,46 +54,35 @@ function buildGreeting() {
   };
 }
 
-async function handle(interaction: ButtonInteraction<CacheType>): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction<CacheType>,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   if (!interaction.guild || interaction.guildId !== supportGuildId) {
-    await safeEphemeralReply(interaction, {
+    await responder.respond({
       content: 'Use this verification button in the SPRITEbot support server.',
       ephemeral: true,
     });
     return;
   }
 
+  let content: string;
   try {
-    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const member = await executeDiscordSdkMethodAs<GuildMember>(
+      supportMemberReadPolicy,
+      interaction.guild.members,
+      'fetch',
+      interaction.user.id,
+    );
     const result = await verifySupportMember(member);
-
-    await safeEphemeralReply(interaction, {
-      content: await buildSupportVerificationMessage(interaction, result),
-      ephemeral: true,
-    });
+    content = await buildSupportVerificationMessage(interaction, result);
   } catch (err) {
     console.error('[support_verify_button] Support verification failed:', err);
-    await safeEphemeralReply(interaction, {
-      content:
-        '⚠️ I found the support server, but could not finish assigning verification roles. Please ask a server admin to check my role permissions and configured role IDs.',
-      ephemeral: true,
-    });
+    content =
+      '⚠️ I found the support server, but could not finish assigning verification roles. Please ask a server admin to check my role permissions and configured role IDs.';
   }
+
+  await responder.respond({ content, ephemeral: true });
 }
 
-async function safeEphemeralReply(
-  interaction: ButtonInteraction<CacheType>,
-  reply: { content: string; ephemeral: true },
-): Promise<void> {
-  try {
-    if (interaction.replied || interaction.deferred) {
-      await interaction.followUp(reply);
-    } else {
-      await interaction.reply(reply);
-    }
-  } catch (err) {
-    console.error('[support_verify_button] Failed to reply to interaction:', err);
-  }
-}
-
-export { id, build, buildGreeting, handle };
+export { id, build, buildGreeting, handle, interactionPolicy };

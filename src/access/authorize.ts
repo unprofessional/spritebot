@@ -8,7 +8,16 @@ import type { FeatureKey } from './features';
 
 export type AuthResult =
   | { ok: true; planName: string | null }
-  | { ok: false; reason: 'NO_GUILD' | 'NO_SUBSCRIPTION' | 'EXPIRED' | 'NOT_INCLUDED' | 'UNKNOWN' };
+  | {
+      ok: false;
+      reason:
+        | 'NO_GUILD'
+        | 'NO_SUBSCRIPTION'
+        | 'EXPIRED'
+        | 'NOT_INCLUDED'
+        | 'AUTHORIZATION_UNAVAILABLE'
+        | 'UNKNOWN';
+    };
 
 const OWNER_IDS = new Set<string>([process.env.OWNER_DISCORD_ID ?? '']); // optional
 const ADMIN_BYPASS = process.env.ADMIN_BYPASS === 'true'; // default off in prod
@@ -69,6 +78,13 @@ export async function authorizeInteraction(
   const ent = await getEntitlementsFor({ guildId });
 
   let entitlementOutcome: AuthResult | null = null;
+
+  if (ent?.status === 'unavailable') {
+    console.warn(
+      `[authorizeInteraction] Entitlement authorization unavailable guild=${guildId} category=${ent.failure.category}`,
+    );
+    return { ok: false, reason: 'AUTHORIZATION_UNAVAILABLE' };
+  }
 
   if (!ent) {
     console.debug(`[authorizeInteraction] ❌ No entitlements found for guild=${guildId}`);

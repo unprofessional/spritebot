@@ -7,6 +7,10 @@ import { handleAdminGlobalStats } from '../handlers/admin_global_stats.handler';
 import { handleAdminOrphans, handleAdminOrphansPurge } from '../handlers/admin_orphans.handler';
 import { handleAdminRestoreCharacter } from '../handlers/admin_restore.handler';
 import { userOwnsGame, userOwnsGameInGuild } from '../services/admin_housekeeping.service';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
 const OPS_GUILD_ID = process.env.DEV_GUILD_ID ?? '';
@@ -63,9 +67,16 @@ async function canAuditGames(interaction: ChatInputCommandInteraction): Promise<
 
 module.exports = {
   data,
-  async execute(interaction: ChatInputCommandInteraction) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+  async execute(
+    interaction: ChatInputCommandInteraction,
+    { responder }: InteractionCommandContext,
+  ) {
     if (!interaction.guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -75,67 +86,67 @@ module.exports = {
 
     if (subcommand === 'orphans') {
       if (interaction.guildId !== OPS_GUILD_ID) {
-        return interaction.reply({
+        return responder.respond({
           content: '⛔ Orphan audits are only available in the ops guild.',
           ephemeral: true,
         });
       }
 
       if (!isOwner(interaction.user.id)) {
-        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+        return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminOrphans(interaction);
+      await handleAdminOrphans(interaction, responder);
       return;
     }
 
     if (subcommand === 'orphans-purge') {
       if (interaction.guildId !== OPS_GUILD_ID) {
-        return interaction.reply({
+        return responder.respond({
           content: '⛔ Orphan purges are only available in the ops guild.',
           ephemeral: true,
         });
       }
 
       if (!isOwner(interaction.user.id)) {
-        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+        return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminOrphansPurge(interaction);
+      await handleAdminOrphansPurge(interaction, responder);
       return;
     }
 
     if (subcommand === 'global-stats') {
       if (!isOwner(interaction.user.id)) {
-        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+        return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminGlobalStats(interaction);
+      await handleAdminGlobalStats(interaction, responder);
       return;
     }
 
     if (subcommand === 'games') {
       if (!(await canAuditGames(interaction))) {
-        return interaction.reply({
+        return responder.respond({
           content: '⛔ Not authorized. Only the bot owner or a GM in this server can audit games.',
           ephemeral: true,
         });
       }
 
-      await handleAdminGames(interaction);
+      await handleAdminGames(interaction, responder);
       return;
     }
 
     if (subcommand === 'characters') {
       if (isOwner(interaction.user.id)) {
-        await handleAdminCharacters(interaction);
+        await handleAdminCharacters(interaction, responder);
         return;
       }
 
       const gameId = interaction.options.getString('game_id');
 
       if (!gameId) {
-        return interaction.reply({
+        return responder.respond({
           content:
             '⚠️ GMs must provide a game_id so the private-character audit stays scoped to one of their games.',
           ephemeral: true,
@@ -143,22 +154,22 @@ module.exports = {
       }
 
       if (!(await userOwnsGame(interaction.user.id, gameId, interaction.guildId))) {
-        return interaction.reply({
+        return responder.respond({
           content: '⛔ Not authorized. You can only audit private characters for your own games.',
           ephemeral: true,
         });
       }
 
-      await handleAdminCharacters(interaction);
+      await handleAdminCharacters(interaction, responder);
       return;
     }
 
     if (subcommand === 'restore-character') {
       if (!isOwner(interaction.user.id)) {
-        return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+        return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminRestoreCharacter(interaction);
+      await handleAdminRestoreCharacter(interaction, responder);
     }
   },
 };

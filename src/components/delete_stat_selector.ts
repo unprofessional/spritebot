@@ -11,10 +11,16 @@ import {
 } from 'discord.js';
 
 import { getStatTemplateById } from '../services/game.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { StatTemplate } from '../types/stat_template';
 import { build as buildCancelButton } from './finish_stat_setup_button';
 
 const id = 'deleteStatSelect';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(
   gameId: string,
@@ -34,13 +40,16 @@ function build(
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
 }
 
-async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId, values } = interaction;
   const selected = values?.[0];
   const [, gameId] = customId.split(':');
 
   if (!selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No field selected.',
       ephemeral: true,
     });
@@ -50,7 +59,7 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
   try {
     const field = await getStatTemplateById(selected);
     if (!field || field.game_id !== gameId) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Could not find or verify the selected stat field.',
         ephemeral: true,
       });
@@ -65,18 +74,18 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
       new ButtonBuilder(buildCancelButton(gameId)),
     );
 
-    await interaction.update({
+    await responder.respond({
       content: `🗑️ Are you sure you want to delete stat **${field.label}**?`,
       embeds: [] as APIEmbed[],
       components: [confirmRow as ActionRowBuilder<MessageActionRowComponentBuilder>],
     });
   } catch (err) {
     console.error('Error selecting stat field to delete:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to prepare delete confirmation.',
       ephemeral: true,
     });
   }
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };

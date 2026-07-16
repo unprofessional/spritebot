@@ -2,6 +2,8 @@ import { CharacterDAO } from '../../../src/dao/character.dao';
 import { GameDAO } from '../../../src/dao/game.dao';
 import { createItem } from '../../../src/services/inventory.service';
 import { handle } from '../../../src/handlers/select_menu_handlers/inventory_item_select';
+import { interactionPolicy } from '../../../src/handlers/select_menu_handlers/inventory_item_select';
+import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
 
 describe('inventory_item_select', () => {
   const characterDAO = new CharacterDAO();
@@ -31,14 +33,21 @@ describe('inventory_item_select', () => {
       quantity: 1,
     });
     const update = jest.fn().mockResolvedValue(undefined);
-
-    await handle({
+    const interaction = {
       customId: `editInventoryItemSelect:${character.id}:0`,
       values: [item.id],
       user: { id: 'player-1' },
+      replied: false,
+      deferred: false,
       update,
       reply: jest.fn(),
-    } as any);
+      deferUpdate: jest.fn(),
+      editReply: jest.fn(),
+      followUp: jest.fn(),
+    } as any;
+    const responder = new DiscordInteractionResponder(interaction, interactionPolicy.mode);
+
+    await handle(interaction, responder);
 
     const payload = update.mock.calls[0][0];
     const components = payload.components[0].toJSON().components as Array<{ custom_id: string }>;
@@ -53,5 +62,30 @@ describe('inventory_item_select', () => {
       ]),
     );
     expect(customIds.every((customId) => customId.length <= 100)).toBe(true);
+  });
+
+  test('routes a missing selection to a private follow-up after component deferral', async () => {
+    const interaction = {
+      customId: 'editInventoryItemSelect:character-1:0',
+      values: [],
+      user: { id: 'player-1' },
+      replied: false,
+      deferred: false,
+      update: jest.fn(),
+      reply: jest.fn(),
+      deferUpdate: jest.fn().mockResolvedValue(undefined),
+      editReply: jest.fn(),
+      followUp: jest.fn().mockResolvedValue(undefined),
+    } as any;
+    const responder = new DiscordInteractionResponder(interaction, interactionPolicy.mode);
+
+    await responder.acknowledge();
+    await handle(interaction, responder);
+
+    expect(interaction.followUp).toHaveBeenCalledWith({
+      content: '⚠️ No inventory item selected.',
+      ephemeral: true,
+    });
+    expect(interaction.editReply).not.toHaveBeenCalled();
   });
 });

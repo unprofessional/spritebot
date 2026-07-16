@@ -26,7 +26,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-1' },
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, { responder: { respond: interaction.reply } });
 
     const reply = interaction.reply.mock.calls[0][0];
     const row = reply.components[0].toJSON();
@@ -65,7 +65,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-2' },
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, { responder: { respond: interaction.reply } });
 
     const reply = interaction.reply.mock.calls[0][0];
     const row = reply.components[0].toJSON();
@@ -102,7 +102,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-1' },
     };
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.update });
 
     expect(deleteMessageMock).toHaveBeenCalledWith({
       client: interaction.client,
@@ -126,7 +126,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-2' },
     };
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.reply });
 
     expect(deleteMessageMock).not.toHaveBeenCalled();
     expect(interaction.reply).toHaveBeenCalledWith({
@@ -144,7 +144,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-1' },
     };
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.update });
 
     expect(deleteMessageMock).not.toHaveBeenCalled();
     expect(interaction.update).toHaveBeenCalledWith({

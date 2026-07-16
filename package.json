@@ -18,6 +18,8 @@
     "test:integration": "jest tests/integration --coverage=false --runInBand",
     "test:e2e": "jest tests/e2e --runInBand --coverage=false",
     "lint:eslint": "eslint --ext .ts,.js src --format=stylish",
+    "audit:discord-boundary": "node scripts/report-discord-boundary.cjs",
+    "check:discord-boundary": "eslint src --quiet",
     "lint:prettier": "prettier --check .",
     "precommit": "npm run lint && npm test",
     "prepare": "husky"

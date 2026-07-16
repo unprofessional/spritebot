@@ -8,8 +8,14 @@ import {
 } from 'discord.js';
 import { getRestorableCharacters, restoreCharacterForUser } from '../services/character.service';
 import { formatTimeAgo } from '../utils/time_ago';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 export const id = 'restoreCharacterDropdown';
+export const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 export async function build(
   userId: string,
@@ -52,12 +58,15 @@ export async function build(
   };
 }
 
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const selected = interaction.values[0];
   const { guildId, user } = interaction;
 
   if (!guildId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ This action must be used in a server.',
       ephemeral: true,
     });
@@ -65,7 +74,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   }
 
   if (!selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No character selected.',
       ephemeral: true,
     });
@@ -84,14 +93,14 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
         ? '⚠️ That character is outside the 30-day restore window.'
         : '⚠️ That character can no longer be restored from this menu.';
 
-    await interaction.update({
+    await responder.respond({
       content: message,
       components: [],
     });
     return;
   }
 
-  await interaction.update({
+  await responder.respond({
     content: `✅ Restored **${result.character.name}** as a private character and made them active. Use \`/view-character\` to review them.`,
     components: [],
   });

@@ -4,7 +4,6 @@ import {
   CacheType,
   ChannelType,
   ChatInputCommandInteraction,
-  MessageFlags,
   PermissionFlagsBits,
   SlashCommandBuilder,
   ThreadChannel,
@@ -12,6 +11,20 @@ import {
 import { rescheduleThread, unscheduleThread } from '../schedulers/bump_scheduler';
 import { ThreadBumpService } from '../services/thread_bump.service';
 import { computeDefaultIntervalMinutes } from '../config/bump_config';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod } from '../discord/sdk_operations';
+
+const bumpTargetReadPolicy = defineDiscordOperationPolicy({
+  operation: 'bump-command.fetch-channel',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 const service = new ThreadBumpService();
 
@@ -105,7 +118,12 @@ async function resolveTargetThread(
   if (ch && isThreadType(ch.type)) return ch as ThreadChannel;
 
   // 3) Fallback: fetch authoritative channel by ID (handles partials/edge cases)
-  const fetched = await interaction.client.channels.fetch(interaction.channelId).catch((e) => {
+  const fetched = await executeDiscordSdkMethod(
+    bumpTargetReadPolicy,
+    interaction.client.channels,
+    'fetch',
+    interaction.channelId,
+  ).catch((e) => {
     console.warn(
       `[bump-thread] resolve: fetch by channelId failed id=${interaction.channelId} err=`,
       e,
@@ -219,7 +237,15 @@ module.exports = {
         ),
     ),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     try {
       const sub = interaction.options.getSubcommand(true);
       const guildId = ensureGuild(interaction);
@@ -232,9 +258,9 @@ module.exports = {
 
       if (!hasThreadPerms(interaction)) {
         console.log('[bump-thread] exec: missing ManageThreads/Admin on invoker');
-        await interaction.reply({
+        await responder.respond({
           content: '❌ You need **Manage Threads** to do that.',
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -243,9 +269,9 @@ module.exports = {
         const rows = await service.listGuild(guildId);
         console.log(`[bump-thread] list: rows=${rows.length}`);
         if (rows.length === 0) {
-          await interaction.reply({
+          await responder.respond({
             content: 'ℹ️ No registered threads in this server.',
-            flags: MessageFlags.Ephemeral,
+            ephemeral: true,
           });
           return;
         }
@@ -261,9 +287,9 @@ module.exports = {
           }),
         );
 
-        await interaction.reply({
+        await responder.respond({
           content: `📋 **Registered bump threads:**\n${lines.join('\n')}`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -274,10 +300,10 @@ module.exports = {
       );
 
       if (!target) {
-        await interaction.reply({
+        await responder.respond({
           content:
             '⚠️ You must run this in a thread or specify a valid thread with `/bump-thread … thread:`.',
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -287,9 +313,9 @@ module.exports = {
         console.log(
           `[bump-thread] exec: thread guild mismatch (thread.guild.id=${target.guild?.id} vs guildId=${guildId})`,
         );
-        await interaction.reply({
+        await responder.respond({
           content: '⚠️ That thread is not in this server.',
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -312,13 +338,13 @@ module.exports = {
 
         await rescheduleThread(target.id);
 
-        await interaction.reply({
+        await responder.respond({
           content:
             `✅ Registered <#${target.id}> for auto-bumps.` +
             (note ? `\n📝 Note: _${note}_` : '') +
             `\n⏱️ Interval: **${defaultMinutes}m**` +
             (target.autoArchiveDuration ? ` (auto-archive: ${target.autoArchiveDuration}m)` : ''),
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -328,11 +354,11 @@ module.exports = {
         unscheduleThread(target.id); // cancel any pending timer immediately
         const ok = await service.unregister(target.id);
         unscheduleThread(target.id); // cancel again in case of race
-        await interaction.reply({
+        await responder.respond({
           content: ok
             ? `🗑️ Unregistered <#${target.id}>.`
             : `ℹ️ <#${target.id}> was not registered.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -343,13 +369,13 @@ module.exports = {
         console.log(`[bump-thread] set-note: thread=${target.id} note=${note ?? 'null'}`);
         const ok = await service.setNote(target.id, note);
         if (ok) await rescheduleThread(target.id); // reschedule is harmless here
-        await interaction.reply({
+        await responder.respond({
           content: ok
             ? note
               ? `📝 Updated note for <#${target.id}>: _${note}_`
               : `🧹 Cleared note for <#${target.id}>.`
             : `⚠️ <#${target.id}> is not registered.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -363,14 +389,14 @@ module.exports = {
         );
         const ok = await service.setInterval(target.id, minutes);
         if (ok) await rescheduleThread(target.id);
-        await interaction.reply({
+        await responder.respond({
           content: ok
             ? `⏱️ Interval for <#${target.id}> set to **${minutes} min**.` +
               (risky
                 ? `\n⚠️ Heads up: this is ≥ the thread’s auto-archive window (${archive}m). The bot will need **Manage Threads** to unarchive before bumping.`
                 : '')
             : `⚠️ <#${target.id}> is not registered.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
@@ -378,25 +404,18 @@ module.exports = {
       if (sub === 'bump-now') {
         console.log(`[bump-thread] bump-now: thread=${target.id}`);
         await service.bumpNow(interaction.client, target.id, { deleteAfter: false });
-        await interaction.reply({
+        await responder.respond({
           content: `🔔 Bumped <#${target.id}>.`,
-          flags: MessageFlags.Ephemeral,
+          ephemeral: true,
         });
         return;
       }
     } catch (err) {
       console.error('bump-thread command error:', err);
-      if (interaction.deferred || interaction.replied) {
-        await interaction.followUp({
-          content: '❌ Something went wrong.',
-          flags: MessageFlags.Ephemeral,
-        });
-      } else {
-        await interaction.reply({
-          content: '❌ Something went wrong.',
-          flags: MessageFlags.Ephemeral,
-        });
-      }
+      await responder.respond({
+        content: '❌ Something went wrong.',
+        ephemeral: true,
+      });
     }
   },
 };

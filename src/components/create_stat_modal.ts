@@ -11,6 +11,8 @@ import {
 } from 'discord.js';
 
 import { addStatTemplates, getStatTemplates, getGame } from '../services/game.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 
@@ -18,6 +20,10 @@ import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
 
 const id = 'createStatModal';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(gameId: string, statType: string): ModalBuilder {
   if (!statType) throw new Error('[create_stat_modal.build] Missing statType');
@@ -50,7 +56,10 @@ function build(gameId: string, statType: string): ModalBuilder {
     );
 }
 
-async function handle(interaction: ModalSubmitInteraction): Promise<void> {
+async function handle(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, gameId, statTypeRaw] = interaction.customId.split(':');
   const statType = statTypeRaw as 'number' | 'count' | 'short' | 'paragraph';
 
@@ -60,7 +69,7 @@ async function handle(interaction: ModalSubmitInteraction): Promise<void> {
   const sort_order = sortIndexRaw ? parseInt(sortIndexRaw, 10) : 0;
 
   if (!label || !['number', 'count', 'short', 'paragraph'].includes(statType)) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Invalid input or stat type.',
       ephemeral: true,
     });
@@ -95,8 +104,7 @@ async function handle(interaction: ModalSubmitInteraction): Promise<void> {
   );
 
   // Update the existing setup message instead of sending a new ephemeral reply
-  await interaction.deferUpdate();
-  await interaction.editReply({
+  await responder.respond({
     content: appendNudge(response.content, nudge),
     embeds: response.embeds,
     components: response.components.map((row) =>
@@ -105,4 +113,4 @@ async function handle(interaction: ModalSubmitInteraction): Promise<void> {
   });
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };

@@ -11,6 +11,10 @@ import { rebuildCreateCharacterResponse } from '../utils/rebuild_create_characte
 
 import type { StatTemplate } from '../types/stat_template';
 import type { UserDefinedField } from '../types/character';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 interface LabeledField {
   name: string;
@@ -22,12 +26,20 @@ module.exports = {
     .setName('create-character')
     .setDescription('Create a character for your current game.'),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     const userId = interaction.user.id;
     const guildId = interaction.guildId;
 
     if (!guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ You must use this command in a server.',
         ephemeral: true,
       });
@@ -37,7 +49,7 @@ module.exports = {
     const gameId = await getCurrentGame(userId, guildId);
 
     if (!gameId) {
-      return interaction.reply({
+      return responder.respond({
         content: appendNudge(
           '⚠️ You haven’t joined a game yet.',
           buildNudge({ userId, guildId }, 'create-character-no-game'),
@@ -48,14 +60,14 @@ module.exports = {
 
     const game = await getGame({ id: gameId });
     if (!game) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ Your currently joined game no longer exists.',
         ephemeral: true,
       });
     }
 
     if (!game.is_public && game.created_by !== userId) {
-      return interaction.reply({
+      return responder.respond({
         content:
           '⚠️ This game is no longer public. You must ask the GM to republish it or invite you.',
         ephemeral: true,
@@ -66,7 +78,7 @@ module.exports = {
     const userFields = (await getUserDefinedFields(userId)) as UserDefinedField[];
 
     if (!statTemplates.length) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This game has no stat fields defined yet. Ask the GM to set them up.',
         ephemeral: true,
       });
@@ -75,7 +87,7 @@ module.exports = {
     const existingDraft = await getTempCharacterData(userId);
     const draft = initDraft(userId);
     if (!draft) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ Failed to initialize character draft.',
         ephemeral: true,
       });
@@ -116,7 +128,7 @@ module.exports = {
     );
 
     if (!safeFields.length) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ No valid fields found to show in the dropdown.',
         ephemeral: true,
       });
@@ -133,7 +145,7 @@ module.exports = {
     );
 
     // ✅ Send ephemeral builder
-    await interaction.reply({
+    await responder.respond({
       ...response,
       content: existingDraft
         ? `⚠️ Resumed your previous draft!\nContinue filling in the fields below.\n\n${response.content || ''}`
