@@ -83,6 +83,15 @@ export function logDiscordOperationTelemetry(
   sink(formatDiscordOperationTelemetryLog(input));
 }
 
+export function interactionMetadataString(
+  interaction: unknown,
+  key: 'commandName' | 'customId',
+): string | undefined {
+  if (!interaction || typeof interaction !== 'object') return undefined;
+  const value = (interaction as Record<string, unknown>)[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
 function safeMetadata(value: string | undefined): string | undefined {
   if (!value || !safeLabel.test(value)) return undefined;
   return value;
