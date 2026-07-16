@@ -28,7 +28,9 @@ describe('/gift', () => {
       user: { id: 'support-admin-1' },
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content: '⛔ Not authorized.',
@@ -53,7 +55,9 @@ describe('/gift', () => {
       user: { id: 'owner-1' },
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(mockUpsertGift).toHaveBeenCalledWith({
       guildId: 'guild-1',
