@@ -6,7 +6,10 @@ import { interactionMetadataString, logDiscordFailure } from './logging';
 export type InteractionMode =
   | { kind: 'reply'; visibility: 'ephemeral' | 'public' }
   | { kind: 'component-update' }
-  | { kind: 'modal' };
+  | { kind: 'modal' }
+  | { kind: 'modal-or-reply'; visibility: 'ephemeral' | 'public' };
+
+export type ModalPresentationOutcome = 'shown' | 'requires_activation' | 'expired';
 
 export type InteractionResponseState =
   | 'unacknowledged'
@@ -151,8 +154,10 @@ export class DiscordInteractionResponder {
   showModal(modal: unknown): Promise<void> {
     return this.runSerialized(async () => {
       if (this.currentState === 'expired') return;
-      if (this.mode.kind !== 'modal') {
-        throw new InteractionResponseStateError('showModal() requires modal interaction mode.');
+      if (this.mode.kind !== 'modal' && this.mode.kind !== 'modal-or-reply') {
+        throw new InteractionResponseStateError(
+          'showModal() requires modal or modal-or-reply interaction mode.',
+        );
       }
       if (this.currentState !== 'unacknowledged') {
         throw new InteractionResponseStateError(
@@ -161,6 +166,28 @@ export class DiscordInteractionResponder {
       }
 
       await this.invoke('showModal', () => this.callbacks.showModal(modal), 'modal_shown');
+    });
+  }
+
+  presentModal(modal: unknown): Promise<ModalPresentationOutcome> {
+    return this.runSerialized(async () => {
+      if (this.currentState === 'expired') return 'expired';
+      if (this.mode.kind !== 'modal-or-reply') {
+        throw new InteractionResponseStateError(
+          'presentModal() requires modal-or-reply interaction mode.',
+        );
+      }
+      if (this.currentState === 'deferred_reply' || this.currentState === 'replied') {
+        return 'requires_activation';
+      }
+      if (this.currentState !== 'unacknowledged') {
+        throw new InteractionResponseStateError(
+          `Cannot present a modal from state ${this.currentState}.`,
+        );
+      }
+
+      await this.invoke('showModal', () => this.callbacks.showModal(modal), 'modal_shown');
+      return this.state === 'expired' ? 'expired' : 'shown';
     });
   }
 
@@ -213,7 +240,9 @@ export class DiscordInteractionResponder {
   }
 
   private replyPayload(payload: InteractionPayload): InteractionPayload {
-    const ephemeral = this.mode.kind === 'reply' && this.mode.visibility === 'ephemeral';
+    const ephemeral =
+      (this.mode.kind === 'reply' || this.mode.kind === 'modal-or-reply') &&
+      this.mode.visibility === 'ephemeral';
     if ('ephemeral' in payload && payload.ephemeral !== ephemeral) {
       throw new InteractionResponseStateError(
         'Interaction response visibility cannot change after the response mode is selected.',
@@ -246,11 +275,11 @@ export class DiscordInteractionResponder {
         return;
       }
 
-      this.reconcileAcknowledgementState();
+      this.reconcileAcknowledgementState(successState);
     }
   }
 
-  private reconcileAcknowledgementState(): void {
+  private reconcileAcknowledgementState(fallbackState: InteractionResponseState): void {
     if (this.callbacks.replied) {
       this.currentState = 'replied';
       return;
@@ -261,9 +290,7 @@ export class DiscordInteractionResponder {
       return;
     }
 
-    if (this.mode.kind === 'component-update') this.currentState = 'updated';
-    else if (this.mode.kind === 'modal') this.currentState = 'modal_shown';
-    else this.currentState = 'replied';
+    this.currentState = fallbackState;
   }
 
   private logTerminalFailure(operation: string, error: unknown, elapsedMs: number): void {
@@ -279,9 +306,12 @@ export class DiscordInteractionResponder {
     });
   }
 
-  private runSerialized(work: () => Promise<void>): Promise<void> {
+  private runSerialized<T>(work: () => Promise<T>): Promise<T> {
     const result = this.serialized.then(work);
-    this.serialized = result.catch(() => undefined);
+    this.serialized = result.then(
+      () => undefined,
+      () => undefined,
+    );
     return result;
   }
 }
