@@ -101,6 +101,10 @@ export function classifyDiscordError(error: unknown): ClassifiedDiscordError {
     );
   }
 
+  if (status !== undefined && status >= 500 && status <= 599) {
+    return classified('transient_network', true, 'Transient Discord server failure.', code, status);
+  }
+
   if (status === 404) {
     return classified('not_found', false, 'Discord resource not found.', code, status);
   }
