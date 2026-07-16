@@ -1,4 +1,9 @@
-import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import {
+  CacheType,
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+  type GuildMember,
+} from 'discord.js';
 
 import { supportGuildId } from '../config/env_config';
 import {
@@ -10,6 +15,16 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../discord/interaction_dispatch';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethodAs } from '../discord/sdk_operations';
+
+const supportMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'support.verify.fetch-member',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -34,7 +49,12 @@ module.exports = {
 
     let result: SupportVerificationResult;
     try {
-      const member = await interaction.guild.members.fetch(interaction.user.id);
+      const member = await executeDiscordSdkMethodAs<GuildMember>(
+        supportMemberReadPolicy,
+        interaction.guild.members,
+        'fetch',
+        interaction.user.id,
+      );
       result = await verifySupportMember(member);
     } catch (err) {
       console.error('[verify] Support verification failed:', err);

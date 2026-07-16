@@ -1,10 +1,4 @@
-import {
-  entersState,
-  getVoiceConnection,
-  joinVoiceChannel,
-  VoiceConnection,
-  VoiceConnectionStatus,
-} from '@discordjs/voice';
+import { VoiceConnection, VoiceConnectionStatus } from '@discordjs/voice';
 import {
   AttachmentBuilder,
   ChannelType,
@@ -12,9 +6,11 @@ import {
   Client,
   Events,
   Guild,
+  GuildMember,
   GuildTextBasedChannel,
   VoiceState,
   VoiceBasedChannel,
+  User,
 } from 'discord.js';
 
 import {
@@ -24,6 +20,13 @@ import {
   trackOperation,
 } from '../runtime/lifecycle';
 import { transcriptionConcurrency, transcriptionDrainTimeoutMs } from '../config/env_config';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod, executeDiscordSdkMethodAs } from '../discord/sdk_operations';
+import {
+  destroyExistingDiscordVoiceConnection,
+  joinDiscordVoiceChannel,
+  waitForDiscordVoiceState,
+} from '../discord/voice_operations';
 import { AudioReceiver } from './audio_receiver';
 import {
   createNoopTranscriptionProgressMessage,
@@ -46,6 +49,48 @@ import {
 } from './transcription_permissions';
 import { TranscriptionQueue, type TranscriptionSegmentRecord } from './transcription_queue';
 import { encodePcm16MonoWav } from './wav';
+
+const voiceJoinPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.join',
+  timeoutMs: 5_000,
+  totalBudgetMs: 5_000,
+});
+const voiceReadyPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.wait-ready',
+  timeoutMs: 21_000,
+  totalBudgetMs: 21_000,
+});
+const voiceDestroyPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.destroy-connection',
+  timeoutMs: 2_000,
+  totalBudgetMs: 2_000,
+});
+const voiceChannelReadPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.fetch-output-channel',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const voiceMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.fetch-speaker-member',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const voiceUserReadPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.fetch-speaker-user',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const voiceSendPolicy = defineDiscordOperationPolicy({
+  operation: 'voice.send-transcript',
+  timeoutMs: 5_000,
+  totalBudgetMs: 5_000,
+});
 
 export type StartTranscriptionParams = {
   client: Client;
@@ -133,7 +178,7 @@ export class VoiceManager {
       throw new Error(formatMissingTranscriptionPermissions(missingPermissions));
     }
 
-    const connection = joinVoiceChannel({
+    const connection = await joinDiscordVoiceChannel(voiceJoinPolicy, {
       channelId: params.voiceChannel.id,
       guildId: params.guild.id,
       adapterCreator: params.guild.voiceAdapterCreator,
@@ -141,7 +186,12 @@ export class VoiceManager {
       selfMute: true,
     });
 
-    await entersState(connection, VoiceConnectionStatus.Ready, 20_000);
+    await waitForDiscordVoiceState(
+      voiceReadyPolicy,
+      connection,
+      VoiceConnectionStatus.Ready,
+      20_000,
+    );
 
     const sessionId = `${Date.now()}-${process.pid}`;
     const segmentSpool = new SegmentSpool({ guildId: params.guild.id, sessionId });
@@ -215,7 +265,7 @@ export class VoiceManager {
   ): Promise<StopTranscriptionResult> {
     const session = this.sessions.get(guildId);
     if (!session) {
-      getVoiceConnection(guildId)?.destroy();
+      await destroyExistingDiscordVoiceConnection(voiceDestroyPolicy, guildId);
       return {
         stopped: false,
         segmentCount: 0,
@@ -229,7 +279,7 @@ export class VoiceManager {
     }
 
     session.isStopping = true;
-    session.connection.destroy();
+    await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy');
     await Promise.allSettled([...session.pendingSpools]);
     const stats = session.transcriptionQueue.stats();
 
@@ -307,7 +357,7 @@ export class VoiceManager {
 
     if (timedOut) {
       for (const [guildId, session] of this.sessions) {
-        session.connection.destroy();
+        await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy');
         await session.segmentSpool.cleanup();
         this.sessions.delete(guildId);
       }
@@ -364,7 +414,12 @@ export class VoiceManager {
   private async createProgressMessage(
     session: VoiceSession,
   ): Promise<TranscriptionProgressMessage> {
-    const channel = await session.client.channels.fetch(session.textChannelId).catch(() => null);
+    const channel = await executeDiscordSdkMethodAs<Channel | null>(
+      voiceChannelReadPolicy,
+      session.client.channels,
+      'fetch',
+      session.textChannelId,
+    ).catch(() => null);
     if (!isTextOutputChannel(channel)) return createNoopTranscriptionProgressMessage();
 
     return createTranscriptionProgressMessage(channel, session.transcriptionQueue.stats()).catch(
@@ -470,11 +525,23 @@ export class VoiceManager {
     const cached = session.speakerIdentities.get(userId);
     if (cached) return cached;
 
-    const member = await session.client.guilds.cache
-      .get(session.guildId)
-      ?.members.fetch(userId)
-      .catch(() => null);
-    const user = member?.user ?? (await session.client.users.fetch(userId).catch(() => null));
+    const guild = session.client.guilds.cache.get(session.guildId);
+    const member = guild
+      ? await executeDiscordSdkMethodAs<GuildMember>(
+          voiceMemberReadPolicy,
+          guild.members,
+          'fetch',
+          userId,
+        ).catch(() => null)
+      : null;
+    const user =
+      member?.user ??
+      (await executeDiscordSdkMethodAs<User>(
+        voiceUserReadPolicy,
+        session.client.users,
+        'fetch',
+        userId,
+      ).catch(() => null));
     const identity = {
       displayName: member?.displayName ?? user?.displayName ?? user?.username ?? userId,
       isBot: member?.user.bot ?? user?.bot ?? false,
@@ -489,7 +556,12 @@ export class VoiceManager {
     autoStopped: boolean,
     { kind, timedOut }: { kind: TranscriptDumpKind; timedOut: boolean },
   ): Promise<void> {
-    const channel = await session.client.channels.fetch(session.textChannelId).catch(() => null);
+    const channel = await executeDiscordSdkMethodAs<Channel | null>(
+      voiceChannelReadPolicy,
+      session.client.channels,
+      'fetch',
+      session.textChannelId,
+    ).catch(() => null);
     if (!isTextOutputChannel(channel)) return;
 
     const endedAt = new Date();
@@ -510,7 +582,7 @@ export class VoiceManager {
       name: `${kind}-transcript-${session.guildId}-${session.startedAt.toISOString().replace(/[:.]/g, '-')}.txt`,
     });
 
-    await channel.send({
+    await executeDiscordSdkMethod(voiceSendPolicy, channel, 'send', {
       content: [
         transcriptMessage(kind, autoStopped, timedOut),
         `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,

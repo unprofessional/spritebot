@@ -4,6 +4,7 @@ import {
   ButtonInteraction,
   ButtonStyle,
   CacheType,
+  type GuildMember,
 } from 'discord.js';
 
 import { supportGuildId } from '../config/env_config';
@@ -11,12 +12,21 @@ import { verifySupportMember } from '../services/support_verification.service';
 import { buildSupportVerificationMessage } from '../utils/support_verification_messages';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethodAs } from '../discord/sdk_operations';
 
 const id = 'supportVerify';
 const interactionPolicy = {
   mode: { kind: 'reply', visibility: 'ephemeral' },
   acknowledgement: 'auto-defer',
 } satisfies InteractionDispatchPolicy;
+const supportMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'support.verify-button.fetch-member',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 function build(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -58,7 +68,12 @@ async function handle(
 
   let content: string;
   try {
-    const member = await interaction.guild.members.fetch(interaction.user.id);
+    const member = await executeDiscordSdkMethodAs<GuildMember>(
+      supportMemberReadPolicy,
+      interaction.guild.members,
+      'fetch',
+      interaction.user.id,
+    );
     const result = await verifySupportMember(member);
     content = await buildSupportVerificationMessage(interaction, result);
   } catch (err) {

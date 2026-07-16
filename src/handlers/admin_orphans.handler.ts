@@ -11,8 +11,17 @@ import {
   type HousekeepingCategory,
 } from '../services/admin_housekeeping.service';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod } from '../discord/sdk_operations';
 
 const THREAD_BUMP_CHECK_LIMIT = 25;
+const orphanChannelReadPolicy = defineDiscordOperationPolicy({
+  operation: 'admin.orphans.fetch-channel',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 function formatExamples(category: HousekeepingCategory): string {
   if (!category.examples.length) return 'No examples.';
@@ -56,7 +65,12 @@ async function buildDeadThreadBumpCategory(
   const deadExamples: HousekeepingCategory['examples'] = [];
 
   for (const candidate of candidates) {
-    const channel = await interaction.client.channels.fetch(candidate.threadId).catch(() => null);
+    const channel = await executeDiscordSdkMethod(
+      orphanChannelReadPolicy,
+      interaction.client.channels,
+      'fetch',
+      candidate.threadId,
+    ).catch(() => null);
     if (!channel) {
       deadExamples.push({
         id: candidate.threadId,

@@ -32,6 +32,8 @@ import {
   runtimeLeaseStandbyPollMs,
   runtimeLeaseTtlMs,
 } from './config/env_config';
+import { defineDiscordOperationPolicy } from './discord/operation_policy';
+import { executeDiscordSdkMethod } from './discord/sdk_operations';
 
 dotenv.config();
 
@@ -46,6 +48,16 @@ const client = new Client({
 });
 
 let activeLease: RuntimeInstanceLease | null = null;
+const clientLoginPolicy = defineDiscordOperationPolicy({
+  operation: 'client.login',
+  timeoutMs: 30_000,
+  totalBudgetMs: 30_000,
+});
+const clientDestroyPolicy = defineDiscordOperationPolicy({
+  operation: 'client.destroy',
+  timeoutMs: 5_000,
+  totalBudgetMs: 5_000,
+});
 
 const shutdownOptions = {
   waitTimeoutMs: 60_000,
@@ -58,8 +70,8 @@ const shutdownOptions = {
   async sendShutdownNotification() {
     await sendLifecycleNotification(client, 'shutdown', { allowDuringDrain: true });
   },
-  destroyClient() {
-    client.destroy();
+  async destroyClient() {
+    await executeDiscordSdkMethod(clientDestroyPolicy, client, 'destroy');
   },
   async closeDb() {
     if (activeLease) {
@@ -129,7 +141,12 @@ async function main(): Promise<void> {
       void sendLifecycleNotification(client, 'online');
     });
 
-    await client.login(process.env.DISCORD_BOT_TOKEN);
+    await executeDiscordSdkMethod(
+      clientLoginPolicy,
+      client,
+      'login',
+      process.env.DISCORD_BOT_TOKEN,
+    );
   } catch (err) {
     console.error('❌ Bot startup failed:', err);
     process.exit(1);

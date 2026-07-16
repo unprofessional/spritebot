@@ -16,6 +16,16 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../discord/interaction_dispatch';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethod } from '../discord/sdk_operations';
+
+const bumpTargetReadPolicy = defineDiscordOperationPolicy({
+  operation: 'bump-command.fetch-channel',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 const service = new ThreadBumpService();
 
@@ -109,7 +119,12 @@ async function resolveTargetThread(
   if (ch && isThreadType(ch.type)) return ch as ThreadChannel;
 
   // 3) Fallback: fetch authoritative channel by ID (handles partials/edge cases)
-  const fetched = await interaction.client.channels.fetch(interaction.channelId).catch((e) => {
+  const fetched = await executeDiscordSdkMethod(
+    bumpTargetReadPolicy,
+    interaction.client.channels,
+    'fetch',
+    interaction.channelId,
+  ).catch((e) => {
     console.warn(
       `[bump-thread] resolve: fetch by channelId failed id=${interaction.channelId} err=`,
       e,
