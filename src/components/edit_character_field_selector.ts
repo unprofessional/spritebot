@@ -9,7 +9,11 @@ import {
   TextInputStyle,
 } from 'discord.js';
 
+import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+
 export const id = 'editCharacterFieldDropdown';
+export const interactionPolicy = gatedImmediateModalInteractionPolicy;
 
 interface FieldDescriptor {
   name: string;
@@ -65,11 +69,14 @@ export function build(
 /**
  * Handles user interaction with the edit field dropdown.
  */
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const selected = interaction.values?.[0];
 
   if (!selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No selection made.',
       ephemeral: true,
     });
@@ -83,7 +90,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
 
   if (!fieldKey.includes(':')) {
     console.warn('[edit_character_field_selector] Invalid fieldKey:', fieldKey);
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Invalid field selected. Please run `/create-character` again.',
       ephemeral: true,
     });
@@ -125,5 +132,5 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     );
   }
 
-  await interaction.showModal(modal);
+  await responder.showModal(modal);
 }

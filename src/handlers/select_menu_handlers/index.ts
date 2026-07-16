@@ -16,11 +16,14 @@ import { handle as statTypeSelectorHandler } from '../../components/stat_type_se
 import { handle as handleSwitchCharacterSelector } from '../../components/switch_character_selector';
 import { handle as handleSwitchGameSelector } from '../../components/switch_game_selector';
 import { interactionPolicy as joinGamePolicy } from '../../components/join_game_selector';
+import { interactionPolicy as characterFieldPolicy } from '../../components/character_field_selector';
+import { interactionPolicy as editCharacterFieldPolicy } from '../../components/edit_character_field_selector';
 import { interactionPolicy as paragraphFieldPolicy } from '../../components/paragraph_field_selector';
 import { interactionPolicy as publicCharacterPolicy } from '../../components/public_character_selector';
 import { interactionPolicy as restoreCharacterPolicy } from '../../components/restore_character_selector';
 import { interactionPolicy as switchCharacterPolicy } from '../../components/switch_character_selector';
 import { interactionPolicy as switchGamePolicy } from '../../components/switch_game_selector';
+import { interactionPolicy as statTypePolicy } from '../../components/stat_type_selector';
 import * as inventoryItemSelect from './inventory_item_select';
 import * as characterStatSelect from './character_stat_select_menu';
 import * as adjustNumericStatSelectHandler from './adjust_numeric_stat_select';
@@ -35,12 +38,12 @@ export function getSelectMenuInteractionPolicy(
   if (customId.startsWith('selectPublicCharacter')) return publicCharacterPolicy;
   if (customId.startsWith('paragraphFieldSelect')) return paragraphFieldPolicy;
   if (customId.startsWith('editInventoryItemSelect:')) return inventoryItemSelect.interactionPolicy;
+  if (customId.startsWith('selectStatType:')) return statTypePolicy;
+  if (customId.startsWith('createCharacterDropdown')) return characterFieldPolicy;
+  if (customId.startsWith('editCharacterFieldDropdown')) return editCharacterFieldPolicy;
   if (
     customId.startsWith('editStatSelect:') ||
     customId.startsWith('deleteStatSelect:') ||
-    customId.startsWith('selectStatType:') ||
-    customId.startsWith('createCharacterDropdown') ||
-    customId.startsWith('editCharacterFieldDropdown') ||
     customId.startsWith('editCharacterStatDropdown:') ||
     customId.startsWith('adjustStatSelect:')
   ) {
@@ -63,11 +66,12 @@ export async function handleSelectMenu(
     return handleRestoreCharacterSelector(interaction, responder!);
   if (customId.startsWith('editStatSelect:')) return editStatSelectorHandler(interaction);
   if (customId.startsWith('deleteStatSelect:')) return deleteStatSelectorHandler(interaction);
-  if (customId.startsWith('selectStatType:')) return statTypeSelectorHandler(interaction);
+  if (customId.startsWith('selectStatType:'))
+    return statTypeSelectorHandler(interaction, responder!);
   if (customId.startsWith('createCharacterDropdown'))
-    return characterFieldSelectorHandler(interaction);
+    return characterFieldSelectorHandler(interaction, responder!);
   if (customId.startsWith('editCharacterFieldDropdown'))
-    return characterEditFieldSelectorHandler(interaction);
+    return characterEditFieldSelectorHandler(interaction, responder!);
   if (customId.startsWith('selectPublicCharacter'))
     return handlePublicCharacterSelector(interaction, responder!);
   if (customId.startsWith('paragraphFieldSelect'))
