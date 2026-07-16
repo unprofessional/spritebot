@@ -8,18 +8,30 @@ import { getCurrentGame } from '../services/player.service';
 import { rebuildListCharactersResponse } from '../components/rebuild_list_characters_response';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { Character } from '../types/character';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('list-characters')
     .setDescription('Lists all public characters in your current game.'),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     const userId = interaction.user.id;
     const guildId = interaction.guild?.id;
 
     if (!guildId) {
-      return await interaction.reply({
+      return await responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -32,7 +44,7 @@ module.exports = {
       if (!gameId) {
         const games = await getGamesByGuild(guildId);
 
-        return await interaction.reply({
+        return await responder.respond({
           content: appendNudge(
             '⚠️ You must join or create a game first.',
             buildNudge(
@@ -70,7 +82,7 @@ module.exports = {
       );
 
       if (!publicCharacters.length) {
-        return await interaction.reply({
+        return await responder.respond({
           content: appendNudge(
             '📭 No public characters found in your current game.',
             buildNudge({ userId, guildId, gameId }, 'list-characters-empty'),
@@ -86,14 +98,14 @@ module.exports = {
         guildId,
       );
 
-      await interaction.reply({
+      await responder.respond({
         content,
         components,
         ephemeral: true,
       });
     } catch (err) {
       console.error('[COMMAND ERROR] /list-characters:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to list characters. Please try again later.',
         ephemeral: true,
       });

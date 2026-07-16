@@ -11,18 +11,30 @@ import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { build as buildCharacterCard } from '../components/view_character_card';
 
 import type { CharacterWithStats } from '../types/character';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('view-character')
     .setDescription("View your character's stats for this game's campaign."),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     const userId = interaction.user.id;
     const guildId = interaction.guild?.id;
 
     if (!guildId) {
-      return await interaction.reply({
+      return await responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -32,7 +44,7 @@ module.exports = {
       const currentGameId = await getCurrentGame(userId, guildId);
 
       if (!currentGameId) {
-        return await interaction.reply({
+        return await responder.respond({
           content: '⚠️ No active game found. Use `/switch-game` or `/join-game` to select one.',
           ephemeral: true,
         });
@@ -41,7 +53,7 @@ module.exports = {
       const allCharacters = await getCharactersByUser(userId, guildId);
 
       if (!allCharacters.length) {
-        return await interaction.reply({
+        return await responder.respond({
           content: appendNudge(
             '⚠️ No character found.',
             buildNudge({ userId, guildId, gameId: currentGameId }, 'view-character-none'),
@@ -52,7 +64,7 @@ module.exports = {
 
       const activeCharacterId = await getCurrentCharacter(userId, guildId);
       if (!activeCharacterId) {
-        return await interaction.reply({
+        return await responder.respond({
           content: '⚠️ No active character selected. Use `/switch-character`.',
           ephemeral: true,
         });
@@ -60,7 +72,7 @@ module.exports = {
 
       const full = await getCharacterWithStats(activeCharacterId);
       if (!full) {
-        return await interaction.reply({
+        return await responder.respond({
           content: '⚠️ Could not load your active character. Please try `/switch-character`.',
           ephemeral: true,
         });
@@ -74,14 +86,14 @@ module.exports = {
       const isSelf = full.id === activeCharacterId;
       const view = buildCharacterCard(full as CharacterWithStats, isSelf);
 
-      await interaction.reply({
+      await responder.respond({
         ...view,
         content: warning ?? undefined,
         ephemeral: true,
       });
     } catch (err) {
       console.error('[COMMAND ERROR] /view-character:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to retrieve character. Please try again later.',
         ephemeral: true,
       });
