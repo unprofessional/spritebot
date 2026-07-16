@@ -139,8 +139,7 @@ export class DiscordInteractionResponder {
         );
       }
 
-      const followUpPayload =
-        this.mode.kind === 'reply' ? this.replyPayload(payload) : withoutEphemeral(payload);
+      const followUpPayload = this.mode.kind === 'reply' ? this.replyPayload(payload) : payload;
       await this.invoke(
         'followUp',
         () => this.callbacks.followUp(followUpPayload),
@@ -166,7 +165,18 @@ export class DiscordInteractionResponder {
   }
 
   private async respondToComponent(payload: InteractionPayload): Promise<void> {
+    // When a component-update handler needs to send an ephemeral error instead
+    // of updating the original message, route through followUp so the original
+    // message stays intact and the user gets a private error.
+    const wantsEphemeral = 'ephemeral' in payload && payload.ephemeral === true;
+
     if (this.currentState === 'unacknowledged') {
+      if (wantsEphemeral) {
+        // Can't send an ephemeral update — acknowledge first, then follow up.
+        await this.invoke('deferUpdate', () => this.callbacks.deferUpdate(), 'deferred_update');
+        await this.invoke('followUp', () => this.callbacks.followUp(payload), 'updated');
+        return;
+      }
       await this.invoke(
         'update',
         () => this.callbacks.update(withoutEphemeral(payload)),
@@ -175,6 +185,12 @@ export class DiscordInteractionResponder {
       return;
     }
     if (this.currentState === 'deferred_update') {
+      if (wantsEphemeral) {
+        // Already deferred — follow up with an ephemeral message, leaving
+        // the original message unchanged.
+        await this.invoke('followUp', () => this.callbacks.followUp(payload), 'updated');
+        return;
+      }
       await this.invoke(
         'editReply',
         () => this.callbacks.editReply(withoutEphemeral(payload)),
@@ -185,7 +201,7 @@ export class DiscordInteractionResponder {
     if (this.currentState === 'updated') {
       await this.invoke(
         'followUp',
-        () => this.callbacks.followUp(withoutEphemeral(payload)),
+        () => this.callbacks.followUp(wantsEphemeral ? payload : withoutEphemeral(payload)),
         'updated',
       );
       return;

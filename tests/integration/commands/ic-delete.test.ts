@@ -102,7 +102,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-1' },
     };
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.update });
 
     expect(deleteMessageMock).toHaveBeenCalledWith({
       client: interaction.client,
@@ -126,7 +126,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-2' },
     };
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.reply });
 
     expect(deleteMessageMock).not.toHaveBeenCalled();
     expect(interaction.reply).toHaveBeenCalledWith({
@@ -144,7 +144,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-1' },
     };
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.update });
 
     expect(deleteMessageMock).not.toHaveBeenCalled();
     expect(interaction.update).toHaveBeenCalledWith({

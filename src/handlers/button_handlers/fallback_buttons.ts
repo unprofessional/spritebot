@@ -5,20 +5,33 @@ import { ButtonInteraction, ChatInputCommandInteraction } from 'discord.js';
 import { getCharactersByUser, getCharacterWithStats } from '../../services/character.service';
 import { isActiveCharacter } from '../../utils/is_active_character';
 import { build as buildCharacterCard } from '../../components/view_character_card';
+import type { InteractionDispatchPolicy } from '../../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 
-export async function handle(interaction: ButtonInteraction): Promise<void> {
-  await interaction.reply({
+export const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
+
+export async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
+  await responder.respond({
     content: '❌ Unrecognized button interaction.',
     ephemeral: true,
   });
 }
 
-export async function execute(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function execute(
+  interaction: ChatInputCommandInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const userId = interaction.user.id;
   const guildId = interaction.guild?.id;
 
   if (!guildId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ This command must be used in a server.',
       ephemeral: true,
     });
@@ -30,7 +43,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const character = allCharacters[0];
 
     if (!character) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ No character found. Use `/create-character` to start one.',
         ephemeral: true,
       });
@@ -39,7 +52,7 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
 
     const full = await getCharacterWithStats(character.id);
     if (!full) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to load character details.',
         ephemeral: true,
       });
@@ -49,13 +62,13 @@ export async function execute(interaction: ChatInputCommandInteraction): Promise
     const isSelf = await isActiveCharacter(userId, guildId, character.id);
     const view = buildCharacterCard(full, isSelf);
 
-    await interaction.reply({
+    await responder.respond({
       ...view,
       ephemeral: true,
     });
   } catch (err) {
     console.error('[SLASH COMMAND FALLBACK ERROR]:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to load character view.',
       ephemeral: true,
     });

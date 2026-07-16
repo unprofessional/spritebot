@@ -1,6 +1,8 @@
 // src/handlers/button_handlers/index.ts
 
 import type { ButtonInteraction } from 'discord.js';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
+import type { InteractionDispatchPolicy } from '../../discord/interaction_dispatch';
 
 import { handle as handleCalculateStatsButton } from '../../components/calculate_character_stats_button';
 import { handle as handleCharPageButton } from '../../components/character_page_buttons';
@@ -19,62 +21,94 @@ import { handle as handleSupportVerifyButton } from '../../components/support_ve
 import { handle as handleToggleCharacterVisibilityButton } from '../../components/toggle_character_visibility_button';
 import { handle as handleTogglePublishButton } from '../../components/toggle_publish_button';
 import { handle as handleViewParagraphFieldsButton } from '../../components/view_paragraph_fields_button';
+import { interactionPolicy as charPagePolicy } from '../../components/character_page_buttons';
+import { interactionPolicy as confirmDeleteCharacterPolicy } from '../../components/confirm_delete_character_button';
+import { interactionPolicy as confirmIcDeletePolicy } from '../../components/confirm_ic_delete_button';
+import { interactionPolicy as confirmDeleteStatPolicy } from '../../components/confirm_delete_stat_button';
+import { interactionPolicy as confirmPurgePolicy } from '../../components/confirm_purge_button';
+import { interactionPolicy as finishStatSetupPolicy } from '../../components/finish_stat_setup_button';
+import { interactionPolicy as submitCharacterPolicy } from '../../components/submit_character_button';
+import { interactionPolicy as supportVerifyPolicy } from '../../components/support_verify_button';
+import { interactionPolicy as toggleCharacterVisibilityPolicy } from '../../components/toggle_character_visibility_button';
+import { interactionPolicy as togglePublishPolicy } from '../../components/toggle_publish_button';
+import { interactionPolicy as viewParagraphFieldsPolicy } from '../../components/view_paragraph_fields_button';
 
 import * as characterViewButtons from './character_view_buttons';
 import * as fallbackButtons from './fallback_buttons';
 import * as inventoryButtons from './inventory_buttons';
 
-const directRoutes: [RegExp, (i: ButtonInteraction) => Promise<void>][] = [
+type ButtonRoute = [
+  RegExp,
+  (i: ButtonInteraction, responder?: DiscordInteractionResponder) => Promise<void>,
+  InteractionDispatchPolicy?,
+];
+
+const directRoutes: ButtonRoute[] = [
   [/^defineStats:/, handleDefineStats],
   [/^editGameStats:/, handleEditGameStats],
   [/^deleteStats:/, handleDeleteStats],
-  [/^finishStatSetup:/, handleFinishStatSetup],
-  [/^togglePublishGame:/, handleTogglePublishButton],
-  [/^confirmDeleteStat:/, handleConfirmDeleteStat],
-  [/^confirmPurgeOrphans:/, handleConfirmPurgeButton],
-  [/^submitNewCharacter/, handleSubmitCharacter],
+  [/^finishStatSetup:/, (i, r) => handleFinishStatSetup(i, r!), finishStatSetupPolicy],
+  [/^togglePublishGame:/, (i, r) => handleTogglePublishButton(i, r!), togglePublishPolicy],
+  [/^confirmDeleteStat:/, (i, r) => handleConfirmDeleteStat(i, r!), confirmDeleteStatPolicy],
+  [/^confirmPurgeOrphans:/, (i, r) => handleConfirmPurgeButton(i, r!), confirmPurgePolicy],
+  [/^submitNewCharacter/, (i, r) => handleSubmitCharacter(i, r!), submitCharacterPolicy],
   [/^deleteCharacter/, handleDeleteCharacter],
-  [/^confirmDeleteCharacter/, handleConfirmDeleteCharacterButton],
-  [/^confirmIcDelete:/, handleConfirmIcDeleteButton],
-  [/^cancelIcDelete:/, handleConfirmIcDeleteButton],
-  [/^supportVerify:/, handleSupportVerifyButton],
-  [/^charPage:/, handleCharPageButton],
+  [
+    /^confirmDeleteCharacter/,
+    (i, r) => handleConfirmDeleteCharacterButton(i, r!),
+    confirmDeleteCharacterPolicy,
+  ],
+  [/^confirmIcDelete:/, (i, r) => handleConfirmIcDeleteButton(i, r!), confirmIcDeletePolicy],
+  [/^cancelIcDelete:/, (i, r) => handleConfirmIcDeleteButton(i, r!), confirmIcDeletePolicy],
+  [/^supportVerify:/, (i, r) => handleSupportVerifyButton(i, r!), supportVerifyPolicy],
+  [/^charPage:/, (i, r) => handleCharPageButton(i, r!), charPagePolicy],
   [/^editCharacterStat/, handleEditCharacterStatsButton],
   [/^calculateCharacterStats:/, handleCalculateStatsButton],
-  [/^handleToggleCharacterVisibilityButton:/, handleToggleCharacterVisibilityButton],
-  [/^viewParagraphFields/, handleViewParagraphFieldsButton],
+  [
+    /^handleToggleCharacterVisibilityButton:/,
+    (i, r) => handleToggleCharacterVisibilityButton(i, r!),
+    toggleCharacterVisibilityPolicy,
+  ],
+  [
+    /^viewParagraphFields/,
+    (i, r) => handleViewParagraphFieldsButton(i, r!),
+    viewParagraphFieldsPolicy,
+  ],
 ];
 
-export async function handleButton(interaction: ButtonInteraction): Promise<void> {
+export function getButtonInteractionPolicy(
+  customId: string,
+): InteractionDispatchPolicy | undefined {
+  const directPolicy = directRoutes.find(([pattern]) => pattern.test(customId))?.[2];
+  if (directPolicy) return directPolicy;
+  if (isInventoryButton(customId)) return undefined;
+  if (customId.startsWith('goBackToCharacter:')) return characterViewButtons.interactionPolicy;
+  return fallbackButtons.interactionPolicy;
+}
+
+function isInventoryButton(customId: string): boolean {
+  return /^(?:add_inventory_item|view_inventory|inventoryPage|invEq|invEdit|invDel|invDelOk|toggle_inventory_item_equipped|edit_inventory_item|delete_inventory_item|confirm_delete_inventory_item|cancel_inventory_item_action|clear_inventory|confirm_clear_inventory|cancel_clear_inventory):/.test(
+    customId,
+  );
+}
+
+export async function handleButton(
+  interaction: ButtonInteraction,
+  responder?: DiscordInteractionResponder,
+): Promise<void> {
   const { customId } = interaction;
 
   for (const [pattern, handler] of directRoutes) {
-    if (pattern.test(customId)) return handler(interaction);
+    if (pattern.test(customId)) return handler(interaction, responder);
   }
 
-  if (
-    /^add_inventory_item:/.test(customId) ||
-    /^view_inventory:/.test(customId) ||
-    /^inventoryPage:/.test(customId) ||
-    /^invEq:/.test(customId) ||
-    /^invEdit:/.test(customId) ||
-    /^invDel:/.test(customId) ||
-    /^invDelOk:/.test(customId) ||
-    /^toggle_inventory_item_equipped:/.test(customId) ||
-    /^edit_inventory_item:/.test(customId) ||
-    /^delete_inventory_item:/.test(customId) ||
-    /^confirm_delete_inventory_item:/.test(customId) ||
-    /^cancel_inventory_item_action:/.test(customId) ||
-    /^clear_inventory:/.test(customId) ||
-    /^confirm_clear_inventory:/.test(customId) ||
-    /^cancel_clear_inventory:/.test(customId)
-  ) {
+  if (isInventoryButton(customId)) {
     return inventoryButtons.handle(interaction);
   }
 
   if (customId.startsWith('goBackToCharacter:')) {
-    return characterViewButtons.handle(interaction);
+    return characterViewButtons.handle(interaction, responder!);
   }
 
-  return fallbackButtons.handle(interaction);
+  return fallbackButtons.handle(interaction, responder!);
 }
