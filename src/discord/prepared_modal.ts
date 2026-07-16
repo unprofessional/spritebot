@@ -25,7 +25,9 @@ const preparedModals = new Map<string, PreparedModalEntry>();
 
 export const preparedModalInteractionPolicy = {
   mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
-  acknowledgement: 'auto-defer',
+  // Activation must preserve the button interaction's initial response for showModal(). Both the
+  // modal and expired-token reply paths are process-local and immediately available.
+  acknowledgement: 'manual',
 } satisfies InteractionDispatchPolicy;
 
 export async function presentPreparedModal({

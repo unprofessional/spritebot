@@ -528,6 +528,9 @@ deferred ephemerally, the prepared modal is retained behind a short-lived, owner
 token and an **Open editor** button. Modal data must never be encoded in `customId`. A slow path may
 add one activation click, but it must never replace a prefilled editor with a blank modal. Prepared
 state is process-local and bounded; activation after a restart returns explicit retry guidance.
+Prepared-modal activation uses manual acknowledgement because opening the modal consumes the button
+interaction's initial response; auto-defer would compete with the only successful response path.
+Token lookup and expired-token feedback must remain process-local and immediately available.
 
 **Remaining: Batch 2 (modal-opening components), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 

@@ -145,6 +145,7 @@ describe('IC message editing commands', () => {
         preparedModalInteractionPolicy.mode,
       );
       expect(getButtonInteractionPolicy(customId)).toBe(preparedModalInteractionPolicy);
+      expect(preparedModalInteractionPolicy.acknowledgement).toBe('manual');
       await handleButton(activation as never, activationResponder);
 
       expectOnlyModalCallback(activation, '123456789012345678', 'Prepared IC content');
