@@ -818,3 +818,7 @@ Implement as reviewable phases rather than a monolith:
 7. ESLint enforcement and fault-injection suite (Tasks 9+10 may share a PR).
 
 Each PR must update `docs/discord-boundary-inventory.md`, include focused RED/GREEN evidence, and pass existing repository quality gates.
+
+## Known Regressions
+
+- **IC edit modal no longer pre-populates original message content.** The pre-`showModal()` fetch of proxy message content was removed to eliminate deadline risk. The modal now opens with a blank paragraph field; ownership and existence validation occur on submission. `buildIcEditModal()` still accepts optional `content` — restoration requires a UX pattern that doesn't block the initial acknowledgement (e.g. optimistic prefill, or a secondary fetch after modal display). Track as a follow-up outside this plan.
