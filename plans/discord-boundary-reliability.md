@@ -753,6 +753,10 @@ git commit -m "Enforce Discord boundary usage in CI"
 
 **Objective:** Verify boundary behavior under timing and failure modes that ordinary happy-path mocks miss.
 
+**Complete.** Deterministic interaction and operation integration suites cover every listed timing,
+Discord error, retry, duplicate-prevention, and process-drain fixture. Every case asserts clean
+unhandled-rejection listeners and fake timers. Task 11 production rollout and verification is next.
+
 **Files:**
 
 - Create: `tests/integration/discord/interaction_contract.test.ts`
