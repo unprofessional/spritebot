@@ -532,7 +532,15 @@ Prepared-modal activation uses manual acknowledgement because opening the modal 
 interaction's initial response; auto-defer would compete with the only successful response path.
 Token lookup and expired-token feedback must remain process-local and immediately available.
 
-**Remaining: Batch 2 (modal-opening components), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
+**Completed: Batch 2A (synchronous modal-opening selectors)**
+
+`character_field_selector`, `edit_character_field_selector`, and `stat_type_selector` use the
+shared manual `modal-or-reply` policy. They build and show their existing modals synchronously, or
+send their existing ephemeral validation reply. Their activating component authorization is
+deferred to the already-gated modal submission so a remote entitlement lookup cannot consume the
+only response that can open the modal.
+
+**Remaining: Batch 2B (I/O-dependent modal-opening routes), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 
 **Step 1: Classify before migration**
 

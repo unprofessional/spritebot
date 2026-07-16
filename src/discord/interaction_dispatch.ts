@@ -18,6 +18,18 @@ export interface InteractionDispatchPolicy {
   authorization?: 'command' | 'modal-submit';
 }
 
+/**
+ * Policy for component routes that can build a modal synchronously.
+ *
+ * The activating interaction must remain unacknowledged for showModal(), so entitlement checks run
+ * authoritatively on the gated modal submission instead of competing with the initial response.
+ */
+export const gatedImmediateModalInteractionPolicy = {
+  mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+  acknowledgement: 'manual',
+  authorization: 'modal-submit',
+} satisfies InteractionDispatchPolicy;
+
 export type InteractionDispatchPolicySource<I extends BaseInteraction = BaseInteraction> =
   | InteractionDispatchPolicy
   | ((interaction: I) => InteractionDispatchPolicy);

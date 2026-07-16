@@ -76,6 +76,12 @@ The first Task 7 component/handler batch removes 95 more direct interaction call
 current report to 200 findings. Seventeen non-modal button/select components plus their routed
 handler paths now use explicit reply or component-update policies.
 
+Task 7 Batch 2A removes 8 more direct interaction calls, bringing the current report to 192
+findings. Three synchronous modal-opening selectors now use a shared manual `modal-or-reply`
+policy. Their existing modal payloads and ephemeral validation replies are unchanged, and
+authorization runs authoritatively on the corresponding gated modal submission so no remote work
+can race the initial `showModal()` acknowledgement.
+
 The rule uses TypeScript receiver provenance from discord.js/`@discordjs` declarations, imported
 REST/route symbols, and Discord URL construction. It intentionally does not flag arbitrary domain
 objects that happen to expose methods such as `send`, `edit`, `delete`, or `fetch`.
@@ -113,6 +119,9 @@ ephemeral reply policies; modal-opening component routes remain on the reviewed 
 prepared-modal vertical slice restores IC edit prefill and establishes the required fast/slow
 pattern for the remaining prefilled editors without changing the audit count.
 
+Task 7 Batch 2A migrates the three synchronous modal selectors. They share a manual hybrid policy,
+skip pre-modal component authorization, and retain authorization on the gated modal submission.
+
 ## Migration Matrix
 
 `Retry-safe?` describes the intended policy, not current automatic retry behavior. The completed
@@ -126,7 +135,7 @@ command batches are recorded below; all other source call sites remain pending m
 | Authorization member lookup                                   | `src/access/guards.ts`                                                                                                                                                                                                                                    | Guild-member SDK fetch before authorization                                                      | Yes, because it is inside interaction dispatch        | Safe-read candidate                                                                     | Deadline-aware dispatcher plus operation executor                      | Tasks 5 and 8                                                                      |
 | Slash/context commands                                        | `src/commands/*.ts` (4 files; 13 findings)                                                                                                                                                                                                                | Proxy-intercepted interaction deferrals, edits, and follow-ups plus mixed-command SDK operations | Yes                                                   | No callback retries                                                                     | Interaction responder                                                  | Task 6 command responder migration complete; mixed SDK operations remain in Task 8 |
 | Mixed command SDK operations                                  | `src/commands/bump-thread.ts`, `src/commands/verify.ts`, `src/commands/verify-greeting.ts`                                                                                                                                                                | Channel/member fetches and verification greeting send                                            | Yes for their enclosing interactions                  | Fetches are safe-read candidates; greeting send is not retry-safe without idempotency   | Operation executor after dispatcher acknowledgement                    | Tasks 6 and 8                                                                      |
-| Components with direct interaction calls                      | `src/components/*.ts`                                                                                                                                                                                                                                     | Replies, updates, deferrals, edits, follow-ups, and modal acknowledgements                       | Yes                                                   | No callback retries                                                                     | Interaction responder with explicit reply/component-update/modal modes | Task 7 batch 1 complete for 17 non-modal button/select routes                      |
+| Components with direct interaction calls                      | `src/components/*.ts`                                                                                                                                                                                                                                     | Replies, updates, deferrals, edits, follow-ups, and modal acknowledgements                       | Yes                                                   | No callback retries                                                                     | Interaction responder with explicit reply/component-update/modal modes | Task 7 batch 1 and synchronous modal batch 2A complete                             |
 | Builder-only components reviewed with no direct boundary call | `src/components/rebuild_list_characters_response.ts`, `src/components/stat_type_select.ts`, `src/components/view_character_card.ts`, `src/components/view_game_card.ts`, `src/components/view_game_stat_card.ts`, `src/components/view_inventory_card.ts` | Discord payload construction only                                                                | No                                                    | Not applicable                                                                          | Keep outside the controlled call-method rule                           | No migration required unless behavior changes                                      |
 | Mixed component SDK operation                                 | `src/components/support_verify_button.ts`                                                                                                                                                                                                                 | Support-guild member fetch plus interaction response                                             | Yes                                                   | Member fetch is a safe-read candidate                                                   | Operation executor plus responder                                      | Task 7 responder complete; member fetch remains in Task 8                          |
 | Handlers with direct interaction calls                        | `src/handlers/**/*.ts` (20 direct-call files; 117 findings)                                                                                                                                                                                               | Replies, component updates, deferrals, edits, follow-ups, and modal acknowledgements             | Yes                                                   | No callback retries                                                                     | Interaction responder with route-specific mode                         | Task 7                                                                             |
@@ -149,13 +158,10 @@ prepared-modal pattern with modal-submission authorization:
 - `src/commands/ic-edit-context.ts`
 - `src/commands/ic-edit.ts`
 
-The remaining 9 calls across 8 component/handler files require explicit modal-first review because
+The remaining 6 calls across 5 component/handler files require explicit modal-first review because
 Discord does not permit deferring and then opening a modal:
 
-- `src/components/character_field_selector.ts`
-- `src/components/edit_character_field_selector.ts`
 - `src/components/edit_stat_selector.ts`
-- `src/components/stat_type_selector.ts`
 - `src/handlers/button_handlers/inventory_buttons.ts`
 - `src/handlers/select_menu_handlers/adjust_numeric_stat_select.ts`
 - `src/handlers/select_menu_handlers/character_stat_select_menu.ts`
