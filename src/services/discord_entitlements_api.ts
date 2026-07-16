@@ -1,16 +1,20 @@
-// src/services/discord_entitlements_api.ts
-
-/**
- * Minimal Discord Entitlements API client (lazy pull).
- * Docs: GET /applications/{application_id}/entitlements
- * Auth: Bot {TOKEN}
- *
- * We filter in code for:
- *  - guild-scoped entitlements
- *  - active/valid (ends_at null or > now)
- */
+import type { ClassifiedDiscordError } from '../discord/errors';
+import {
+  DiscordOperationError,
+  executeDiscordOperation,
+  type DiscordOperationDependencies,
+} from '../discord/operation_executor';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
 
 const API_BASE = 'https://discord.com/api/v10';
+
+export const entitlementReadPolicy = defineDiscordOperationPolicy({
+  operation: 'entitlements.fetch-guild',
+  timeoutMs: 800,
+  totalBudgetMs: 2_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 export type DiscordEntitlement = Record<string, unknown> & {
   id: string;
@@ -18,82 +22,106 @@ export type DiscordEntitlement = Record<string, unknown> & {
   user_id?: string | null;
   guild_id?: string | null;
   application_id: string;
-  starts_at?: string | null; // ISO
-  ends_at?: string | null; // ISO
-  // ... other fields are ignored
+  starts_at?: string | null;
+  ends_at?: string | null;
 };
+
+export type DiscordEntitlementsFetchResult =
+  | { ok: true; entitlements: DiscordEntitlement[] }
+  | { ok: false; failure: ClassifiedDiscordError };
+
+interface EntitlementsApiDependencies {
+  fetch?: typeof fetch;
+  operation?: DiscordOperationDependencies;
+}
+
+class DiscordEntitlementsHttpError extends Error {
+  readonly status: number;
+  readonly retryAfterMs?: number;
+
+  constructor(status: number, retryAfterMs?: number) {
+    super(`Discord entitlements request failed with status ${status}.`);
+    this.name = 'DiscordEntitlementsHttpError';
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export async function fetchGuildEntitlementsLazy(
+  opts: {
+    applicationId: string;
+    botToken: string;
+    guildId: string;
+    limit?: number;
+  },
+  dependencies: EntitlementsApiDependencies = {},
+): Promise<DiscordEntitlementsFetchResult> {
+  const { applicationId, botToken, guildId, limit = 100 } = opts;
+  const fetchImpl = dependencies.fetch ?? fetch;
+  const url = new URL(`${API_BASE}/applications/${applicationId}/entitlements`);
+  url.searchParams.set('guild_id', guildId);
+  url.searchParams.set('limit', String(limit));
+
+  try {
+    const entitlements = await executeDiscordOperation(
+      entitlementReadPolicy,
+      async ({ signal }) => {
+        const response = await fetchImpl(url.toString(), {
+          method: 'GET',
+          headers: {
+            Authorization: `Bot ${botToken}`,
+            'Content-Type': 'application/json',
+          },
+          signal,
+        });
+
+        if (!response.ok) {
+          throw new DiscordEntitlementsHttpError(
+            response.status,
+            readRetryAfterMs(response.headers.get('retry-after')),
+          );
+        }
+
+        const data = (await response.json()) as unknown;
+        if (!Array.isArray(data)) {
+          throw new TypeError('Discord entitlements response was not an array.');
+        }
+
+        return data.map(normalizeEntitlement);
+      },
+      dependencies.operation,
+    );
+
+    return { ok: true, entitlements };
+  } catch (error) {
+    if (error instanceof DiscordOperationError) {
+      return { ok: false, failure: error.classified };
+    }
+    throw error;
+  }
+}
+
+function normalizeEntitlement(raw: unknown): DiscordEntitlement {
+  const entitlement = raw as Record<string, unknown>;
+  return {
+    ...entitlement,
+    id: String(entitlement.id),
+    sku_id: String(entitlement.sku_id),
+    user_id: readOptionalString(entitlement.user_id),
+    guild_id: readOptionalString(entitlement.guild_id),
+    application_id: String(entitlement.application_id),
+    starts_at: readOptionalString(entitlement.starts_at),
+    ends_at: readOptionalString(entitlement.ends_at),
+  };
+}
 
 function readOptionalString(value: unknown): string | null {
   return value ? String(value) : null;
 }
 
-export async function fetchGuildEntitlementsLazy(opts: {
-  applicationId: string;
-  botToken: string;
-  guildId: string;
-  limit?: number; // default 100
-}): Promise<DiscordEntitlement[]> {
-  const { applicationId, botToken, guildId, limit = 100 } = opts;
-
-  const url = new URL(`${API_BASE}/applications/${applicationId}/entitlements`);
-  url.searchParams.set('guild_id', guildId);
-  url.searchParams.set('limit', String(limit));
-
-  console.debug(
-    `[EntitlementsAPI] Fetching entitlements for guild=${guildId} app=${applicationId} limit=${limit}`,
-  );
-
-  const res = await fetch(url.toString(), {
-    method: 'GET',
-    headers: {
-      Authorization: `Bot ${botToken}`,
-      'Content-Type': 'application/json',
-    },
-  });
-
-  console.debug(
-    `[EntitlementsAPI] Response status ${res.status} ${res.statusText} for guild=${guildId}`,
-  );
-
-  if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    console.error(
-      `[EntitlementsAPI] Failed fetch for guild=${guildId} status=${res.status} body="${text}"`,
-    );
-    throw new Error(`Discord entitlements fetch failed (${res.status} ${res.statusText}): ${text}`);
-  }
-
-  const data = (await res.json()) as unknown;
-  if (!Array.isArray(data)) {
-    console.warn(`[EntitlementsAPI] Non-array response for guild=${guildId}, ignoring`);
-    return [];
-  }
-
-  console.debug(`[EntitlementsAPI] Received ${data.length} entitlements for guild=${guildId}`);
-
-  const mapped = data.map((raw): DiscordEntitlement => {
-    const e = raw as Record<string, unknown>;
-    return {
-      ...e,
-      id: String(e.id),
-      sku_id: String(e.sku_id),
-      user_id: readOptionalString(e.user_id),
-      guild_id: readOptionalString(e.guild_id),
-      application_id: String(e.application_id),
-      starts_at: readOptionalString(e.starts_at),
-      ends_at: readOptionalString(e.ends_at),
-    };
-  });
-
-  for (const ent of mapped) {
-    console.debug(
-      `[EntitlementsAPI] Entitlement id=${ent.id} sku=${ent.sku_id} ` +
-        `guild=${ent.guild_id ?? 'n/a'} user=${ent.user_id ?? 'n/a'} ` +
-        `starts=${ent.starts_at ?? 'none'} ends=${ent.ends_at ?? 'none'}`,
-    );
-  }
-
-  console.debug(`[EntitlementsAPI] Normalized ${mapped.length} entitlements for guild=${guildId}`);
-
-  return mapped;
+function readRetryAfterMs(value: string | null): number | undefined {
+  if (value === null) return undefined;
+  const seconds = Number(value);
+  if (!Number.isFinite(seconds) || seconds < 0) return undefined;
+  return Math.round(seconds * 1_000);
 }

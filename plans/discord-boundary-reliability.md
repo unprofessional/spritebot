@@ -582,7 +582,7 @@ submissions select between those contracts based on whether Discord supplies a s
 Every button, select, and modal now enters the deadline-aware dispatcher, including unknown-route
 fallbacks. Inventory routing uses one non-overlapping family predicate with per-action policies.
 
-**Task 7 complete. Remaining implementation begins with Task 8 entitlement/authorization work.**
+**Task 7 complete. Task 8 entitlement/authorization migration is complete.**
 
 **Step 1: Classify before migration**
 
@@ -627,6 +627,10 @@ Keep modal routes separate from ordinary component-update routes to simplify rev
 ### Task 8: Migrate Raw Discord HTTP and Non-Interaction SDK Operations
 
 **Objective:** Apply explicit operation policies to Discord API work outside the interaction callback state machine.
+
+**Progress:** Entitlement/authorization batch complete. The raw entitlement read now uses the
+operation executor's bounded safe-read policy and returns typed unavailable outcomes through the
+authorization guard. Command registration and the remaining SDK subsystems are pending.
 
 **Files:**
 
