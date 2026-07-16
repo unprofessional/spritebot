@@ -1,5 +1,7 @@
 # Expired Discord Interaction Crash Hotfix Implementation Plan
 
+> **Status:** Complete — shipped as prerequisite for discord-boundary-reliability.
+>
 > **For Codex:** Implement this plan task-by-task using strict TDD. Keep the hotfix narrow; do not refactor unrelated command handlers.
 
 **Goal:** Prevent an expired Discord interaction from terminating SPRITEbot, and make gifted guild authorization avoid the slow Discord entitlement fetch that triggered the 2026-07-15 production crash.
