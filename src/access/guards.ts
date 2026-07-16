@@ -13,6 +13,14 @@ export const UPGRADE_MSG =
   '⚠️ This feature requires an active server subscription. Ask a server admin to enable it or visit the bot’s upgrade page.';
 export const NEED_GUILD_MSG =
   '⚠️ This action only works in a server. Please use this in a Discord server where the bot is installed.';
+export const AUTHORIZATION_UNAVAILABLE_MSG =
+  'I couldn’t verify this server’s access with Discord right now. Nothing was changed. Please try again in a moment.';
+
+function denialMessage(
+  reason: Exclude<Awaited<ReturnType<typeof authorizeInteraction>>, { ok: true }>['reason'],
+): string {
+  return reason === 'AUTHORIZATION_UNAVAILABLE' ? AUTHORIZATION_UNAVAILABLE_MSG : UPGRADE_MSG;
+}
 
 export async function guardCommand(interaction: CommandInteraction): Promise<true | string> {
   console.debug(`[GuardCommand] command=${interaction.commandName} user=${interaction.user.id}`);
@@ -50,7 +58,7 @@ export async function guardCommand(interaction: CommandInteraction): Promise<tru
 
   console.debug(`[GuardCommand] Auth result ok=${res.ok}`);
 
-  return res.ok ? true : UPGRADE_MSG;
+  return res.ok ? true : denialMessage(res.reason);
 }
 
 export async function guardComponent(
@@ -94,5 +102,5 @@ export async function guardComponent(
 
   console.debug(`[GuardComponent] Auth result ok=${res.ok}`);
 
-  return res.ok ? true : UPGRADE_MSG;
+  return res.ok ? true : denialMessage(res.reason);
 }
