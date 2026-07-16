@@ -8,13 +8,13 @@ import {
   StringSelectMenuInteraction,
 } from 'discord.js';
 
-import { gatedPreparedModalInteractionPolicy } from '../../discord/interaction_dispatch';
+import { gatedPreparedComponentModalInteractionPolicy } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import { presentPreparedModal } from '../../discord/prepared_modal';
 import { getCharacterWithStats } from '../../services/character.service';
 import type { CharacterWithStats, CharacterStatWithLabel } from '../../types/character';
 
-export const interactionPolicy = gatedPreparedModalInteractionPolicy;
+export const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
 
 /**
  * Truncates a string to a maximum length with ellipsis if needed.

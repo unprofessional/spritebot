@@ -65,7 +65,7 @@ describe('character stat select prepared-modal boundary', () => {
       interactionPolicy,
     );
     expect(interactionPolicy).toEqual({
-      mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+      mode: { kind: 'modal-or-component-update' },
       acknowledgement: 'auto-defer',
       authorization: 'modal-submit',
     });
@@ -148,12 +148,12 @@ describe('character stat select prepared-modal boundary', () => {
       await Promise.resolve();
       await jest.advanceTimersByTimeAsync(10);
 
-      expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
       resolveCharacter(character);
       await dispatch;
 
       expect(interaction.showModal).not.toHaveBeenCalled();
-      const preparedPayload = (interaction.editReply as jest.Mock).mock.calls[0][0];
+      const preparedPayload = (interaction.followUp as jest.Mock).mock.calls[0][0];
       expect(preparedPayload.content).toBe(
         'Discord needed a moment. Select **Open editor** to continue where you left off.',
       );
@@ -169,7 +169,7 @@ describe('character stat select prepared-modal boundary', () => {
       await handleButton(activation as never, responder);
 
       const modal = expectSingleModal(activation.showModal as jest.Mock);
-      expect(modal.custom_id).toBe('editStatModal:character-1:count:stat-hp');
+      expect(modal.custom_id).toMatch(/^preparedSubmit:/);
       expect(modal.components[0].components[0]).toEqual(
         expect.objectContaining({ custom_id: 'stat-hp:max', value: '12' }),
       );

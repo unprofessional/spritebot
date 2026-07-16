@@ -62,7 +62,7 @@ describe('inventory button prepared-modal boundary', () => {
       interactionPolicy,
     );
     expect(interactionPolicy).toEqual({
-      mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+      mode: { kind: 'modal-or-component-update' },
       acknowledgement: 'auto-defer',
       authorization: 'modal-submit',
     });
@@ -146,12 +146,12 @@ describe('inventory button prepared-modal boundary', () => {
         await Promise.resolve();
         await jest.advanceTimersByTimeAsync(10);
 
-        expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+        expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
         resolveOwnership(true);
         await dispatch;
 
         expect(interaction.showModal).not.toHaveBeenCalled();
-        const preparedPayload = (interaction.editReply as jest.Mock).mock.calls[0][0];
+        const preparedPayload = (interaction.followUp as jest.Mock).mock.calls[0][0];
         expect(preparedPayload.content).toBe(
           'Discord needed a moment. Select **Open editor** to continue where you left off.',
         );
@@ -165,8 +165,9 @@ describe('inventory button prepared-modal boundary', () => {
         expect(getButtonInteractionPolicy(preparedCustomId)).toBe(preparedModalInteractionPolicy);
         await handleButton(activation, activationResponder);
 
-        if (kind === 'add') expectAddModal(activation.showModal as jest.Mock);
-        else expectEditModal(activation.showModal as jest.Mock);
+        if (kind === 'add')
+          expectPreparedModal(activation.showModal as jest.Mock, 'Add Inventory Item');
+        else expectPreparedModal(activation.showModal as jest.Mock, 'Edit Healing Potion');
       } finally {
         jest.useRealTimers();
       }
@@ -188,6 +189,16 @@ function expectAddModal(showModal: jest.Mock): void {
       (row: { components: Array<{ custom_id: string }> }) => row.components[0].custom_id,
     ),
   ).toEqual(['name', 'type', 'quantity', 'description']);
+}
+
+function expectPreparedModal(showModal: jest.Mock, title: string): void {
+  expect(showModal).toHaveBeenCalledTimes(1);
+  expect(showModal.mock.calls[0][0].toJSON()).toEqual(
+    expect.objectContaining({
+      custom_id: expect.stringMatching(/^preparedSubmit:/),
+      title,
+    }),
+  );
 }
 
 function expectEditModal(showModal: jest.Mock): void {
