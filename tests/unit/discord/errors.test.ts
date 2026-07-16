@@ -58,6 +58,15 @@ describe('classifyDiscordError', () => {
     );
   });
 
+  test('classifies HTTP 5xx as a retryable transient failure', () => {
+    expect(classifyDiscordError({ status: 503 })).toEqual({
+      category: 'transient_network',
+      retryable: true,
+      status: 503,
+      safeMessage: 'Transient Discord server failure.',
+    });
+  });
+
   test('classifies a non-interaction 404 as permanent not found', () => {
     expect(classifyDiscordError({ status: 404, code: 10008 })).toEqual(
       expect.objectContaining({

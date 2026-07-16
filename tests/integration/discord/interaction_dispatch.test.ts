@@ -7,7 +7,7 @@ import {
   startTrackedInteractionDispatch,
   type InteractionDispatchPolicy,
 } from '../../../src/discord/interaction_dispatch';
-import { UPGRADE_MSG } from '../../../src/access/guards';
+import { AUTHORIZATION_UNAVAILABLE_MSG, UPGRADE_MSG } from '../../../src/access/guards';
 import {
   beginDrain,
   DRAINING_REPLY,
@@ -88,6 +88,32 @@ describe('deadline-aware interaction dispatch', () => {
     await result;
 
     expect(interaction.editReply).toHaveBeenCalledWith({ content: UPGRADE_MSG });
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  test('completes a deferred unavailable authorization without an upgrade CTA', async () => {
+    jest.useFakeTimers();
+    const interaction = replyInteraction();
+    const guard = deferred<true | string>();
+    const handler = jest.fn();
+    const result = dispatchInteractionWithDeadline({
+      interaction: interaction as never,
+      policy: replyPolicy(),
+      guard: () => guard.promise,
+      handler,
+    });
+    await jest.advanceTimersByTimeAsync(DEFAULT_INTERACTION_ACKNOWLEDGEMENT_BUDGET_MS);
+
+    guard.resolve(AUTHORIZATION_UNAVAILABLE_MSG);
+    await result;
+
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content:
+        'I couldn’t verify this server’s access with Discord right now. Nothing was changed. Please try again in a moment.',
+    });
+    expect(interaction.editReply).not.toHaveBeenCalledWith(
+      expect.objectContaining({ content: UPGRADE_MSG }),
+    );
     expect(handler).not.toHaveBeenCalled();
   });
 

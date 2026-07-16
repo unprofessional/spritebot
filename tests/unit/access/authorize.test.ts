@@ -97,4 +97,24 @@ describe('authorizeInteraction gifted access ordering', () => {
     expect(String(warnSpy.mock.calls[0][0])).toContain('guild=guild-4');
     expect(mockGetEntitlementsFor).toHaveBeenCalledWith({ guildId: 'guild-4' });
   });
+
+  test('distinguishes unavailable authorization from a subscription denial', async () => {
+    mockIsGifted.mockResolvedValue(false);
+    mockGetEntitlementsFor.mockResolvedValue({
+      status: 'unavailable',
+      failure: {
+        category: 'timeout',
+        retryable: true,
+        safeMessage: 'Discord operation timed out.',
+      },
+    });
+
+    await expect(
+      authorizeInteraction({
+        feature: 'rpg:characters',
+        guildId: 'guild-5',
+        userId: 'user-5',
+      }),
+    ).resolves.toEqual({ ok: false, reason: 'AUTHORIZATION_UNAVAILABLE' });
+  });
 });
