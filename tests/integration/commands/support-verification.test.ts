@@ -33,7 +33,9 @@ describe('support server commands', () => {
       reply: jest.fn().mockResolvedValue(undefined),
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
@@ -53,7 +55,9 @@ describe('support server commands', () => {
     const member = { id: 'member-1' };
     const interaction = createVerifyInteraction({ member });
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.guild.members.fetch).toHaveBeenCalledWith('user-1');
     expect(verifySupportMemberMock).toHaveBeenCalledWith(member);
@@ -77,7 +81,9 @@ describe('support server commands', () => {
     const command = require('../../../src/commands/verify');
     const interaction = createVerifyInteraction();
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
@@ -91,7 +97,9 @@ describe('support server commands', () => {
     const command = require('../../../src/commands/verify');
     const interaction = createVerifyInteraction();
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
