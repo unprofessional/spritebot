@@ -10,6 +10,7 @@ import {
   getThreadBumpCheckCandidates,
   type HousekeepingCategory,
 } from '../services/admin_housekeeping.service';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 const THREAD_BUMP_CHECK_LIMIT = 25;
 
@@ -74,16 +75,17 @@ async function buildDeadThreadBumpCategory(
   };
 }
 
-export async function handleAdminOrphans(interaction: ChatInputCommandInteraction): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
-
+export async function handleAdminOrphans(
+  interaction: ChatInputCommandInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const categories = await getOrphanReport();
   categories.push(await buildDeadThreadBumpCategory(interaction));
 
   const hasFindings = categories.some((category) => category.count > 0);
 
   if (!hasFindings) {
-    await interaction.editReply('✅ No orphans detected.');
+    await responder.respond({ content: '✅ No orphans detected.', ephemeral: true });
     return;
   }
 
@@ -92,14 +94,13 @@ export async function handleAdminOrphans(interaction: ChatInputCommandInteractio
     'Read-only audit. Manual-review categories are not safe to purge blindly.',
   );
 
-  await interaction.editReply({ embeds: [embed] });
+  await responder.respond({ embeds: [embed], ephemeral: true });
 }
 
 export async function handleAdminOrphansPurge(
   interaction: ChatInputCommandInteraction,
+  responder: DiscordInteractionResponder,
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: true });
-
   const categories = await getOrphanReport();
   const safeCategories = categories.filter((category) => category.safeToPurge);
   const purgeCount = safeCategories.reduce((sum, category) => sum + category.count, 0);
@@ -113,9 +114,10 @@ export async function handleAdminOrphansPurge(
   );
 
   if (purgeCount === 0) {
-    await interaction.editReply({
+    await responder.respond({
       content: '✅ No safe orphan rows are currently eligible for purge.',
       embeds: [embed],
+      ephemeral: true,
     });
     return;
   }
@@ -124,9 +126,10 @@ export async function handleAdminOrphansPurge(
     buildConfirmPurgeButton(interaction.user.id),
   );
 
-  await interaction.editReply({
+  await responder.respond({
     content: `⚠️ Confirm purge will permanently delete **${purgeCount}** row(s).`,
     embeds: [embed],
     components: [row],
+    ephemeral: true,
   });
 }

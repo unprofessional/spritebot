@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { getGlobalStats } from '../services/admin_housekeeping.service';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 function formatNumber(value: number): string {
   return value.toLocaleString('en-US');
@@ -7,6 +8,7 @@ function formatNumber(value: number): string {
 
 export async function handleAdminGlobalStats(
   interaction: ChatInputCommandInteraction,
+  responder: DiscordInteractionResponder,
 ): Promise<void> {
   const stats = await getGlobalStats();
   const botGuilds = interaction.client.guilds.cache.size;
@@ -55,5 +57,5 @@ export async function handleAdminGlobalStats(
     )
     .setTimestamp(new Date());
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await responder.respond({ embeds: [embed], ephemeral: true });
 }

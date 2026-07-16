@@ -9,9 +9,15 @@ import {
 
 import { getCharacterWithStats } from '../services/character.service';
 import { isActiveCharacter } from '../utils/is_active_character';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { build as buildCharacterCard } from './view_character_card';
 
 const id = 'selectPublicCharacter';
+const interactionPolicy = {
+  mode: { kind: 'reply', visibility: 'ephemeral' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 interface PublicCharacterOption {
   id: string;
@@ -44,25 +50,28 @@ function build(
 /**
  * Handles selection of a public character from the dropdown.
  */
-async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   try {
     const [customId] = interaction.customId.split(':');
     if (customId !== id) return;
 
     const characterId = interaction.values?.[0];
     if (!characterId) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ No character selected.',
         ephemeral: true,
       });
       return;
     }
 
-    await interaction.deferReply({ ephemeral: true });
+    await responder.acknowledge();
 
     const character = await getCharacterWithStats(characterId);
     if (!character) {
-      await interaction.editReply({
+      await responder.respond({
         content: '❌ That character no longer exists.',
       });
       return;
@@ -75,16 +84,14 @@ async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
     );
     const view = buildCharacterCard(character, isSelf);
 
-    await interaction.editReply(view);
+    await responder.respond(view);
   } catch (err) {
     console.error('[SELECT MENU ERROR] public_character_selector:', err);
-    if (!interaction.replied) {
-      await interaction.reply({
-        content: '❌ Failed to display character details.',
-        ephemeral: true,
-      });
-    }
+    await responder.respond({
+      content: '❌ Failed to display character details.',
+      ephemeral: true,
+    });
   }
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };

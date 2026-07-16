@@ -12,8 +12,14 @@ import {
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 import type { StatTemplate } from '../types/stat_template';
 import type { Game } from '../types/game';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 const id = 'confirmDeleteStat';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(statId: string): ButtonBuilder {
   return new ButtonBuilder()
@@ -22,13 +28,16 @@ function build(statId: string): ButtonBuilder {
     .setStyle(ButtonStyle.Danger);
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, statId] = interaction.customId.split(':');
 
   try {
     const stat = await getStatTemplateById(statId);
     if (!stat) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ That stat no longer exists.',
         ephemeral: true,
       });
@@ -48,17 +57,17 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
 
     const response = rebuildCreateGameResponse(game, statTemplates);
 
-    await interaction.update({
+    await responder.respond({
       ...response,
       components: response.components.map((row) => row.toJSON()),
     });
   } catch (err) {
     console.error('Error confirming stat deletion:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to delete stat.',
       ephemeral: true,
     });
   }
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };

@@ -14,8 +14,14 @@ import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response
 
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 const id = 'finishStatSetup';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(gameId: string): APIButtonComponentWithCustomId {
   return {
@@ -26,7 +32,10 @@ function build(gameId: string): APIButtonComponentWithCustomId {
   };
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, gameId] = interaction.customId.split(':');
 
   try {
@@ -36,14 +45,14 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     ]);
 
     if (!game) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Game not found. You may need to recreate it.',
         ephemeral: true,
       });
       return;
     }
 
-    await interaction.deferUpdate();
+    await responder.acknowledge();
 
     const result = rebuildCreateGameResponse(game, stats);
     const nudge = buildNudge(
@@ -58,7 +67,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
       'finish-stat-setup',
     );
 
-    await interaction.editReply({
+    await responder.respond({
       content: appendNudge(result.content, nudge),
       embeds: result.embeds,
       components: result.components.map((row) =>
@@ -67,11 +76,11 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     });
   } catch (err) {
     console.error('Error in finishStatSetup:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Something went wrong while finalizing your game setup.',
       ephemeral: true,
     });
   }
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };

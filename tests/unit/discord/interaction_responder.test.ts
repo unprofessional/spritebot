@@ -75,6 +75,54 @@ describe('DiscordInteractionResponder', () => {
     expect(deferred.update).not.toHaveBeenCalled();
   });
 
+  test('routes ephemeral respond to followUp in component-update mode when unacknowledged', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'component-update',
+    });
+
+    await responder.respond({ content: 'no permission', ephemeral: true });
+
+    // Should auto-defer then follow up ephemerally, leaving original message intact
+    expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
+    expect(interaction.followUp).toHaveBeenCalledWith({
+      content: 'no permission',
+      ephemeral: true,
+    });
+    expect(interaction.update).not.toHaveBeenCalled();
+    expect(interaction.editReply).not.toHaveBeenCalled();
+  });
+
+  test('routes ephemeral respond to followUp in component-update mode when already deferred', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'component-update',
+    });
+
+    await responder.acknowledge();
+    await responder.respond({ content: 'error occurred', ephemeral: true });
+
+    expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
+    expect(interaction.followUp).toHaveBeenCalledWith({
+      content: 'error occurred',
+      ephemeral: true,
+    });
+    expect(interaction.editReply).not.toHaveBeenCalled();
+  });
+
+  test('followUp preserves ephemeral flag in component-update mode', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'component-update',
+    });
+
+    await responder.acknowledge();
+    await responder.respond({ content: 'updated' });
+    await responder.followUp({ content: 'side note', ephemeral: true });
+
+    expect(interaction.followUp).toHaveBeenCalledWith({ content: 'side note', ephemeral: true });
+  });
+
   test('uses showModal as the only initial acknowledgement for modal mode', async () => {
     const interaction = componentInteraction();
     const responder = new DiscordInteractionResponder(interaction as never, { kind: 'modal' });

@@ -1,5 +1,6 @@
 import { ChatInputCommandInteraction, EmbedBuilder } from 'discord.js';
 import { getGameAudit, type GameAuditRow } from '../services/admin_housekeeping.service';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 function formatGame(row: GameAuditRow): string {
   const visibility = row.isPublic ? 'Public' : 'Private';
@@ -13,10 +14,13 @@ function formatGame(row: GameAuditRow): string {
   ].join('\n');
 }
 
-export async function handleAdminGames(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleAdminGames(
+  interaction: ChatInputCommandInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const guildId = interaction.guildId;
   if (!guildId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ This command must be used in a server.',
       ephemeral: true,
     });
@@ -26,7 +30,7 @@ export async function handleAdminGames(interaction: ChatInputCommandInteraction)
   const rows = await getGameAudit(guildId);
 
   if (!rows.length) {
-    await interaction.reply({
+    await responder.respond({
       content: '📭 No games found in this server.',
       ephemeral: true,
     });
@@ -51,5 +55,5 @@ export async function handleAdminGames(interaction: ChatInputCommandInteraction)
     embed.setFooter({ text: `Showing 25 of ${rows.length} games.` });
   }
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await responder.respond({ embeds: [embed], ephemeral: true });
 }

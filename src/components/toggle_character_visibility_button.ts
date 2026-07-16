@@ -4,9 +4,15 @@ import { ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
 
 import { getCharacterWithStats, updateCharacterMeta } from '../services/character.service';
 import { getCurrentCharacter } from '../services/player.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { build as buildCharacterCard } from './view_character_card';
 
 const id = 'handleToggleCharacterVisibilityButton';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(characterId: string, currentVisibility = 'private'): ButtonBuilder {
   const isPublic = (currentVisibility || '').toLowerCase() === 'public';
@@ -17,14 +23,17 @@ function build(characterId: string, currentVisibility = 'private'): ButtonBuilde
     .setStyle(ButtonStyle.Secondary);
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId] = interaction.customId.split(':');
 
   try {
     const character = await getCharacterWithStats(characterId);
 
     if (!character) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Character not found.',
         ephemeral: true,
       });
@@ -38,7 +47,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
 
     const updated = await getCharacterWithStats(characterId);
     if (!updated) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Character not found after updating visibility.',
         ephemeral: true,
       });
@@ -50,17 +59,17 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     const isSelf = (await getCurrentCharacter(userId, guildId)) === characterId;
     const updatedCard = buildCharacterCard(updated, isSelf);
 
-    await interaction.update({
+    await responder.respond({
       ...updatedCard,
       content: `✅ Visibility set to **${newVisibility.charAt(0).toUpperCase() + newVisibility.slice(1)}**.`,
     });
   } catch (err) {
     console.error('[TOGGLE VISIBILITY ERROR]', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to toggle visibility.',
       ephemeral: true,
     });
   }
 }
 
-export { id, build, handle };
+export { id, build, handle, interactionPolicy };
