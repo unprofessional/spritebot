@@ -26,7 +26,7 @@ const field = {
   default_value: '10',
   is_required: true,
   sort_order: 2,
-  meta: {},
+  meta: { default_current: 4 },
 };
 
 function selectInteraction(values = ['stat-1']) {
@@ -173,6 +173,7 @@ function expectEditModal(showModal: jest.Mock): void {
   ).toEqual([
     expect.objectContaining({ custom_id: 'label', value: 'Hit Points' }),
     expect.objectContaining({ custom_id: 'default_value', value: '10' }),
+    expect.objectContaining({ custom_id: 'default_current', value: '4' }),
     expect.objectContaining({ custom_id: 'sort_order', value: '2' }),
   ]);
 }
