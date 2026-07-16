@@ -22,6 +22,11 @@ import type { DiscordInteractionResponder } from '../../discord/interaction_resp
 import type { Game } from '../../types/game';
 import type { StatTemplate } from '../../types/stat_template';
 import { rebuildCreateGameResponse } from '../../utils/rebuild_create_game_response';
+import {
+  getCountStatDefaults,
+  parseCountDefault,
+  withDefaultCurrent,
+} from '../../utils/count_stat_defaults';
 
 const handle = async (
   interaction: ModalSubmitInteraction,
@@ -33,8 +38,21 @@ const handle = async (
     const [, statId] = customId.split(':');
 
     try {
+      const fieldRecord = await getStatTemplateById(statId);
+      if (!fieldRecord) {
+        await responder.respond({
+          content: '❌ Could not find that stat field.',
+          ephemeral: true,
+        });
+        return;
+      }
+
       const label = interaction.fields.getTextInputValue('label')?.trim().toUpperCase();
-      const defaultValue = interaction.fields.getTextInputValue('default_value')?.trim();
+      let defaultValue = interaction.fields.getTextInputValue('default_value')?.trim() || null;
+      const defaultCurrentRaw =
+        fieldRecord.field_type === 'count'
+          ? interaction.fields.getTextInputValue('default_current')?.trim() || null
+          : null;
       const sortOrderRaw = interaction.fields.getTextInputValue('sort_order')?.trim();
       const sortOrder = isNaN(parseInt(sortOrderRaw, 10)) ? 0 : parseInt(sortOrderRaw, 10);
 
@@ -46,13 +64,39 @@ const handle = async (
         return;
       }
 
+      let meta = fieldRecord.meta;
+      if (fieldRecord.field_type === 'count') {
+        const defaultMax = parseCountDefault(defaultValue);
+        const defaultCurrent = parseCountDefault(defaultCurrentRaw);
+        if (
+          (defaultValue && defaultMax === null) ||
+          (defaultCurrentRaw && defaultCurrent === null)
+        ) {
+          await responder.respond({
+            content: '⚠️ Default MAX and CURRENT values must be non-negative whole numbers.',
+            ephemeral: true,
+          });
+          return;
+        }
+        if (defaultCurrent !== null && defaultMax === null) {
+          await responder.respond({
+            content: '⚠️ Set a default MAX value before setting a default CURRENT value.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        defaultValue = defaultMax === null ? null : String(defaultMax);
+        meta = withDefaultCurrent(fieldRecord.meta, defaultCurrentRaw ? defaultCurrent : null);
+      }
+
       await updateStatTemplate(statId, {
         label,
         default_value: defaultValue,
         sort_order: sortOrder,
+        meta,
       });
 
-      const fieldRecord = await getStatTemplateById(statId);
       const gameId = fieldRecord?.game_id;
 
       if (!gameId) {
@@ -105,6 +149,8 @@ function buildStatTemplateModal({
     : `createStatModal:${gameId}:${(field as StatTemplate | undefined)?.field_type ?? 'short'}`;
 
   const title = isEdit ? `Edit Field: ${field.label}` : 'Add New Stat Field';
+  const isCount = field?.field_type === 'count';
+  const countDefaults = isCount ? getCountStatDefaults(field) : null;
 
   const components = [
     new ActionRowBuilder<TextInputBuilder>().addComponents(
@@ -118,11 +164,23 @@ function buildStatTemplateModal({
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
         .setCustomId('default_value')
-        .setLabel('Default Value (optional)')
+        .setLabel(isCount ? 'Default MAX Value (optional)' : 'Default Value (optional)')
         .setStyle(TextInputStyle.Short)
         .setValue(field?.default_value ?? '')
         .setRequired(false),
     ),
+    ...(isCount
+      ? [
+          new ActionRowBuilder<TextInputBuilder>().addComponents(
+            new TextInputBuilder()
+              .setCustomId('default_current')
+              .setLabel('Default CURRENT Value (optional)')
+              .setStyle(TextInputStyle.Short)
+              .setValue(countDefaults?.current?.toString() ?? '')
+              .setRequired(false),
+          ),
+        ]
+      : []),
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
         .setCustomId('sort_order')

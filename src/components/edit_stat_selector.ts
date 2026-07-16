@@ -8,6 +8,7 @@ import { presentPreparedModal } from '../discord/prepared_modal';
 import { getStatTemplates } from '../services/game.service';
 import { buildStatTemplateModal } from '../handlers/modal_handlers/stat_template_modals';
 import type { StatTemplate } from '../types/stat_template';
+import { formatStatTemplateDefault } from '../utils/count_stat_defaults';
 
 const id = 'editStatSelect';
 const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
@@ -19,11 +20,14 @@ function build(
   gameId: string,
   statTemplates: StatTemplate[],
 ): ActionRowBuilder<StringSelectMenuBuilder> {
-  const options = statTemplates.map((f, i) => ({
-    label: `${i + 1}. ${f.label}`,
-    description: `Type: ${f.field_type} — Default: ${f.default_value || 'None'}`,
-    value: f.id,
-  }));
+  const options = statTemplates.map((f, i) => {
+    const defaultValue = formatStatTemplateDefault(f);
+    return {
+      label: `${i + 1}. ${f.label}`,
+      description: `Type: ${f.field_type} — Default: ${defaultValue || 'None'}`,
+      value: f.id,
+    };
+  });
 
   const selectMenu = new StringSelectMenuBuilder()
     .setCustomId(`${id}:${gameId}`)
