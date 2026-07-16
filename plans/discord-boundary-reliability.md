@@ -556,7 +556,16 @@ slow hydration preserves the same values behind owner-bound activation. Existing
 missing-character, and missing-stat errors remain ephemeral, and both modal submission prefixes
 remain authoritative authorization boundaries.
 
-**Remaining: Batch 2B (I/O-dependent modal-opening routes), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
+**Completed: Batch 2B.3 (prepared numeric-stat adjustment editor)**
+
+`adjust_numeric_stat_select` uses a component-update-aware prepared-modal policy. Fast stat
+hydration opens the existing adjustment modal immediately, while slow hydration keeps the original
+message intact and presents the same modal behind private owner-bound activation. Existing
+not-found results continue replacing the original message, including after automatic component
+deferral, and the unknown-selection fallback remains an immediate ephemeral reply. The adjustment
+modal submission remains the authoritative authorization boundary.
+
+**Remaining: Batch 2B (inventory modal-opening route), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 
 **Step 1: Classify before migration**
 

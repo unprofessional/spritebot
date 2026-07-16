@@ -46,9 +46,9 @@ export function getSelectMenuInteractionPolicy(
   if (customId.startsWith('editCharacterStatDropdown:')) {
     return characterStatSelect.interactionPolicy;
   }
-  if (customId.startsWith('deleteStatSelect:') || customId.startsWith('adjustStatSelect:')) {
-    return undefined;
-  }
+  if (customId.startsWith('adjustStatSelect:'))
+    return adjustNumericStatSelectHandler.interactionPolicy;
+  if (customId.startsWith('deleteStatSelect:')) return undefined;
   return undefined;
 }
 
@@ -80,7 +80,7 @@ export async function handleSelectMenu(
   if (customId.startsWith('editCharacterStatDropdown:'))
     return characterStatSelect.handle(interaction, responder!);
   if (customId.startsWith('adjustStatSelect:'))
-    return adjustNumericStatSelectHandler.handle(interaction);
+    return adjustNumericStatSelectHandler.handle(interaction, responder!);
   if (customId.startsWith('editInventoryItemSelect:'))
     return inventoryItemSelect.handle(interaction, responder!);
 
