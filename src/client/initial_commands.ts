@@ -33,7 +33,8 @@ import {
 import {
   respondBestEffort,
   startTrackedInteractionDispatch,
-  type InteractionDispatchPolicy,
+  type InteractionCommandContext,
+  type InteractionDispatchPolicySource,
 } from '../discord/interaction_dispatch';
 import { logDiscordFailure } from '../discord/logging';
 
@@ -51,9 +52,12 @@ const requireCommand = createRequire(__filename);
 // --- Types ---
 type CommandModule = {
   data: SlashCommandBuilder | ContextMenuCommandBuilder;
-  interactionPolicy?: InteractionDispatchPolicy;
+  interactionPolicy?: InteractionDispatchPolicySource<
+    ChatInputCommandInteraction | MessageContextMenuCommandInteraction
+  >;
   execute: (
     interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
+    context?: InteractionCommandContext,
   ) => Promise<unknown>;
 };
 
@@ -197,11 +201,16 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
   if (interaction.isChatInputCommand() || interaction.isMessageContextMenuCommand()) {
     const command = client.commands.get(interaction.commandName);
     if (command?.interactionPolicy) {
+      const policy =
+        typeof command.interactionPolicy === 'function'
+          ? command.interactionPolicy(interaction)
+          : command.interactionPolicy;
       await startTrackedInteractionDispatch({
         interaction,
-        policy: command.interactionPolicy,
+        policy,
         guard: guardCommand,
-        handler: (routedInteraction) => command.execute(routedInteraction),
+        handler: (routedInteraction, responder) =>
+          command.execute(routedInteraction, { responder }),
       });
       return;
     }

@@ -1,5 +1,5 @@
 const rollCommand = require('../../../src/commands/roll') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 
 import { GameDAO } from '../../../src/dao/game.dao';
@@ -40,6 +40,7 @@ function createInteraction({
       reply,
     },
     reply,
+    responderContext: { responder: { respond: reply } },
   };
 }
 
@@ -78,9 +79,9 @@ describe('/roll', () => {
 
   test('prefers the active character name in a server', async () => {
     await createActiveCharacter('Mira Vale');
-    const { interaction, reply } = createInteraction();
+    const { interaction, reply, responderContext } = createInteraction();
 
-    await rollCommand.execute(interaction);
+    await rollCommand.execute(interaction, responderContext);
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -91,9 +92,11 @@ describe('/roll', () => {
   });
 
   test('falls back to the server profile display name without an active character', async () => {
-    const { interaction, reply } = createInteraction({ memberDisplayName: 'Table Captain' });
+    const { interaction, reply, responderContext } = createInteraction({
+      memberDisplayName: 'Table Captain',
+    });
 
-    await rollCommand.execute(interaction);
+    await rollCommand.execute(interaction, responderContext);
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -104,13 +107,13 @@ describe('/roll', () => {
   });
 
   test('falls back to the account display name outside a server', async () => {
-    const { interaction, reply } = createInteraction({
+    const { interaction, reply, responderContext } = createInteraction({
       guildId: null,
       memberDisplayName: null,
       userDisplayName: 'Wandering Account',
     });
 
-    await rollCommand.execute(interaction);
+    await rollCommand.execute(interaction, responderContext);
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -121,9 +124,9 @@ describe('/roll', () => {
   });
 
   test('accepts an uppercase dice expression', async () => {
-    const { interaction, reply } = createInteraction({ dice: '2D20' });
+    const { interaction, reply, responderContext } = createInteraction({ dice: '2D20' });
 
-    await rollCommand.execute(interaction);
+    await rollCommand.execute(interaction, responderContext);
 
     expect(reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -134,9 +137,11 @@ describe('/roll', () => {
   });
 
   test('explains unsupported dice expressions', async () => {
-    const { interaction, reply } = createInteraction({ dice: '2 dice 20 sides' });
+    const { interaction, reply, responderContext } = createInteraction({
+      dice: '2 dice 20 sides',
+    });
 
-    await rollCommand.execute(interaction);
+    await rollCommand.execute(interaction, responderContext);
 
     expect(reply).toHaveBeenCalledWith({
       content: expect.stringContaining('Use a roll like `2d20`'),

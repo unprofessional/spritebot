@@ -5,18 +5,30 @@ import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'dis
 import { getGame } from '../services/game.service';
 import { getCurrentGame } from '../services/player.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 module.exports = {
   data: new SlashCommandBuilder()
     .setName('list-games')
     .setDescription('Lists all games in this server with publish status.'),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     const userId = interaction.user.id;
     const guildId = interaction.guild?.id;
 
     if (!guildId) {
-      return await interaction.reply({
+      return await responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -26,7 +38,7 @@ module.exports = {
       const game = await getGame({ guildId });
 
       if (!game) {
-        return await interaction.reply({
+        return await responder.respond({
           content: appendNudge(
             '📭 No games found in this server.',
             buildNudge({ userId, guildId }, 'list-games-empty'),
@@ -55,13 +67,13 @@ module.exports = {
         'list-games',
       );
 
-      await interaction.reply({
+      await responder.respond({
         content: appendNudge(`🎲 **Game in this server:**\n\n${row}`, nudge),
         ephemeral: true,
       });
     } catch (err) {
       console.error('[COMMAND ERROR] /list-games:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to list games. Please try again later.',
         ephemeral: true,
       });
