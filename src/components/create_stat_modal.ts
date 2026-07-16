@@ -14,6 +14,7 @@ import { addStatTemplates, getStatTemplates, getGame } from '../services/game.se
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
+import { parseCountDefault, withDefaultCurrent } from '../utils/count_stat_defaults';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 
 import type { Game } from '../types/game';
@@ -36,9 +37,20 @@ function build(gameId: string, statType: string): ModalBuilder {
 
   const defaultInput = new TextInputBuilder()
     .setCustomId('default_value')
-    .setLabel('Default Value (optional)')
+    .setLabel(statType === 'count' ? 'Default MAX Value (optional)' : 'Default Value (optional)')
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
+
+  const defaultCurrentInput =
+    statType === 'count'
+      ? new ActionRowBuilder<TextInputBuilder>().addComponents(
+          new TextInputBuilder()
+            .setCustomId('default_current')
+            .setLabel('Default CURRENT Value (optional)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false),
+        )
+      : null;
 
   const sortInput = new TextInputBuilder()
     .setCustomId('sort_index')
@@ -52,6 +64,7 @@ function build(gameId: string, statType: string): ModalBuilder {
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(labelInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(defaultInput),
+      ...(defaultCurrentInput ? [defaultCurrentInput] : []),
       new ActionRowBuilder<TextInputBuilder>().addComponents(sortInput),
     );
 }
@@ -64,7 +77,11 @@ async function handle(
   const statType = statTypeRaw as 'number' | 'count' | 'short' | 'paragraph';
 
   const label = interaction.fields.getTextInputValue('label')?.trim().toUpperCase();
-  const defaultValue = interaction.fields.getTextInputValue('default_value')?.trim() || null;
+  let defaultValue = interaction.fields.getTextInputValue('default_value')?.trim() || null;
+  const defaultCurrentRaw =
+    statType === 'count'
+      ? interaction.fields.getTextInputValue('default_current')?.trim() || null
+      : null;
   const sortIndexRaw = interaction.fields.getTextInputValue('sort_index')?.trim();
   const sort_order = sortIndexRaw ? parseInt(sortIndexRaw, 10) : 0;
 
@@ -76,12 +93,36 @@ async function handle(
     return;
   }
 
+  let meta: Record<string, unknown> = {};
+  if (statType === 'count') {
+    const defaultMax = parseCountDefault(defaultValue);
+    const defaultCurrent = parseCountDefault(defaultCurrentRaw);
+    if ((defaultValue && defaultMax === null) || (defaultCurrentRaw && defaultCurrent === null)) {
+      await responder.respond({
+        content: '⚠️ Default MAX and CURRENT values must be non-negative whole numbers.',
+        ephemeral: true,
+      });
+      return;
+    }
+    if (defaultCurrent !== null && defaultMax === null) {
+      await responder.respond({
+        content: '⚠️ Set a default MAX value before setting a default CURRENT value.',
+        ephemeral: true,
+      });
+      return;
+    }
+
+    defaultValue = defaultMax === null ? null : String(defaultMax);
+    meta = withDefaultCurrent({}, defaultCurrentRaw ? defaultCurrent : null);
+  }
+
   await addStatTemplates(gameId, [
     {
       label,
       field_type: statType,
       default_value: defaultValue,
       sort_order,
+      meta,
     },
   ]);
 

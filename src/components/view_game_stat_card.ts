@@ -4,6 +4,7 @@ import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
+import { formatStatTemplateDefault } from '../utils/count_stat_defaults';
 
 import { build as buildDefineStatsButton } from './define_stats_button';
 import { build as buildDeleteStatsButton } from './delete_stat_button';
@@ -38,7 +39,8 @@ function buildEmbed(
     const isNew = highlightLabel && f.label?.toLowerCase() === highlightLabel.toLowerCase();
 
     const icon = f.field_type === 'paragraph' ? '📝' : '🔹';
-    const defaultStr = f.default_value ? ` _(default: ${f.default_value})_` : '';
+    const formattedDefault = formatStatTemplateDefault(f);
+    const defaultStr = formattedDefault ? ` _(default: ${formattedDefault})_` : '';
     const labelWithType = `${f.label} \`${f.field_type}\``;
 
     return `${icon} ${isNew ? '**🆕 ' : '**'}${labelWithType}**${defaultStr}`;
