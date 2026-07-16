@@ -79,7 +79,17 @@ const directRoutes: ButtonRoute[] = [
 export function getButtonInteractionPolicy(
   customId: string,
 ): InteractionDispatchPolicy | undefined {
-  return directRoutes.find(([pattern]) => pattern.test(customId))?.[2];
+  const directPolicy = directRoutes.find(([pattern]) => pattern.test(customId))?.[2];
+  if (directPolicy) return directPolicy;
+  if (isInventoryButton(customId)) return undefined;
+  if (customId.startsWith('goBackToCharacter:')) return characterViewButtons.interactionPolicy;
+  return fallbackButtons.interactionPolicy;
+}
+
+function isInventoryButton(customId: string): boolean {
+  return /^(?:add_inventory_item|view_inventory|inventoryPage|invEq|invEdit|invDel|invDelOk|toggle_inventory_item_equipped|edit_inventory_item|delete_inventory_item|confirm_delete_inventory_item|cancel_inventory_item_action|clear_inventory|confirm_clear_inventory|cancel_clear_inventory):/.test(
+    customId,
+  );
 }
 
 export async function handleButton(
@@ -92,29 +102,13 @@ export async function handleButton(
     if (pattern.test(customId)) return handler(interaction, responder);
   }
 
-  if (
-    /^add_inventory_item:/.test(customId) ||
-    /^view_inventory:/.test(customId) ||
-    /^inventoryPage:/.test(customId) ||
-    /^invEq:/.test(customId) ||
-    /^invEdit:/.test(customId) ||
-    /^invDel:/.test(customId) ||
-    /^invDelOk:/.test(customId) ||
-    /^toggle_inventory_item_equipped:/.test(customId) ||
-    /^edit_inventory_item:/.test(customId) ||
-    /^delete_inventory_item:/.test(customId) ||
-    /^confirm_delete_inventory_item:/.test(customId) ||
-    /^cancel_inventory_item_action:/.test(customId) ||
-    /^clear_inventory:/.test(customId) ||
-    /^confirm_clear_inventory:/.test(customId) ||
-    /^cancel_clear_inventory:/.test(customId)
-  ) {
+  if (isInventoryButton(customId)) {
     return inventoryButtons.handle(interaction);
   }
 
   if (customId.startsWith('goBackToCharacter:')) {
-    return characterViewButtons.handle(interaction);
+    return characterViewButtons.handle(interaction, responder!);
   }
 
-  return fallbackButtons.handle(interaction);
+  return fallbackButtons.handle(interaction, responder!);
 }
