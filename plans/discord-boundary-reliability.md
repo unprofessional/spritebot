@@ -540,6 +540,14 @@ send their existing ephemeral validation reply. Their activating component autho
 deferred to the already-gated modal submission so a remote entitlement lookup cannot consume the
 only response that can open the modal.
 
+**Completed: Batch 2B.1 (prepared stat-template editor)**
+
+`edit_stat_selector` uses the shared gated prepared-modal policy. A fast stat-template lookup opens
+the existing prefilled editor immediately; a slow lookup preserves the same editor behind the
+owner-bound activation button. The modal submission remains the authoritative authorization
+boundary. The unrouted `stat_template_dropdown` duplicate was removed after confirming the live
+router has always used the dedicated edit and delete selector components.
+
 **Remaining: Batch 2B (I/O-dependent modal-opening routes), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 
 **Step 1: Classify before migration**

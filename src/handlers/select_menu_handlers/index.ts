@@ -18,6 +18,7 @@ import { handle as handleSwitchGameSelector } from '../../components/switch_game
 import { interactionPolicy as joinGamePolicy } from '../../components/join_game_selector';
 import { interactionPolicy as characterFieldPolicy } from '../../components/character_field_selector';
 import { interactionPolicy as editCharacterFieldPolicy } from '../../components/edit_character_field_selector';
+import { interactionPolicy as editStatPolicy } from '../../components/edit_stat_selector';
 import { interactionPolicy as paragraphFieldPolicy } from '../../components/paragraph_field_selector';
 import { interactionPolicy as publicCharacterPolicy } from '../../components/public_character_selector';
 import { interactionPolicy as restoreCharacterPolicy } from '../../components/restore_character_selector';
@@ -41,8 +42,8 @@ export function getSelectMenuInteractionPolicy(
   if (customId.startsWith('selectStatType:')) return statTypePolicy;
   if (customId.startsWith('createCharacterDropdown')) return characterFieldPolicy;
   if (customId.startsWith('editCharacterFieldDropdown')) return editCharacterFieldPolicy;
+  if (customId.startsWith('editStatSelect:')) return editStatPolicy;
   if (
-    customId.startsWith('editStatSelect:') ||
     customId.startsWith('deleteStatSelect:') ||
     customId.startsWith('editCharacterStatDropdown:') ||
     customId.startsWith('adjustStatSelect:')
@@ -64,7 +65,8 @@ export async function handleSelectMenu(
   if (customId === 'joinGameDropdown') return handleJoinGameSelector(interaction, responder!);
   if (customId === 'restoreCharacterDropdown')
     return handleRestoreCharacterSelector(interaction, responder!);
-  if (customId.startsWith('editStatSelect:')) return editStatSelectorHandler(interaction);
+  if (customId.startsWith('editStatSelect:'))
+    return editStatSelectorHandler(interaction, responder!);
   if (customId.startsWith('deleteStatSelect:')) return deleteStatSelectorHandler(interaction);
   if (customId.startsWith('selectStatType:'))
     return statTypeSelectorHandler(interaction, responder!);

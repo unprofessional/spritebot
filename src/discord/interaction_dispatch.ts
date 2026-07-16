@@ -30,6 +30,18 @@ export const gatedImmediateModalInteractionPolicy = {
   authorization: 'modal-submit',
 } satisfies InteractionDispatchPolicy;
 
+/**
+ * Policy for gated editors that require asynchronous values before their modal can be built.
+ *
+ * The preparation interaction may defer, while the resulting modal submission remains the
+ * authoritative authorization boundary.
+ */
+export const gatedPreparedModalInteractionPolicy = {
+  mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+  acknowledgement: 'auto-defer',
+  authorization: 'modal-submit',
+} satisfies InteractionDispatchPolicy;
+
 export type InteractionDispatchPolicySource<I extends BaseInteraction = BaseInteraction> =
   | InteractionDispatchPolicy
   | ((interaction: I) => InteractionDispatchPolicy);

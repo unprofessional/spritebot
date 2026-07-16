@@ -5,10 +5,11 @@ import {
   MessageContextMenuCommandInteraction,
 } from 'discord.js';
 
-import type {
-  InteractionCommandContext,
-  InteractionDispatchPolicy,
-  InteractionDispatchPolicySource,
+import {
+  gatedPreparedModalInteractionPolicy,
+  type InteractionCommandContext,
+  type InteractionDispatchPolicy,
+  type InteractionDispatchPolicySource,
 } from '../discord/interaction_dispatch';
 import { presentPreparedModal } from '../discord/prepared_modal';
 import { fetchProxyMessageContent } from '../services/rp_message_proxy.service';
@@ -66,11 +67,7 @@ function resolveIcEditContextPolicy(
   interaction: MessageContextMenuCommandInteraction<CacheType>,
 ): InteractionDispatchPolicy {
   if (interaction.guildId) {
-    return {
-      mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
-      acknowledgement: 'auto-defer',
-      authorization: 'modal-submit',
-    };
+    return gatedPreparedModalInteractionPolicy;
   }
 
   return {
