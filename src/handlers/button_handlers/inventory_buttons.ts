@@ -11,6 +11,9 @@ import {
 } from 'discord.js';
 
 import { build as buildInventoryCard } from '../../components/view_inventory_card';
+import { gatedPreparedModalInteractionPolicy } from '../../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
+import { presentPreparedModal } from '../../discord/prepared_modal';
 import { belongsToUser } from '../../services/character.service';
 import {
   deleteItemForCharacter,
@@ -20,13 +23,18 @@ import {
 } from '../../services/inventory.service';
 import { buildEditModal } from '../select_menu_handlers/inventory_item_select';
 
-export async function handle(interaction: ButtonInteraction): Promise<void> {
+export const interactionPolicy = gatedPreparedModalInteractionPolicy;
+
+export async function handle(
+  interaction: ButtonInteraction,
+  responder?: DiscordInteractionResponder,
+): Promise<void> {
   const { customId } = interaction;
 
   if (customId.startsWith('add_inventory_item:')) {
     const [, characterId, rawPage] = customId.split(':');
 
-    if (!(await canUseInventory(interaction, characterId))) return;
+    if (!(await canUseInventory(interaction, characterId, responder))) return;
 
     const page = parseInt(rawPage, 10) || 0;
     const modal = new ModalBuilder()
@@ -64,7 +72,7 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
         ),
       );
 
-    await interaction.showModal(modal);
+    await presentPreparedModal({ modal, responder: responder!, userId: interaction.user.id });
     return;
   }
 
@@ -159,13 +167,13 @@ export async function handle(interaction: ButtonInteraction): Promise<void> {
   if (customId.startsWith('invEdit:') || customId.startsWith('edit_inventory_item:')) {
     const [, characterId, itemId, rawPage] = customId.split(':');
     try {
-      if (!(await canUseInventory(interaction, characterId))) return;
+      if (!(await canUseInventory(interaction, characterId, responder))) return;
 
       const page = parseInt(rawPage, 10) || 0;
-      await buildEditModal(interaction, characterId, itemId, page);
+      await buildEditModal(responder!, interaction.user.id, characterId, itemId, page);
     } catch (err) {
       console.error('Error preparing inventory item edit:', err);
-      await interaction.reply({
+      await responder!.respond({
         content: '❌ Failed to edit inventory item.',
         ephemeral: true,
       });
@@ -299,21 +307,26 @@ export async function updateInventoryMessage(
 async function canUseInventory(
   interaction: ButtonInteraction,
   characterId: string | undefined,
+  responder?: DiscordInteractionResponder,
 ): Promise<boolean> {
   if (!characterId) {
-    await interaction.reply({
+    const payload = {
       content: '⚠️ Invalid inventory action.',
-      ephemeral: true,
-    });
+      ephemeral: true as const,
+    };
+    if (responder) await responder.respond(payload);
+    else await interaction.reply(payload);
     return false;
   }
 
   const ownsCharacter = await belongsToUser(characterId, interaction.user.id);
   if (!ownsCharacter) {
-    await interaction.reply({
+    const payload = {
       content: '❌ You can only manage inventory for your own characters.',
-      ephemeral: true,
-    });
+      ephemeral: true as const,
+    };
+    if (responder) await responder.respond(payload);
+    else await interaction.reply(payload);
     return false;
   }
 

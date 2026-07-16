@@ -12,6 +12,7 @@ import { belongsToUser } from '../../services/character.service';
 import { getItemForCharacter } from '../../services/inventory.service';
 import type { InteractionDispatchPolicy } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
+import { presentPreparedModal } from '../../discord/prepared_modal';
 
 export const interactionPolicy = {
   mode: { kind: 'component-update' },
@@ -78,17 +79,15 @@ export async function handle(
 }
 
 export async function buildEditModal(
-  interaction: {
-    showModal(modal: ModalBuilder): Promise<void>;
-    reply(options: { content: string; ephemeral: true }): Promise<unknown>;
-  },
+  responder: DiscordInteractionResponder,
+  userId: string,
   characterId: string,
   itemId: string,
   page: number,
 ): Promise<void> {
   const item = await getItemForCharacter(characterId, itemId);
   if (!item) {
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Inventory item not found.',
       ephemeral: true,
     });
@@ -133,7 +132,7 @@ export async function buildEditModal(
       ),
     );
 
-  await interaction.showModal(modal);
+  await presentPreparedModal({ modal, responder, userId });
 }
 
 function truncate(value: string, maxLength = 45): string {
