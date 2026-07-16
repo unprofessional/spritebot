@@ -2,6 +2,10 @@
 
 import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from 'discord.js';
 import { GiftedGuildsDAO } from '../dao/gifted_guilds.dao';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
 const giftedDAO = new GiftedGuildsDAO();
@@ -40,10 +44,17 @@ export const data = new SlashCommandBuilder()
 
 module.exports = {
   data,
-  async execute(interaction: ChatInputCommandInteraction) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+  async execute(
+    interaction: ChatInputCommandInteraction,
+    { responder }: InteractionCommandContext,
+  ) {
     // hard owner gate (extra belt-and-suspenders)
     if (!OWNER_IDS.has(interaction.user.id)) {
-      return interaction.reply({ content: '⛔ Not authorized.', ephemeral: true });
+      return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
     }
 
     const sub = interaction.options.getSubcommand(true);
@@ -64,7 +75,7 @@ module.exports = {
         expiresAt,
       });
 
-      return interaction.reply({
+      return responder.respond({
         content: `✅ Gifted **${guildId}**${recipientMemberId ? ` to <@${recipientMemberId}>` : ''}${expiresAt ? ` until **${expiresAt.toISOString()}**` : ' (no expiry)'}.`,
         ephemeral: true,
       });
@@ -73,7 +84,7 @@ module.exports = {
     if (sub === 'revoke') {
       const guildId = interaction.options.getString('guild_id', true).trim();
       const ok = await giftedDAO.revokeGift(guildId);
-      return interaction.reply({
+      return responder.respond({
         content: ok
           ? `🗑️ Revoked gift for **${guildId}**.`
           : `ℹ️ No gift existed for **${guildId}**.`,
@@ -84,7 +95,7 @@ module.exports = {
     if (sub === 'list') {
       const rows = await giftedDAO.list({ limit: 25 });
       if (!rows.length) {
-        return interaction.reply({ content: 'No gifted guilds.', ephemeral: true });
+        return responder.respond({ content: 'No gifted guilds.', ephemeral: true });
       }
       const lines = rows.map((r) => {
         const guild = interaction.client.guilds.cache.get(r.guild_id);
@@ -95,7 +106,7 @@ module.exports = {
         const n = r.note ? ` — ${r.note}` : '';
         return `• ${name}${id}${recipient}${exp}${n}`;
       });
-      return interaction.reply({ content: lines.join('\n'), ephemeral: true });
+      return responder.respond({ content: lines.join('\n'), ephemeral: true });
     }
   },
 };

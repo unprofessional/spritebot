@@ -10,6 +10,10 @@ import {
 
 import { GiftedGuildsDAO } from '../dao/gifted_guilds.dao';
 import { getEntitlementsFor } from '../services/entitlements.service';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 const PREMIUM_SKU_ID = '1405308360818954322';
 const giftedDAO = new GiftedGuildsDAO();
@@ -19,9 +23,17 @@ module.exports = {
     .setName('subscribe')
     .setDescription("View or manage this server's SPRITEbot subscription"),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     if (!interaction.guild || !interaction.guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: 'Use `/subscribe` in a server to view or manage its SPRITEbot subscription.',
         ephemeral: true,
       });
@@ -52,12 +64,12 @@ module.exports = {
         .setDescription(details.join('\n'))
         .setColor(0x22c55e);
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return responder.respond({ embeds: [embed], ephemeral: true });
     }
 
     const applicationId = interaction.client.application?.id;
     if (!applicationId) {
-      return interaction.reply({
+      return responder.respond({
         content: 'SPRITEbot subscription management is not available yet. Try again shortly.',
         ephemeral: true,
       });
@@ -76,7 +88,7 @@ module.exports = {
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(subscribeButton);
 
-    return interaction.reply({
+    return responder.respond({
       embeds: [embed],
       components: [row],
       ephemeral: true,
