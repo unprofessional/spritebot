@@ -131,6 +131,32 @@ describe('rp_message_proxy.service thread handling', () => {
     );
   });
 
+  test('does not retry an indeterminate webhook send or delete the original message', async () => {
+    await createActiveCharacter();
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'parent-1',
+      userId: 'user-1',
+      isIc: true,
+    });
+    const webhook = createWebhookMock();
+    webhook.send.mockRejectedValue(Object.assign(new Error('reset'), { code: 'ECONNRESET' }));
+    const parentChannel = createParentChannel(webhook);
+    const threadChannel = createThreadChannel();
+    const client = {
+      channels: {
+        fetch: jest.fn(async (channelId: string) =>
+          channelId === 'parent-1' ? parentChannel : threadChannel,
+        ),
+      },
+    };
+    const message = createThreadMessage({ client, channel: threadChannel });
+
+    await expect(handleRoleplayProxyMessage(message)).rejects.toThrow();
+    expect(webhook.send).toHaveBeenCalledTimes(1);
+    expect(message.delete).not.toHaveBeenCalled();
+  });
+
   test('edits proxied thread messages by resolving the parent webhook and passing threadId', async () => {
     await createActiveCharacter();
     const character = await new CharacterDAO().findByUser('user-1');

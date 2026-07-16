@@ -4,7 +4,10 @@ import type {
   CommandInteraction,
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
+  GuildMember,
 } from 'discord.js';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethodAs } from '../discord/sdk_operations';
 import { CommandPolicy } from './features';
 import { ComponentPolicy } from './components_policy';
 import { authorizeInteraction } from './authorize';
@@ -21,6 +24,14 @@ function denialMessage(
 ): string {
   return reason === 'AUTHORIZATION_UNAVAILABLE' ? AUTHORIZATION_UNAVAILABLE_MSG : UPGRADE_MSG;
 }
+
+const authorizationMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'authorization.fetch-member',
+  timeoutMs: 800,
+  totalBudgetMs: 2_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 export async function guardCommand(interaction: CommandInteraction): Promise<true | string> {
   console.debug(`[GuardCommand] command=${interaction.commandName} user=${interaction.user.id}`);
@@ -39,7 +50,12 @@ export async function guardCommand(interaction: CommandInteraction): Promise<tru
   }
 
   const member = interaction.guild?.members?.me
-    ? await interaction.guild.members.fetch(interaction.user.id).catch((err) => {
+    ? await executeDiscordSdkMethodAs<GuildMember>(
+        authorizationMemberReadPolicy,
+        interaction.guild.members,
+        'fetch',
+        interaction.user.id,
+      ).catch((err) => {
         console.warn(`[GuardCommand] Failed to fetch member:`, err);
         return null;
       })
@@ -83,7 +99,12 @@ export async function guardComponent(
   }
 
   const member = interaction.guild?.members?.me
-    ? await interaction.guild.members.fetch(interaction.user.id).catch((err) => {
+    ? await executeDiscordSdkMethodAs<GuildMember>(
+        authorizationMemberReadPolicy,
+        interaction.guild.members,
+        'fetch',
+        interaction.user.id,
+      ).catch((err) => {
         console.warn(`[GuardComponent] Failed to fetch member:`, err);
         return null;
       })

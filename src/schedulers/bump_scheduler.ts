@@ -1,6 +1,10 @@
 // src/schedulers/bump_scheduler.ts
 import { Client } from 'discord.js';
-import { ThreadBumpService, isTerminalThreadError } from '../services/thread_bump.service';
+import {
+  ThreadBumpService,
+  isIndeterminateThreadBumpSendError,
+  isTerminalThreadError,
+} from '../services/thread_bump.service';
 import { PerThreadBumpManager } from './per_thread_bump_manager';
 
 let manager: PerThreadBumpManager | null = null;
@@ -68,7 +72,10 @@ export function startBumpScheduler(client: Client): BumpSchedulerController {
           pollerCooldown.delete(r.thread_id);
         } catch (e) {
           console.warn(`⚠️ poller bump failed ${r.thread_id}:`, e);
-          if (isTerminalThreadError(e)) {
+          if (isIndeterminateThreadBumpSendError(e)) {
+            await manager?.onRegisteredOrUpdated(r.thread_id);
+            pollerCooldown.delete(r.thread_id);
+          } else if (isTerminalThreadError(e)) {
             await service['dao'].delete(r.thread_id).catch(() => {});
             manager?.onUnregistered(r.thread_id);
             pollerCooldown.delete(r.thread_id);
