@@ -46,6 +46,10 @@ The hotfix must address both proven causes:
 
 A later reliability change may introduce deadline-aware deferral across all command and component handlers. Do not bundle that broad migration into this production hotfix. For a non-gifted guild with a slow remote entitlement lookup, an individual interaction may still expire, but it must not crash the process.
 
+### Durable follow-up
+
+Implement the central interaction-contract, timeout, retry-policy, error-classification, redaction, migration, and CI-enforcement architecture in [`plans/discord-boundary-reliability.md`](discord-boundary-reliability.md) after this hotfix lands.
+
 ---
 
 ### Task 1: Add a Non-Throwing Best-Effort Interaction Response Utility
