@@ -8,10 +8,10 @@ const viewGameCommand = require('../../../src/commands/view-game') as {
   execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const icCommand = require('../../../src/commands/ic') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const oocCommand = require('../../../src/commands/ooc') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 
 import { isUserInCharacterForChannel } from '../../../src/services/rp_channel_mode.service';
@@ -97,7 +97,7 @@ describe('app command flows', () => {
   test('/ic and /ooc persist the user channel roleplay mode', async () => {
     const ic = createInteraction({ userId: 'user-2', guildId: 'guild-2', channelId: 'channel-2' });
 
-    await icCommand.execute(ic.interaction);
+    await icCommand.execute(ic.interaction, ic.responderContext);
 
     await expect(isUserInCharacterForChannel('guild-2', 'channel-2', 'user-2')).resolves.toBe(true);
     expect(ic.reply).toHaveBeenCalledWith(
@@ -109,7 +109,7 @@ describe('app command flows', () => {
 
     const ooc = createInteraction({ userId: 'user-2', guildId: 'guild-2', channelId: 'channel-2' });
 
-    await oocCommand.execute(ooc.interaction);
+    await oocCommand.execute(ooc.interaction, ooc.responderContext);
 
     await expect(isUserInCharacterForChannel('guild-2', 'channel-2', 'user-2')).resolves.toBe(
       false,
