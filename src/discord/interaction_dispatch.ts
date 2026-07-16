@@ -17,11 +17,19 @@ export interface InteractionDispatchPolicy {
   acknowledgement: 'auto-defer' | 'manual';
 }
 
+export type InteractionDispatchPolicySource<I extends BaseInteraction = BaseInteraction> =
+  | InteractionDispatchPolicy
+  | ((interaction: I) => InteractionDispatchPolicy);
+
+export interface InteractionCommandContext {
+  responder: DiscordInteractionResponder;
+}
+
 export interface InteractionDispatchOptions<I extends BaseInteraction = BaseInteraction> {
   interaction: I;
   policy: InteractionDispatchPolicy;
   guard?: (interaction: I) => Promise<true | string>;
-  handler: (interaction: I) => Promise<unknown>;
+  handler: (interaction: I, responder: DiscordInteractionResponder) => Promise<unknown>;
   acknowledgementBudgetMs?: number;
 }
 
@@ -74,7 +82,7 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
       return;
     }
 
-    await options.handler(routedInteraction);
+    await options.handler(routedInteraction, responder);
     if (
       !responder.acknowledged &&
       responder.state !== 'expired' &&

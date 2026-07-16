@@ -11,6 +11,10 @@ import {
 } from '../utils/dice_roller';
 import { getCharacterById } from '../services/character.service';
 import { getCurrentCharacter } from '../services/player.service';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicySource,
+} from '../discord/interaction_dispatch';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -25,11 +29,24 @@ module.exports = {
         .setRequired(true),
     ),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: ((interaction: ChatInputCommandInteraction<CacheType>) => ({
+    mode: {
+      kind: 'reply',
+      visibility: parseRollExpression(interaction.options.getString('dice', true))
+        ? 'public'
+        : 'ephemeral',
+    },
+    acknowledgement: 'auto-defer',
+  })) satisfies InteractionDispatchPolicySource<ChatInputCommandInteraction<CacheType>>,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     const expression = interaction.options.getString('dice', true);
     const parsed = parseRollExpression(expression);
     if (!parsed) {
-      return interaction.reply({
+      return responder.respond({
         content: `⚠️ Use a roll like \`2d20\` or \`2D20\`. Supported range is \`${MIN_DICE}d${MIN_SIDES}\` through \`${MAX_DICE}d${MAX_SIDES}\`.`,
         ephemeral: true,
       });
@@ -38,7 +55,7 @@ module.exports = {
     const result = rollDice(parsed.numDice, parsed.numSides);
     const rollerName = await resolveRollerDisplayName(interaction);
 
-    return interaction.reply({
+    return responder.respond({
       content: formatRollResult(result, rollerName),
       allowedMentions: { parse: [] },
     });
