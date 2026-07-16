@@ -41,6 +41,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['editStatModal:', 'rpg:characters'], // modal
   ['setCharacterField:', 'rpg:characters'], // modal
   ['editCharacterField:', 'rpg:characters'], // modal
+  ['ic-edit-modal:', 'rpg:characters'], // modal
   ['handleToggleCharacterVisibilityButton:', 'rpg:characters'],
   ['confirmIcDelete:', 'rpg:characters'],
 
