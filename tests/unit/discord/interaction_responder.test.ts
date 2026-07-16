@@ -266,6 +266,41 @@ describe('DiscordInteractionResponder', () => {
     expect(warnSpy).toHaveBeenCalledTimes(1);
   });
 
+  test('contains an indeterminate callback failure without retrying from a business catch', async () => {
+    const interaction = replyInteraction();
+    interaction.reply.mockRejectedValueOnce(
+      Object.assign(new Error('reset'), { code: 'ECONNRESET' }),
+    );
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'reply',
+      visibility: 'ephemeral',
+    });
+
+    try {
+      await responder.respond({ content: 'success' });
+    } catch {
+      await responder.respond({ content: 'business error' });
+    }
+
+    expect(interaction.reply).toHaveBeenCalledTimes(1);
+    expect(interaction.followUp).not.toHaveBeenCalled();
+    expect(responder.state).toBe('expired');
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  test('rejects MessageFlags.Ephemeral in payload flags', async () => {
+    const interaction = replyInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'reply',
+      visibility: 'ephemeral',
+    });
+
+    await expect(responder.respond({ content: 'legacy', flags: 64 })).rejects.toBeInstanceOf(
+      InteractionResponseStateError,
+    );
+    expect(interaction.reply).not.toHaveBeenCalled();
+  });
+
   test('reconciles 40060 from Discord state without retrying the callback', async () => {
     const interaction = replyInteraction();
     interaction.reply.mockImplementationOnce(async () => {

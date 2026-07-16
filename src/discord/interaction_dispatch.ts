@@ -5,8 +5,10 @@ import { DiscordOperationTimeoutError } from './errors';
 import { interactionMetadataString, logDiscordFailure } from './logging';
 import {
   DiscordInteractionResponder,
+  InteractionCallbackError,
   InteractionResponseStateError,
   type InteractionMode,
+  type PreparedComponentUpdateTarget,
 } from './interaction_responder';
 
 export const DEFAULT_INTERACTION_ACKNOWLEDGEMENT_BUDGET_MS = 1_750;
@@ -68,6 +70,7 @@ export interface InteractionDispatchOptions<I extends BaseInteraction = BaseInte
   guard?: (interaction: I) => Promise<true | string>;
   handler: (interaction: I, responder: DiscordInteractionResponder) => Promise<unknown>;
   acknowledgementBudgetMs?: number;
+  preparedComponentUpdateTarget?: PreparedComponentUpdateTarget;
 }
 
 export class InteractionAcknowledgementDeadlineError extends DiscordOperationTimeoutError {
@@ -93,7 +96,11 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
     throw new TypeError('Interaction acknowledgement budget must be between 1ms and 2499ms.');
   }
 
-  const responder = new DiscordInteractionResponder(options.interaction, options.policy.mode);
+  const responder = new DiscordInteractionResponder(
+    options.interaction,
+    options.policy.mode,
+    options.preparedComponentUpdateTarget,
+  );
   const routedInteraction = createResponderInteraction(options.interaction, responder);
   let rejectDeadline!: (reason: InteractionAcknowledgementDeadlineError | unknown) => void;
   const deadlineFailure = new Promise<never>((_resolve, reject) => {
@@ -139,6 +146,7 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
 export async function startTrackedInteractionDispatch<I extends BaseInteraction>(
   options: InteractionDispatchOptions<I>,
 ): Promise<void> {
+  const startedAt = Date.now();
   try {
     await trackOperation(`interaction:${options.interaction.type}`, () =>
       dispatchInteractionWithDeadline(options),
@@ -153,12 +161,16 @@ export async function startTrackedInteractionDispatch<I extends BaseInteraction>
       return;
     }
 
+    // The responder already emitted classified telemetry and made the callback state terminal.
+    // A fallback here would be a blind second callback after an indeterminate outcome.
+    if (error instanceof InteractionCallbackError) return;
+
     logDiscordFailure(
       {
         operation: 'interaction.dispatch',
         error,
         attempt: 1,
-        elapsedMs: 0,
+        elapsedMs: Date.now() - startedAt,
         commandName: interactionMetadataString(options.interaction, 'commandName'),
         customId: interactionMetadataString(options.interaction, 'customId'),
       },
@@ -180,6 +192,7 @@ export async function respondBestEffort(
   context: string,
 ): Promise<void> {
   if (!interaction.isRepliable()) return;
+  const startedAt = Date.now();
 
   const responder = new DiscordInteractionResponder(interaction, {
     kind: 'reply',
@@ -192,7 +205,7 @@ export async function respondBestEffort(
       operation: `interaction.${context}`,
       error,
       attempt: 1,
-      elapsedMs: 0,
+      elapsedMs: Date.now() - startedAt,
       commandName: interactionMetadataString(interaction, 'commandName'),
       customId: interactionMetadataString(interaction, 'customId'),
     });

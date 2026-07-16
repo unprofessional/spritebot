@@ -58,7 +58,7 @@ describe('edit stat selector prepared-modal boundary', () => {
 
     expect(policy).toBe(interactionPolicy);
     expect(policy).toEqual({
-      mode: { kind: 'modal-or-reply', visibility: 'ephemeral' },
+      mode: { kind: 'modal-or-component-update' },
       acknowledgement: 'auto-defer',
       authorization: 'modal-submit',
     });
@@ -95,12 +95,12 @@ describe('edit stat selector prepared-modal boundary', () => {
       await Promise.resolve();
       await jest.advanceTimersByTimeAsync(10);
 
-      expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+      expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
       resolveTemplates([field]);
       await dispatch;
 
       expect(interaction.showModal).not.toHaveBeenCalled();
-      const preparedPayload = (interaction.editReply as jest.Mock).mock.calls[0][0];
+      const preparedPayload = (interaction.followUp as jest.Mock).mock.calls[0][0];
       expect(preparedPayload.content).toBe(
         'Discord needed a moment. Select **Open editor** to continue where you left off.',
       );
@@ -116,7 +116,13 @@ describe('edit stat selector prepared-modal boundary', () => {
       expect(getButtonInteractionPolicy(customId)).toBe(preparedModalInteractionPolicy);
       await handleButton(activation as never, activationResponder);
 
-      expectEditModal(activation.showModal as jest.Mock);
+      expect(activation.showModal).toHaveBeenCalledTimes(1);
+      expect((activation.showModal as jest.Mock).mock.calls[0][0].toJSON()).toEqual(
+        expect.objectContaining({
+          custom_id: expect.stringMatching(/^preparedSubmit:/),
+          title: 'Edit Field: Hit Points',
+        }),
+      );
     } finally {
       jest.useRealTimers();
     }

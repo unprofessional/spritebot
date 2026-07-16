@@ -117,6 +117,36 @@ describe('Discord interaction failure contracts', () => {
     });
   });
 
+  test('contains an ambiguous callback failure when a business catch attempts an error response', async () => {
+    await expectNoUnhandledRejection(async () => {
+      const interaction = replyInteraction();
+      interaction.reply.mockRejectedValueOnce(
+        Object.assign(new Error('connection reset'), { code: 'ECONNRESET' }),
+      );
+
+      await expect(
+        startTrackedInteractionDispatch({
+          interaction: interaction as never,
+          policy: replyPolicy(),
+          handler: async (routed) => {
+            try {
+              await (routed as typeof interaction).reply({ content: 'success', ephemeral: true });
+            } catch {
+              await (routed as typeof interaction).reply({
+                content: 'business error',
+                ephemeral: true,
+              });
+            }
+          },
+        }),
+      ).resolves.toBeUndefined();
+
+      expect(interaction.reply).toHaveBeenCalledTimes(1);
+      expect(interaction.editReply).not.toHaveBeenCalled();
+      expect(interaction.followUp).not.toHaveBeenCalled();
+    });
+  });
+
   test('reconciles concurrent 40060 acknowledgements and performs one callback per state', async () => {
     await expectNoUnhandledRejection(async () => {
       const interaction = replyInteraction();

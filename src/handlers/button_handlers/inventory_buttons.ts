@@ -12,7 +12,7 @@ import {
 
 import { build as buildInventoryCard } from '../../components/view_inventory_card';
 import {
-  gatedPreparedModalInteractionPolicy,
+  gatedPreparedComponentModalInteractionPolicy,
   type InteractionDispatchPolicy,
 } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
@@ -26,7 +26,7 @@ import {
 } from '../../services/inventory.service';
 import { buildEditModal } from '../select_menu_handlers/inventory_item_select';
 
-export const interactionPolicy = gatedPreparedModalInteractionPolicy;
+export const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
 const componentUpdateInteractionPolicy = {
   mode: { kind: 'component-update' },
   acknowledgement: 'auto-defer',

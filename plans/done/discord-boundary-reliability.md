@@ -812,7 +812,12 @@ git commit -m "Test Discord boundary failure contracts"
 
 **Files:**
 
-- Modify only existing operational documentation if deployment reveals a missing verified step.
+- `src/discord/interaction_responder.ts`
+- `src/discord/logging.ts`
+- `src/discord/prepared_modal.ts`
+- interaction routing/policies required to preserve prepared-modal update targets
+- focused unit/integration tests for callback containment, telemetry, and slow modal submission
+- existing operational documentation when verification reveals a missing step
 
 **Step 1: Complete all quality gates**
 
@@ -827,9 +832,22 @@ git diff --check
 
 All must exit 0.
 
-**Step 2: Deploy in phases**
+**Step 2: Perform one controlled deployment**
 
-Do not deploy the full migration as one unreviewed change. Deploy after each subsystem phase and observe at least one normal operating window before continuing.
+The subsystem phases were implemented and reviewed independently on `develop`. Promote the complete
+boundary to `master` as one internally consistent deployment rather than recreating partially
+migrated production states. Before promotion:
+
+- confirm the interaction acknowledgement telemetry in Step 3 is present;
+- record the current container restart count and recent `10062`, `40060`, timeout, rate-limit, and
+  transient-network counts as the comparison baseline;
+- confirm the previous production image remains available for immediate rollback; and
+- assign an operator to run the representative flows in Step 4 immediately after deployment.
+
+Rollback if a boundary-related unhandled rejection occurs, interaction failures increase
+materially, visibility changes, duplicate callbacks/messages are observed, or representative flows
+cannot be completed. Otherwise, observe one normal operating window before declaring the migration
+complete.
 
 **Step 3: Verify safe telemetry**
 
