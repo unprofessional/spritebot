@@ -8,6 +8,10 @@ import {
 } from 'discord.js';
 
 import { PlayerDAO } from '../dao/player.dao';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 import {
   formatMissingTranscriptionPermissions,
   getMissingTranscriptionPermissions,
@@ -53,16 +57,24 @@ module.exports = {
       sub.setName('status').setDescription('Show the active transcription session.'),
     ),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     if (!interaction.guild) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
     }
 
     if (!(await isServerGm(interaction.user.id, interaction.guild.id))) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ Only a GM can manage transcription sessions.',
         ephemeral: true,
       });
@@ -134,13 +146,13 @@ module.exports = {
 
     const status = voiceManager.status(interaction.guild.id);
     if (!status) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ No transcription session is active.',
         ephemeral: true,
       });
     }
 
-    return interaction.reply({
+    return responder.respond({
       content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}.`,
       ephemeral: true,
     });
