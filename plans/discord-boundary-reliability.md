@@ -698,6 +698,10 @@ Run focused tests plus full quality gates after each subsystem.
 
 **Objective:** Prevent new direct Discord contract/API calls from bypassing the wrapper.
 
+**Complete.** The last proxy-intercepted callbacks now use the responder, the audit reports zero,
+the local rule is an error with only `src/discord/**` allowlisted, and GitHub/Jenkins run the
+dedicated enforcement check. Task 10 fault-injection coverage is next.
+
 **Files:**
 
 - Modify: `eslint-rules/discord-boundary.cjs`
