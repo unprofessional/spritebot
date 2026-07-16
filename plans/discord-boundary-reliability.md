@@ -65,6 +65,18 @@ Tests mirror this structure under `tests/unit/discord/`. Integration/contract te
 
 Only files under `src/discord/` and a short explicit bootstrap allowlist may directly call controlled Discord boundary methods after migration.
 
+## Agreed Delivery Grouping
+
+The task numbers describe implementation order, not one PR per task. Use these review units:
+
+1. **Inventory/enforcement scaffold:** Task 1 introduces the repository-local ESLint rule in warning/report mode and records the migration matrix.
+2. **Boundary foundation PR:** Tasks 2 and 3 ship together (classification/redaction plus the operation executor) because neither is useful alone.
+3. **Interaction dispatcher PR:** Tasks 4 and 5 ship together (responder state machine plus deadline-aware dispatch) and migrate one representative command/component vertical slice so production wiring is exercised immediately.
+4. **Migration PRs:** Tasks 6-8 proceed in small subsystem batches. Adjacent command/component batches may share a PR when the diff remains reviewable, but modal-opening routes stay isolated because they often require control-flow redesign.
+5. **Enforcement/fault coverage:** Tasks 9 and 10 may share a PR after the migration reaches zero unexplained violations.
+
+This keeps the dependency order while avoiding four review round-trips before the first production call site uses the boundary.
+
 ---
 
 ### Task 1: Record the Discord Call-Site Inventory and Migration Matrix
@@ -74,13 +86,15 @@ Only files under `src/discord/` and a short explicit bootstrap allowlist may dir
 **Files:**
 
 - Create: `docs/discord-boundary-inventory.md`
-- Create: `scripts/audit-discord-boundary.cjs`
+- Create: `eslint-rules/discord-boundary.cjs`
+- Create: `scripts/report-discord-boundary.cjs`
+- Modify: `eslint.config.js`
 - Modify: `package.json`
-- Test: `tests/unit/scripts/audit-discord-boundary.test.ts`
+- Test: `tests/unit/eslint-rules/discord-boundary.test.ts`
 
-**Step 1: Write the failing audit-script test**
+**Step 1: Write the failing ESLint-rule test**
 
-Use a temporary fixture tree and assert that the script detects and classifies:
+Use a temporary fixture tree and assert that the rule detects and classifies:
 
 - Interaction contract methods: `reply`, `deferReply`, `editReply`, `followUp`, `showModal`, `update`, and `deferUpdate`.
 - Raw HTTP calls to `discord.com/api`.
@@ -88,25 +102,25 @@ Use a temporary fixture tree and assert that the script detects and classifies:
 - SDK reads/writes such as channel/message/member fetches, message sends/edits/deletes, webhook sends, and thread/channel changes.
 - An allowlisted boundary file without reporting it as a violation.
 
-The script must use the TypeScript compiler API or another syntax-aware parser already available through project dependencies. Do not use a regex-only checker that confuses arbitrary domain methods named `send`, `edit`, or `fetch` with Discord operations.
+Implement one focused repository-local ESLint rule using the parser already configured by `eslint.config.js`. The rule must inspect imports, receiver provenance, and member-call AST nodes; do not use regex-only matching that confuses arbitrary domain methods named `send`, `edit`, or `fetch` with Discord operations. The same rule powers both migration inventory and the final CI gate so Task 9 hardens configuration rather than replacing Task 1 tooling.
 
 **Step 2: Run RED**
 
 ```bash
-npm test -- --runTestsByPath tests/unit/scripts/audit-discord-boundary.test.ts
+npm test -- --runTestsByPath tests/unit/eslint-rules/discord-boundary.test.ts
 ```
 
-Expected: FAIL because the audit script does not exist.
+Expected: FAIL because the local ESLint rule does not exist.
 
 **Step 3: Implement report mode**
 
 Add:
 
 ```json
-"audit:discord-boundary": "node scripts/audit-discord-boundary.cjs --report"
+"audit:discord-boundary": "node scripts/report-discord-boundary.cjs"
 ```
 
-Report file, line, operation family, method, and migration status. Report mode exits 0 while inventory work is underway.
+Configure the local rule as a warning during migration. The report script invokes ESLint through its Node API, extracts only this rule's findings, and prints file, line, operation family, method, and migration status. Report mode exits 0 while boundary warnings remain, but must preserve a nonzero exit for parser failures or unrelated ESLint errors; ordinary lint failures must still fail `npm run lint`.
 
 **Step 4: Generate and review the inventory**
 
@@ -138,9 +152,9 @@ Do not rely only on this initial list; the generated inventory is authoritative.
 **Step 5: Run GREEN and commit**
 
 ```bash
-npm test -- --runTestsByPath tests/unit/scripts/audit-discord-boundary.test.ts
+npm test -- --runTestsByPath tests/unit/eslint-rules/discord-boundary.test.ts
 npm run audit:discord-boundary
-git add docs/discord-boundary-inventory.md scripts/audit-discord-boundary.cjs package.json tests/unit/scripts/audit-discord-boundary.test.ts
+git add docs/discord-boundary-inventory.md eslint-rules/discord-boundary.cjs scripts/report-discord-boundary.cjs eslint.config.js package.json tests/unit/eslint-rules/discord-boundary.test.ts
 git commit -m "Inventory Discord boundary call sites"
 ```
 
@@ -149,6 +163,8 @@ git commit -m "Inventory Discord boundary call sites"
 ### Task 2: Define Typed Discord Error Classification and Redaction
 
 **Objective:** Convert discord.js/raw HTTP failures into safe, actionable categories without leaking credentials.
+
+**Delivery:** Implement and review Tasks 2 and 3 together as the boundary foundation PR. Keep their TDD steps and commits distinct inside that PR.
 
 **Files:**
 
@@ -175,7 +191,7 @@ Cover:
 Construct an error containing:
 
 - `https://discord.com/api/v10/interactions/<id>/<token>/callback`
-- `Authorization: Bot secret`
+- `Authorization: Bot sample-secret-token`
 - a webhook URL/token
 - nested `requestBody` and `rawError`
 
@@ -226,6 +242,8 @@ git commit -m "Classify and redact Discord failures"
 ### Task 3: Build the Bounded Discord Operation Executor
 
 **Objective:** Provide one executor for outbound Discord work with explicit deadlines, cancellation, retry safety, backoff, and telemetry.
+
+**Delivery:** This completes the boundary foundation PR started in Task 2; do not open a second review round-trip for the executor alone.
 
 **Files:**
 
@@ -308,6 +326,8 @@ git commit -m "Add bounded Discord operation executor"
 
 **Objective:** Make acknowledgement and subsequent response method selection deterministic and testable.
 
+**Delivery:** Implement and review Tasks 4 and 5 together as the interaction dispatcher PR. Keep their TDD steps and commits distinct, and include one representative production command/component migration in Task 5.
+
 **Files:**
 
 - Create: `src/discord/interaction_responder.ts`
@@ -373,6 +393,8 @@ git commit -m "Add Discord interaction response state machine"
 ### Task 5: Add Deadline-Aware Interaction Dispatch
 
 **Objective:** Ensure potentially slow interaction paths acknowledge before Discord's deadline while preserving modal-first paths.
+
+**Delivery:** This completes the interaction dispatcher PR started in Task 4. The PR is not complete until at least one real command/component path runs through the responder and dispatcher integration tests.
 
 **Files:**
 
@@ -504,6 +526,14 @@ Every component route must be one of:
 
 Mixed routes must choose their contract synchronously before database/network work.
 
+**Known modal migration friction:** Inventory every modal-opening route for asynchronous database/API work performed before `showModal()`. These routes cannot be migrated mechanically because Discord does not allow a prior defer followed by `showModal()`. Restructure each affected route using one of these reviewed patterns:
+
+1. Fetch the required values while building the earlier message/component and carry only a safe opaque lookup key into the modal-opening interaction.
+2. Add an intermediate loading/setup interaction that performs the I/O, then renders a new button whose next click can show the modal synchronously.
+3. Show a minimal modal immediately and perform authoritative lookup/validation on modal submission when prefilled values are not required.
+
+Do not encode secrets or oversized state in `customId`, and do not use stale prefetched data without revalidation on submission. Record the selected restructuring pattern for each affected route in `docs/discord-boundary-inventory.md`.
+
 **Step 2: Add modal safety tests**
 
 Prove that `showModal()` is the first and only initial acknowledgement. A responder must reject an attempt to show a modal after deferral locally before sending another Discord call.
@@ -536,16 +566,22 @@ Keep modal routes separate from ordinary component-update routes to simplify rev
 
 Wrap `fetchGuildEntitlementsLazy()` with:
 
-- an explicit total timeout;
+- an explicit two-second total budget for the interactive authorization path after the dispatcher has deferred the interaction;
 - `AbortSignal` cancellation for raw `fetch`;
-- `safe-read` retry policy with bounded attempts/budget;
+- `safe-read` retry policy whose attempts and backoff fit inside that same two-second total budget;
 - typed failure results so authorization can distinguish timeout/transient failure from a confirmed empty entitlement set.
 
-Never convert a timeout into "no subscription." Preserve stale-good cache data where current semantics allow it, and surface indeterminate authorization explicitly if no trustworthy cached result exists.
+Check local gifted access and trustworthy cached entitlements before the remote request. Never convert a timeout into "no subscription." Preserve stale-good cache data where current semantics allow it. If no trustworthy local result exists and Discord times out or fails transiently, return a distinct `AUTHORIZATION_UNAVAILABLE` outcome, fail closed for the requested action without changing state, and edit the deferred ephemeral reply to exactly:
+
+```text
+I couldn’t verify this server’s access with Discord right now. Nothing was changed. Please try again in a moment.
+```
+
+Do not show the subscription-upgrade message for this outcome, and never leave the deferred reply hanging.
 
 **Step 2: Test entitlement timeout semantics**
 
-Cover fast success, timeout, transient retry, permanent `401/403`, rate limit, stale-cache fallback, and no false empty result.
+Cover fast success, timeout, transient retry within the two-second total budget, permanent `401/403`, rate limit, stale-cache fallback, no false empty result, the exact `AUTHORIZATION_UNAVAILABLE` user copy, no upgrade CTA, and no hanging deferred reply.
 
 **Step 3: Inventory each remaining operation's policy**
 
@@ -588,24 +624,26 @@ Run focused tests plus full quality gates after each subsystem.
 
 **Files:**
 
-- Modify: `scripts/audit-discord-boundary.cjs`
+- Modify: `eslint-rules/discord-boundary.cjs`
+- Modify: `scripts/report-discord-boundary.cjs`
+- Modify: `eslint.config.js`
 - Modify: `package.json`
 - Modify: `.github/workflows/pr-checks.yml`
 - Modify: `Jenkinsfile`
-- Modify: `tests/unit/scripts/audit-discord-boundary.test.ts`
+- Modify: `tests/unit/eslint-rules/discord-boundary.test.ts`
 - Update: `docs/discord-boundary-inventory.md`
 
 **Step 1: Add failing enforcement tests**
 
-Assert `--check` exits nonzero for a new forbidden direct call and prints an actionable file/line/method message. Assert allowlisted boundary/bootstrap files pass.
+Assert the rule reports a new forbidden direct call with actionable file/line/method metadata. Assert allowlisted boundary/bootstrap files pass and unrelated domain methods with the same names do not produce false positives.
 
 **Step 2: Add check mode**
 
 ```json
-"check:discord-boundary": "node scripts/audit-discord-boundary.cjs --check"
+"check:discord-boundary": "eslint src --quiet"
 ```
 
-The allowlist must be short and documented. Do not allow entire commands/components/handlers directories.
+Promote the existing local rule from warning to error in `eslint.config.js`; do not build a second checker. The allowlist must be short and documented in rule options. Do not allow entire commands/components/handlers directories.
 
 **Step 3: Reach zero migration violations**
 
@@ -625,7 +663,7 @@ Add `npm run check:discord-boundary` to GitHub PR checks and Jenkins before buil
 **Step 5: Commit**
 
 ```bash
-git add scripts/audit-discord-boundary.cjs package.json .github/workflows/pr-checks.yml Jenkinsfile tests/unit/scripts/audit-discord-boundary.test.ts docs/discord-boundary-inventory.md
+git add eslint-rules/discord-boundary.cjs scripts/report-discord-boundary.cjs eslint.config.js package.json .github/workflows/pr-checks.yml Jenkinsfile tests/unit/eslint-rules/discord-boundary.test.ts docs/discord-boundary-inventory.md
 git commit -m "Enforce Discord boundary usage in CI"
 ```
 
@@ -762,6 +800,7 @@ Any `10062` should be a contained, redacted event. Any boundary-related unhandle
 - Retries occur only for explicitly safe operations within bounded attempt and elapsed budgets.
 - discord.js remains the owner of Discord rate-limit bucket scheduling.
 - Slow/failed entitlement reads are not misrepresented as confirmed empty entitlements.
+- An indeterminate entitlement check completes the deferred ephemeral response with the specified retry-later copy, makes no state change, and never shows an upgrade CTA.
 - The CI boundary check blocks new bypasses.
 - Full lint, test, boundary check, and build pass.
 - Production verification shows no duplicate sends, interaction-state regressions, or boundary-caused container restarts.
@@ -771,11 +810,11 @@ Any `10062` should be a contained, redacted event. Any boundary-related unhandle
 Implement as reviewable phases rather than a monolith:
 
 1. Inventory/audit tooling.
-2. Error classification, redaction, and operation executor.
-3. Interaction responder and dispatcher.
+2. Boundary foundation: error classification, redaction, and operation executor (Tasks 2+3).
+3. Interaction responder and dispatcher plus one production vertical slice (Tasks 4+5).
 4. Command migration batches.
-5. Component/modal migration batches.
+5. Component/modal migration batches; small adjacent command/component batches may share a PR, but modal restructures remain isolated.
 6. Non-interaction Discord operation migration batches.
-7. CI enforcement and fault-injection suite.
+7. ESLint enforcement and fault-injection suite (Tasks 9+10 may share a PR).
 
 Each PR must update `docs/discord-boundary-inventory.md`, include focused RED/GREEN evidence, and pass existing repository quality gates.
