@@ -13,8 +13,14 @@ import { getCurrentCharacter, getOrCreatePlayer, setCurrentGame } from '../servi
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { validateGameAccess } from '../utils/validate_game_access';
 import type { Game } from '../types/game';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 export const id = 'switchGameDropdown';
+export const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 interface BuildResponse {
   content: string;
@@ -78,12 +84,15 @@ export async function build(userId: string, guildId: string): Promise<BuildRespo
 /**
  * Handles selection from the switchGameDropdown
  */
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { user, guildId, values } = interaction;
   const selected = values?.[0];
 
   if (!guildId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ This action must be used in a server.',
       ephemeral: true,
     });
@@ -91,7 +100,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   }
 
   if (!selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No game selected.',
       ephemeral: true,
     });
@@ -117,13 +126,13 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
       'switch-game',
     );
 
-    await interaction.update({
+    await responder.respond({
       content: appendNudge(`✅ You have switched to the selected game.`, nudge),
       components: [],
     });
   } catch (err) {
     console.error('Error switching game:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to switch game.',
       ephemeral: true,
     });

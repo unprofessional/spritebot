@@ -7,8 +7,14 @@ import { getCharactersByUser } from '../services/character.service';
 import { getOrCreatePlayer, setCurrentGame } from '../services/player.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { Game } from '../types/game'; // Adjust the import path/type name as needed
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 export const id = 'joinGameDropdown';
+export const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 /**
  * Builds the joinable game dropdown for public games
@@ -65,12 +71,15 @@ export async function build(
 /**
  * Handles game selection from joinGameDropdown
  */
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { user, guildId, values } = interaction;
   const selected = values?.[0];
 
   if (!guildId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ This action must be used in a server.',
       ephemeral: true,
     });
@@ -78,7 +87,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   }
 
   if (!selected) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No game selected.',
       ephemeral: true,
     });
@@ -99,13 +108,13 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
       'join-game',
     );
 
-    await interaction.update({
+    await responder.respond({
       content: appendNudge(`✅ You have joined the selected game.`, nudge),
       components: [],
     });
   } catch (err) {
     console.error('Error joining game:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to join the selected game.',
       ephemeral: true,
     });
