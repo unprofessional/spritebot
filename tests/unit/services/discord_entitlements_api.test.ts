@@ -39,7 +39,7 @@ describe('Discord entitlement API boundary', () => {
 
     expect(entitlementReadPolicy).toEqual({
       operation: 'entitlements.fetch-guild',
-      timeoutMs: 900,
+      timeoutMs: 800,
       totalBudgetMs: 2_000,
       retry: 'safe-read',
       maxAttempts: 2,

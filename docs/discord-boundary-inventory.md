@@ -175,8 +175,8 @@ button action, the delete-stat selector, and all modal submissions. Component an
 routers now return a policy for every route, and the modal router chooses a message-update or
 ephemeral-reply contract before dispatch. Task 7 is complete.
 
-The first Task 8 batch routes the raw entitlement `GET` through the operation executor with a
-900ms attempt timeout, a two-second total budget, at most two safe-read attempts, and
+The first Task 8 batch routes the raw entitlement `GET` through the operation executor with an
+800ms attempt timeout, a two-second total budget, at most two safe-read attempts, and
 `AbortSignal` cancellation. Gifted and active cached access still resolve before the remote call.
 Remote timeout, transient, rate-limit, authentication, malformed-response, and other failures are
 typed as authorization unavailable rather than treated as a confirmed empty entitlement set. The
