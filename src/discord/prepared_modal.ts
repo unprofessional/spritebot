@@ -55,7 +55,7 @@ export async function presentPreparedModal({
   );
 
   await responder.respond({
-    content: 'Your editor is ready. Select **Open editor** to continue.',
+    content: 'Discord needed a moment. Select **Open editor** to continue where you left off.',
     components: [row],
     ephemeral: true,
   });

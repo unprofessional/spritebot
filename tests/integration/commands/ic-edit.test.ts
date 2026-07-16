@@ -118,7 +118,9 @@ describe('IC message editing commands', () => {
 
       expect(interaction.showModal).not.toHaveBeenCalled();
       const preparedPayload = interaction.editReply.mock.calls[0][0];
-      expect(preparedPayload.content).toContain('editor is ready');
+      expect(preparedPayload.content).toBe(
+        'Discord needed a moment. Select **Open editor** to continue where you left off.',
+      );
       const customId = preparedPayload.components[0].toJSON().components[0].custom_id;
       expect(customId).toMatch(/^preparedModal:/);
 
