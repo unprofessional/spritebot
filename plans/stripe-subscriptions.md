@@ -1,6 +1,6 @@
 # SPRITEbot Stripe Subscription Integration — Implementation Plan
 
-> **Status:** Planning
+> **Status:** Superseded by `discord-premium-apps.md`
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14, Docker on shinralabs)
 > **Decision:** Stripe-only billing (no Discord App Subscriptions). Full control over payments, refunds, and disputes.
 

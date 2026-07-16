@@ -4,6 +4,7 @@ const pluginTs = require('@typescript-eslint/eslint-plugin');
 const importPlugin = require('eslint-plugin-import');
 const jsdocPlugin = require('eslint-plugin-jsdoc');
 const prettierConfig = require('eslint-config-prettier');
+const discordBoundaryRule = require('./eslint-rules/discord-boundary.cjs');
 
 /** @type {import("eslint").Linter.FlatConfig[]} */
 module.exports = [
@@ -25,6 +26,11 @@ module.exports = [
       '@typescript-eslint': pluginTs,
       import: importPlugin,
       jsdoc: jsdocPlugin,
+      local: {
+        rules: {
+          'discord-boundary': discordBoundaryRule,
+        },
+      },
     },
     rules: {
       // TS + Prettier
@@ -40,6 +46,15 @@ module.exports = [
       '@typescript-eslint/no-unsafe-assignment': 'off',
 
       '@typescript-eslint/no-require-imports': 'off', // 👈 Allow CommonJS `require()`
+
+      // Repository-local Discord boundary implementation. No bootstrap or feature-directory
+      // exemptions are currently required; keep any future exemption narrow, owned, and expiring.
+      'local/discord-boundary': [
+        'error',
+        {
+          allowlist: ['src/discord/**'],
+        },
+      ],
 
       // JSDoc
       'jsdoc/check-param-names': 'warn',

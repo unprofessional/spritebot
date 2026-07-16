@@ -8,8 +8,13 @@ import {
   StringSelectMenuInteraction,
 } from 'discord.js';
 
+import { gatedPreparedComponentModalInteractionPolicy } from '../../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
+import { presentPreparedModal } from '../../discord/prepared_modal';
 import { getCharacterWithStats } from '../../services/character.service';
 import type { CharacterWithStats, CharacterStatWithLabel } from '../../types/character';
+
+export const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
 
 /**
  * Truncates a string to a maximum length with ellipsis if needed.
@@ -21,14 +26,17 @@ function truncate(str: string, max = 45): string {
 /**
  * Shows stat or core field edit modal after user selects from dropdown.
  */
-export async function handle(interaction: StringSelectMenuInteraction): Promise<void> {
+export async function handle(
+  interaction: StringSelectMenuInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId, values } = interaction;
   const [, characterId] = customId.split(':');
   const selectedKey = values?.[0];
 
   if (!selectedKey) {
     console.warn('[editStatSelect] No value received from select menu.');
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No stat selected.',
       ephemeral: true,
     });
@@ -38,7 +46,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
   const character = await getCharacterWithStats(characterId);
 
   if (!character) {
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Character not found.',
       ephemeral: true,
     });
@@ -67,7 +75,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
         ),
       );
 
-    await interaction.showModal(modal);
+    await presentPreparedModal({ modal, responder, userId: interaction.user.id });
     return;
   }
 
@@ -78,7 +86,7 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
 
   if (!stat) {
     console.warn('[editStatSelect] Could not find stat for:', selectedKey);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Could not find that stat field.',
       ephemeral: true,
     });
@@ -132,5 +140,5 @@ export async function handle(interaction: StringSelectMenuInteraction): Promise<
     );
   }
 
-  await interaction.showModal(modal);
+  await presentPreparedModal({ modal, responder, userId: interaction.user.id });
 }

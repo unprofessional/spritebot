@@ -3,9 +3,15 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
 import { getCharactersByGame } from '../services/character.service';
 import { getCurrentGame } from '../services/player.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { rebuildListCharactersResponse } from './rebuild_list_characters_response';
 
 const id = 'charPage';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 /**
  * Builds pagination buttons for character list.
@@ -37,7 +43,10 @@ function build(page: number, hasPrev: boolean, hasNext: boolean): ActionRowBuild
 /**
  * Handles button press for next/prev page in public character list.
  */
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   try {
     const [prefix, direction, rawPage] = interaction.customId.split(':');
     if (prefix !== id) return;
@@ -47,7 +56,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
     const gameId = await getCurrentGame(userId, guildId);
 
     if (!gameId) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ You are not in an active game.',
         ephemeral: true,
       });
@@ -74,14 +83,14 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
       guildId,
     );
 
-    await interaction.update({ content, components });
+    await responder.respond({ content, components });
   } catch (err) {
     console.error('[BUTTON ERROR] character_page_buttons:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to change page.',
       ephemeral: true,
     });
   }
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };

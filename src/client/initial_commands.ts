@@ -11,17 +11,17 @@ import {
   ContextMenuCommandBuilder,
   Events,
   MessageContextMenuCommandInteraction,
-  REST,
-  Routes,
+  type REST,
   type SlashCommandBuilder,
 } from 'discord.js';
 import type { RESTPostAPIApplicationCommandsJSONBody } from 'discord-api-types/v10';
 import dotenv = require('dotenv');
 dotenv.config();
 
-import { handleButton } from '../handlers/button_handlers';
-import { handleModal } from '../handlers/modal_handlers';
-import { handleSelectMenu } from '../handlers/select_menu_handlers';
+import { getButtonInteractionPolicy, handleButton } from '../handlers/button_handlers';
+import { getModalInteractionPolicy, handleModal } from '../handlers/modal_handlers';
+import { resolvePreparedModalSubmission } from '../discord/prepared_modal';
+import { getSelectMenuInteractionPolicy, handleSelectMenu } from '../handlers/select_menu_handlers';
 import { guardCommand, guardComponent } from '../access/guards';
 import { supportGuildId } from '../config/env_config';
 import {
@@ -30,7 +30,20 @@ import {
   isDraining,
   trackOperation,
 } from '../runtime/lifecycle';
-import { bestEffortInteractionResponse } from './interaction_responses';
+import {
+  respondBestEffort,
+  startTrackedInteractionDispatch,
+  type InteractionCommandContext,
+  type InteractionDispatchPolicy,
+  type InteractionDispatchPolicySource,
+} from '../discord/interaction_dispatch';
+import { logDiscordFailure } from '../discord/logging';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import {
+  applicationCommandsRoute,
+  createDiscordRestClient,
+  executeDiscordSdkMethod,
+} from '../discord/sdk_operations';
 
 const { DISCORD_CLIENT_ID, DISCORD_BOT_TOKEN } = process.env;
 // Allow override via env; default to the provided ops guild id
@@ -42,12 +55,32 @@ const commandDir = isProd
   ? path.resolve(__dirname, '../commands') // dist/commands
   : path.resolve(__dirname, '../commands'); // src/commands
 const requireCommand = createRequire(__filename);
+const commandRegistrationPolicy = defineDiscordOperationPolicy({
+  operation: 'commands.register',
+  timeoutMs: 10_000,
+  totalBudgetMs: 25_000,
+  retry: 'idempotent-write',
+  maxAttempts: 2,
+});
+const presencePolicy = defineDiscordOperationPolicy({
+  operation: 'client.set-presence',
+  timeoutMs: 5_000,
+  totalBudgetMs: 5_000,
+});
+const defaultCommandInteractionPolicy: InteractionDispatchPolicy = {
+  mode: { kind: 'reply', visibility: 'ephemeral' },
+  acknowledgement: 'auto-defer',
+};
 
 // --- Types ---
 type CommandModule = {
   data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  interactionPolicy?: InteractionDispatchPolicySource<
+    ChatInputCommandInteraction | MessageContextMenuCommandInteraction
+  >;
   execute: (
     interaction: ChatInputCommandInteraction | MessageContextMenuCommandInteraction,
+    context?: InteractionCommandContext,
   ) => Promise<unknown>;
 };
 
@@ -91,7 +124,13 @@ async function loadCommands(files: string[]): Promise<CommandModule[]> {
 
 async function registerGlobalCommands(rest: REST, cmds: CommandModule[]) {
   const payload: RESTPostAPIApplicationCommandsJSONBody[] = cmds.map((c) => c.data.toJSON());
-  await rest.put(Routes.applicationCommands(DISCORD_CLIENT_ID!), { body: payload });
+  await executeDiscordSdkMethod(
+    commandRegistrationPolicy,
+    rest,
+    'put',
+    applicationCommandsRoute(DISCORD_CLIENT_ID!),
+    { body: payload },
+  );
   console.log(`🛰️  Registered ${payload.length} global command(s)`);
 }
 
@@ -101,9 +140,13 @@ async function registerOpsCommands(rest: REST, opsCmds: CommandModule[]) {
     return;
   }
   const payload: RESTPostAPIApplicationCommandsJSONBody[] = opsCmds.map((c) => c.data.toJSON());
-  await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, DEV_GUILD_ID), {
-    body: payload,
-  });
+  await executeDiscordSdkMethod(
+    commandRegistrationPolicy,
+    rest,
+    'put',
+    applicationCommandsRoute(DISCORD_CLIENT_ID!, DEV_GUILD_ID),
+    { body: payload },
+  );
   console.log(`🛰️  Registered ${payload.length} ops-only command(s) in guild ${DEV_GUILD_ID}`);
 }
 
@@ -114,9 +157,13 @@ async function registerSupportCommands(rest: REST, supportCmds: CommandModule[])
   }
 
   const payload: RESTPostAPIApplicationCommandsJSONBody[] = supportCmds.map((c) => c.data.toJSON());
-  await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, supportGuildId), {
-    body: payload,
-  });
+  await executeDiscordSdkMethod(
+    commandRegistrationPolicy,
+    rest,
+    'put',
+    applicationCommandsRoute(DISCORD_CLIENT_ID!, supportGuildId),
+    { body: payload },
+  );
   console.log(`🛰️  Registered ${payload.length} support command(s) in guild ${supportGuildId}`);
 }
 
@@ -134,9 +181,13 @@ async function registerScopedCommands(
     const payload: RESTPostAPIApplicationCommandsJSONBody[] = [...scopedCommands.values()].map(
       (c) => c.data.toJSON(),
     );
-    await rest.put(Routes.applicationGuildCommands(DISCORD_CLIENT_ID!, DEV_GUILD_ID), {
-      body: payload,
-    });
+    await executeDiscordSdkMethod(
+      commandRegistrationPolicy,
+      rest,
+      'put',
+      applicationCommandsRoute(DISCORD_CLIENT_ID!, DEV_GUILD_ID),
+      { body: payload },
+    );
     console.log(
       `🛰️  Registered ${payload.length} scoped command(s) in shared ops/support guild ${DEV_GUILD_ID}`,
     );
@@ -152,7 +203,7 @@ const safeFallback = async (interaction: BaseInteraction) => {
     content: 'There was an error while executing this action.',
     ephemeral: true as const,
   };
-  await bestEffortInteractionResponse(interaction, reply, 'error-fallback');
+  await respondBestEffort(interaction, reply, 'error-fallback');
 };
 
 const drainFallback = async (interaction: BaseInteraction) => {
@@ -160,53 +211,25 @@ const drainFallback = async (interaction: BaseInteraction) => {
     content: DRAINING_REPLY,
     ephemeral: true as const,
   };
-  await bestEffortInteractionResponse(interaction, reply, 'drain-fallback');
+  await respondBestEffort(interaction, reply, 'drain-fallback');
 };
-
-type ErrorMetadata = {
-  name: string;
-  message: string;
-  code: string;
-  status: string;
-};
-
-function metadataValue(value: unknown): string {
-  return typeof value === 'string' || typeof value === 'number' ? String(value) : 'unknown';
-}
-
-function errorMetadata(error: unknown): ErrorMetadata {
-  if (!(error instanceof Error)) {
-    return { name: 'unknown', message: 'unknown', code: 'unknown', status: 'unknown' };
-  }
-
-  const discordError = error as Error & { code?: unknown; status?: unknown };
-  return {
-    name: error.name || 'Error',
-    message: error.message || 'unknown',
-    code: metadataValue(discordError.code),
-    status: metadataValue(discordError.status),
-  };
-}
-
-function interactionMetadata(interaction: BaseInteraction): string {
-  const metadata = interaction as BaseInteraction & {
-    commandName?: unknown;
-    customId?: unknown;
-  };
-  const command = metadataValue(metadata.commandName);
-  const customId = metadataValue(metadata.customId);
-  return `type=${interaction.type} command=${command} customId=${customId}`;
-}
 
 function logInteractionFailure(
   context: 'interaction-error' | 'terminal',
   interaction: BaseInteraction,
   error: unknown,
 ): void {
-  const metadata = errorMetadata(error);
-  console.error(
-    `[interaction] ${context} ${interactionMetadata(interaction)} name=${metadata.name} ` +
-      `message=${metadata.message} code=${metadata.code} status=${metadata.status}`,
+  const metadata = interaction as BaseInteraction & { commandName?: string; customId?: string };
+  logDiscordFailure(
+    {
+      operation: `interaction.${context}`,
+      error,
+      attempt: 1,
+      elapsedMs: 0,
+      commandName: metadata.commandName,
+      customId: metadata.customId,
+    },
+    console.error,
   );
 }
 
@@ -216,46 +239,66 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
     return;
   }
 
+  if (interaction.isChatInputCommand() || interaction.isMessageContextMenuCommand()) {
+    const command = client.commands.get(interaction.commandName);
+    if (command) {
+      const policy =
+        typeof command.interactionPolicy === 'function'
+          ? command.interactionPolicy(interaction)
+          : (command.interactionPolicy ?? defaultCommandInteractionPolicy);
+      await startTrackedInteractionDispatch({
+        interaction,
+        policy,
+        guard: policy.authorization === 'modal-submit' ? undefined : guardCommand,
+        handler: (routedInteraction, responder) =>
+          command.execute(routedInteraction, { responder }),
+      });
+      return;
+    }
+  }
+
+  if (interaction.isButton()) {
+    const policy = getButtonInteractionPolicy(interaction.customId);
+    if (policy) {
+      await startTrackedInteractionDispatch({
+        interaction,
+        policy,
+        guard: policy.authorization === 'modal-submit' ? undefined : guardComponent,
+        handler: handleButton,
+      });
+      return;
+    }
+  }
+
+  if (interaction.isStringSelectMenu()) {
+    const policy = getSelectMenuInteractionPolicy(interaction.customId);
+    if (policy) {
+      await startTrackedInteractionDispatch({
+        interaction,
+        policy,
+        guard: policy.authorization === 'modal-submit' ? undefined : guardComponent,
+        handler: handleSelectMenu,
+      });
+      return;
+    }
+  }
+
+  if (interaction.isModalSubmit()) {
+    const preparedSubmission = resolvePreparedModalSubmission(interaction);
+    const routedInteraction = preparedSubmission.interaction;
+    const policy = getModalInteractionPolicy(routedInteraction);
+    await startTrackedInteractionDispatch({
+      interaction: routedInteraction,
+      policy,
+      guard: guardComponent,
+      handler: handleModal,
+      preparedComponentUpdateTarget: preparedSubmission.updateOriginal,
+    });
+    return;
+  }
+
   try {
     await trackOperation(`interaction:${interaction.type}`, async () => {
-      if (interaction.isChatInputCommand()) {
-        const auth = await guardCommand(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-
-        const cmd = client.commands.get(interaction.commandName);
-        if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
-        await cmd.execute(interaction);
-        return;
-      }
-
-      if (interaction.isMessageContextMenuCommand()) {
-        const auth = await guardCommand(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-
-        const cmd = client.commands.get(interaction.commandName);
-        if (!cmd) return console.warn(`⚠️ Unknown command: ${interaction.commandName}`);
-        await cmd.execute(interaction);
-        return;
-      }
-
-      if (interaction.isModalSubmit()) {
-        const auth = await guardComponent(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-        return handleModal(interaction);
-      }
-
-      if (interaction.isButton()) {
-        const auth = await guardComponent(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-        return handleButton(interaction);
-      }
-
-      if (interaction.isStringSelectMenu()) {
-        const auth = await guardComponent(interaction);
-        if (auth !== true) return interaction.reply({ content: auth, ephemeral: true });
-        return handleSelectMenu(interaction);
-      }
-
       console.warn('⚠️ Unhandled interaction:', interaction.type);
     });
   } catch (err) {
@@ -297,7 +340,7 @@ export async function initializeCommands(client: Client): Promise<Client> {
   client.commands = new Collection(commands.map((c) => [c.data.name, c]));
 
   // Publish to Discord
-  const rest = new REST({ version: '10' }).setToken(DISCORD_BOT_TOKEN!);
+  const rest = createDiscordRestClient(DISCORD_BOT_TOKEN!);
   try {
     await registerGlobalCommands(rest, globalCommands);
     await registerScopedCommands(rest, opsCommands, supportCommands);
@@ -309,15 +352,18 @@ export async function initializeCommands(client: Client): Promise<Client> {
   client.on(Events.InteractionCreate, (interaction) => {
     void dispatchInteraction(client, interaction).catch((err) => {
       logInteractionFailure('terminal', interaction, err);
+      void safeFallback(interaction);
     });
   });
 
   client.once(Events.ClientReady, (c) => {
     console.log(`🤖 Logged in as ${c.user.tag}`);
-    c.user.setPresence({
+    void executeDiscordSdkMethod(presencePolicy, c.user, 'setPresence', {
       activities: [{ name: 'Tracking inventories and stats', type: 0 }],
       status: 'online',
-    });
+    }).catch((error) =>
+      logDiscordFailure({ operation: 'client.set-presence', error, attempt: 1, elapsedMs: 0 }),
+    );
   });
 
   return client;

@@ -55,9 +55,9 @@ The repo currently defines these slash and context-menu commands:
 - `/gift` - Owner-only gifted access management in the ops and support servers
 - `/toggle-bypass` - Ops-only entitlement bypass toggle
 
-Some commands are available to everyone, while others are gated by feature access. The mapping currently lives in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts).
+Some commands are available to everyone, while others are gated by feature access. The mapping currently lives in [src/access/features.ts](src/access/features.ts).
 
-For a player- and GM-facing usage guide, see [INSTRUCTIONS.md](/Users/power/dev/devcru/spritebot/INSTRUCTIONS.md).
+For a player- and GM-facing usage guide, see [INSTRUCTIONS.md](INSTRUCTIONS.md).
 
 ## Core Concepts
 
@@ -119,8 +119,9 @@ When proxying, the bot uses the character's optional RP display fields first:
 If those fields are blank, it falls back to the character's normal name and avatar URL.
 
 Spritebot tracks the ownership of every proxied webhook message. Players can pass a proxied message
-ID or Discord message link to `/ic-edit`, which opens a multi-line editor pre-filled from the
-current Discord message. They can also right-click a message and choose `Apps` →
+ID or Discord message link to `/ic-edit`, which opens a multi-line replacement editor. They enter
+the complete replacement message, and Spritebot validates ownership when the modal is submitted.
+They can also right-click a message and choose `Apps` →
 `Edit IC Message`. `/ic-delete` accepts the same ID or link format, and players can also
 right-click a message and choose `Apps` → `Delete IC Message`. The bot only updates or deletes
 messages originally proxied by that same Discord user.
@@ -169,17 +170,22 @@ The code follows a fairly clean layered structure:
 - `src/db/` - DB bootstrap and SQL loader
 - `src/access/` - feature gating and authorization logic
 - `src/schedulers/` - background scheduling for thread bumping and housekeeping cleanup
+- `src/discord/` - Discord API boundary layer (interaction responder, operation executor, error classification, SDK wrappers)
 - `src/config/` - environment and feature config
 - `src/types/` - shared TypeScript types
-- `docs/` - privacy policy and terms of service pages
+- `docs/` - privacy policy, terms of service, and boundary inventory
+- `plans/` - active implementation plans
+- `plans/done/` - completed implementation plans
 
 The main request flow is usually:
 
-`Discord interaction -> command/handler -> service -> DAO -> PostgreSQL`
+`Discord interaction -> dispatch/responder -> command/handler -> service -> DAO -> PostgreSQL`
+
+All Discord interaction callbacks and outbound API calls route through the `src/discord/` boundary layer, which handles acknowledgement state machines, timeouts, retries, and error classification. An ESLint rule enforces this boundary in CI.
 
 ## Database Model
 
-The schema is currently defined in [src/db/tables/tables.sql](/Users/power/dev/devcru/spritebot/src/db/tables/tables.sql).
+The schema is currently defined in [src/db/tables/tables.sql](src/db/tables/tables.sql).
 
 Primary tables include:
 
@@ -555,9 +561,9 @@ Feature gating is organized around stable feature keys:
 - `automation:thread-bump`
 - `pro:transcription`
 
-Command-to-feature mapping is defined in [src/access/features.ts](/Users/power/dev/devcru/spritebot/src/access/features.ts), and entitlement resolution happens in [src/services/entitlements.service.ts](/Users/power/dev/devcru/spritebot/src/services/entitlements.service.ts).
+Command-to-feature mapping is defined in [src/access/features.ts](src/access/features.ts), and entitlement resolution happens in [src/services/entitlements.service.ts](src/services/entitlements.service.ts).
 
-The SKU-to-feature mapping file is present in [src/services/plans.ts](/Users/power/dev/devcru/spritebot/src/services/plans.ts), but it is currently a stub and still needs real Discord SKU IDs configured.
+The SKU-to-feature mapping file is present in [src/services/plans.ts](src/services/plans.ts), but it is currently a stub and still needs real Discord SKU IDs configured.
 
 ## Notable Implementation Details
 
@@ -578,17 +584,21 @@ Based on the current codebase:
 
 ## Useful Files to Read First
 
-- [src/index.ts](/Users/power/dev/devcru/spritebot/src/index.ts)
-- [src/client/initial_commands.ts](/Users/power/dev/devcru/spritebot/src/client/initial_commands.ts)
-- [src/db/tables/tables.sql](/Users/power/dev/devcru/spritebot/src/db/tables/tables.sql)
-- [src/services/game.service.ts](/Users/power/dev/devcru/spritebot/src/services/game.service.ts)
-- [src/services/character.service.ts](/Users/power/dev/devcru/spritebot/src/services/character.service.ts)
-- [src/services/thread_bump.service.ts](/Users/power/dev/devcru/spritebot/src/services/thread_bump.service.ts)
-- [src/access/guards.ts](/Users/power/dev/devcru/spritebot/src/access/guards.ts)
+- `src/index.ts`
+- `src/client/initial_commands.ts`
+- `src/discord/interaction_responder.ts` — interaction acknowledgement state machine
+- `src/discord/interaction_dispatch.ts` — deadline-aware dispatch with auto-defer
+- `src/discord/operation_executor.ts` — bounded retries and timeouts for Discord API calls
+- `src/discord/errors.ts` — typed Discord error classification
+- `src/db/tables/tables.sql`
+- `src/services/game.service.ts`
+- `src/services/character.service.ts`
+- `src/services/thread_bump.service.ts`
+- `src/access/guards.ts`
 
 ## Scripts
 
-Defined in [package.json](/Users/power/dev/devcru/spritebot/package.json):
+Defined in [package.json](package.json):
 
 - `npm run start:dev` - run with `ts-node`
 - `npm run build` - compile TypeScript and copy SQL assets

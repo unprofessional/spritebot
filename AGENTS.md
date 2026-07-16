@@ -3,7 +3,7 @@
 Read this before writing code. It describes the architecture, required
 patterns, and conventions for this project.
 
-For implementation plans, see `plans/`.
+For implementation plans, see `plans/` (active/future) and `plans/done/` (completed).
 
 ---
 

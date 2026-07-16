@@ -5,6 +5,13 @@ import {
   MessageContextMenuCommandInteraction,
 } from 'discord.js';
 
+import {
+  gatedPreparedModalInteractionPolicy,
+  type InteractionCommandContext,
+  type InteractionDispatchPolicy,
+  type InteractionDispatchPolicySource,
+} from '../discord/interaction_dispatch';
+import { presentPreparedModal } from '../discord/prepared_modal';
 import { fetchProxyMessageContent } from '../services/rp_message_proxy.service';
 import { buildIcEditModal, resultMessage, resultReason } from './ic-edit';
 
@@ -13,11 +20,21 @@ module.exports = {
     .setName('Edit IC Message')
     .setType(ApplicationCommandType.Message),
 
-  async execute(interaction: MessageContextMenuCommandInteraction<CacheType>) {
+  interactionPolicy: ((interaction: MessageContextMenuCommandInteraction<CacheType>) =>
+    resolveIcEditContextPolicy(interaction)) satisfies InteractionDispatchPolicySource<
+    MessageContextMenuCommandInteraction<CacheType>
+  >,
+
+  async execute(
+    interaction: MessageContextMenuCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
+    if (responder.state === 'expired') return;
+
     const { guildId, targetMessage, user } = interaction;
 
     if (!guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -32,12 +49,29 @@ module.exports = {
     });
 
     if (result.status !== 'found') {
-      return interaction.reply({
+      return responder.respond({
         content: resultMessage(result.status, resultReason(result)),
         ephemeral: true,
       });
     }
 
-    return interaction.showModal(buildIcEditModal(targetMessage.id, result.content));
+    return presentPreparedModal({
+      modal: buildIcEditModal(targetMessage.id, result.content),
+      responder,
+      userId: user.id,
+    });
   },
 };
+
+function resolveIcEditContextPolicy(
+  interaction: MessageContextMenuCommandInteraction<CacheType>,
+): InteractionDispatchPolicy {
+  if (interaction.guildId) {
+    return gatedPreparedModalInteractionPolicy;
+  }
+
+  return {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  };
+}

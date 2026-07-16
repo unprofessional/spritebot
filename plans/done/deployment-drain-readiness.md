@@ -1,6 +1,6 @@
 # Deployment Drain Readiness Plan
 
-> **Status:** Approved — ready for implementation
+> **Status:** Complete — all phases shipped
 > **Target:** SPRITEbot deployment rollout groundwork
 > **Goal:** Add the app and deploy primitives needed to drain Discord work,
 > timers, database connections, and in-flight async operations before a

@@ -1,9 +1,23 @@
-import type { APIEmbed, Attachment, Client, Collection, Message, Webhook } from 'discord.js';
+import type {
+  APIEmbed,
+  Attachment,
+  Channel,
+  Client,
+  Collection,
+  Message,
+  Webhook,
+} from 'discord.js';
 
 import { CharacterDAO } from '../dao/character.dao';
 import { PlayerDAO } from '../dao/player.dao';
 import { RpProxyMessageDAO } from '../dao/rp_proxy_message.dao';
 import { RP_PROXY_TOTAL_CHARACTER_LIMIT, splitRpMessage } from '../utils/rp_message_limits';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import {
+  executeDiscordSdkMethod,
+  executeDiscordSdkMethodAs,
+  fetchDiscordTextResource,
+} from '../discord/sdk_operations';
 import { isUserInCharacterForChannelScope } from './rp_channel_mode.service';
 
 const RP_PROXY_WEBHOOK_NAME = 'Spritebot RP Proxy';
@@ -12,6 +26,66 @@ const MESSAGE_TEXT_ATTACHMENT_NAME = 'message.txt';
 const characterDAO = new CharacterDAO();
 const playerDAO = new PlayerDAO();
 const proxyMessageDAO = new RpProxyMessageDAO();
+const rpWebhookReadPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.fetch-webhooks',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const rpChannelReadPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.fetch-channel',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const rpMessageReadPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.fetch-message',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const rpAttachmentReadPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.fetch-text-attachment',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const rpCreateWebhookPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.create-webhook',
+  timeoutMs: 3_000,
+  totalBudgetMs: 3_000,
+});
+const rpSendPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.send',
+  timeoutMs: 5_000,
+  totalBudgetMs: 5_000,
+});
+const rpReplyPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.reply-user',
+  timeoutMs: 3_000,
+  totalBudgetMs: 3_000,
+});
+const rpEditPolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.edit',
+  timeoutMs: 2_000,
+  totalBudgetMs: 5_000,
+  retry: 'idempotent-write',
+  maxAttempts: 2,
+});
+const rpWebhookDeletePolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.delete-webhook-message',
+  timeoutMs: 2_000,
+  totalBudgetMs: 2_000,
+});
+const rpSourceDeletePolicy = defineDiscordOperationPolicy({
+  operation: 'rp-proxy.delete-source-message',
+  timeoutMs: 2_000,
+  totalBudgetMs: 2_000,
+});
 
 interface ProxyCharacter {
   name?: string | null;
@@ -84,12 +158,7 @@ function getNonTextAttachmentFiles(message: Message) {
 }
 
 async function readMessageTextAttachment(attachment: Attachment): Promise<string> {
-  const response = await fetch(attachment.url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${MESSAGE_TEXT_ATTACHMENT_NAME}: ${response.status}`);
-  }
-
-  return response.text();
+  return fetchDiscordTextResource(rpAttachmentReadPolicy, attachment.url);
 }
 
 async function getMessageContent(message: Message): Promise<string> {
@@ -105,11 +174,11 @@ async function getMessageContent(message: Message): Promise<string> {
 }
 
 async function getOrCreateProxyWebhook(channel: WebhookCapableChannel): Promise<Webhook> {
-  const webhooks = await channel.fetchWebhooks();
+  const webhooks = await executeDiscordSdkMethod(rpWebhookReadPolicy, channel, 'fetchWebhooks');
   const existing = webhooks.find((webhook) => webhook.name === RP_PROXY_WEBHOOK_NAME);
   if (existing) return existing;
 
-  return channel.createWebhook({
+  return executeDiscordSdkMethod(rpCreateWebhookPolicy, channel, 'createWebhook', {
     name: RP_PROXY_WEBHOOK_NAME,
     reason: 'Spritebot roleplay proxy messages',
   });
@@ -119,7 +188,7 @@ async function getExistingProxyWebhook(
   channel: WebhookCapableChannel,
   webhookId: string,
 ): Promise<Webhook | null> {
-  const webhooks = await channel.fetchWebhooks();
+  const webhooks = await executeDiscordSdkMethod(rpWebhookReadPolicy, channel, 'fetchWebhooks');
   return webhooks.get(webhookId) ?? null;
 }
 
@@ -127,7 +196,12 @@ async function fetchWebhookCapableChannel(
   client: Client,
   channelId: string,
 ): Promise<WebhookCapableChannel | null> {
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await executeDiscordSdkMethodAs<Channel | null>(
+    rpChannelReadPolicy,
+    client.channels,
+    'fetch',
+    channelId,
+  ).catch(() => null);
   return isWebhookCapableChannel(channel) ? channel : null;
 }
 
@@ -156,7 +230,12 @@ async function resolveProxyWebhookTargetForChannel(
   client: Client,
   channelId: string,
 ): Promise<ProxyWebhookTarget | null> {
-  const channel = await client.channels.fetch(channelId).catch(() => null);
+  const channel = await executeDiscordSdkMethodAs<Channel | null>(
+    rpChannelReadPolicy,
+    client.channels,
+    'fetch',
+    channelId,
+  ).catch(() => null);
   if (isWebhookCapableChannel(channel)) {
     return { channel };
   }
@@ -216,9 +295,13 @@ export async function fetchProxyMessageContent({
   );
   if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
 
-  const message = await webhook
-    .fetchMessage(record.proxy_message_id, { threadId: target.threadId })
-    .catch(() => null);
+  const message = await executeDiscordSdkMethodAs<Message>(
+    rpMessageReadPolicy,
+    webhook,
+    'fetchMessage',
+    record.proxy_message_id,
+    { threadId: target.threadId },
+  ).catch(() => null);
   if (!message) return { status: 'failed', reason: 'message_not_found' };
 
   return { status: 'found', content: message.content };
@@ -252,12 +335,17 @@ export async function editRoleplayProxyMessage({
   );
   if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
 
-  const edited = await webhook
-    .editMessage(record.proxy_message_id, {
+  const edited = await executeDiscordSdkMethodAs<Message>(
+    rpEditPolicy,
+    webhook,
+    'editMessage',
+    record.proxy_message_id,
+    {
       content,
       threadId: target.threadId,
       allowedMentions: { parse: [] },
-    })
+    },
+  )
     .then(() => true)
     .catch(() => false);
   if (!edited) return { status: 'failed', reason: 'message_not_found' };
@@ -292,7 +380,13 @@ export async function deleteRoleplayProxyMessage({
   const webhook = await getExistingProxyWebhook(target.channel, record.webhook_id);
   if (!webhook) return { status: 'failed', reason: 'webhook_not_found' };
 
-  await webhook.deleteMessage(record.proxy_message_id, target.threadId);
+  await executeDiscordSdkMethod(
+    rpWebhookDeletePolicy,
+    webhook,
+    'deleteMessage',
+    record.proxy_message_id,
+    target.threadId,
+  );
   await proxyMessageDAO.delete(record.proxy_message_id);
 
   return { status: 'deleted' };
@@ -316,7 +410,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
 
   const activeCharacterId = await playerDAO.getCurrentCharacter(message.author.id, message.guildId);
   if (!activeCharacterId) {
-    await message.reply({
+    await executeDiscordSdkMethod(rpReplyPolicy, message, 'reply', {
       content:
         'You are in-character in this channel, but you do not have an active character selected. Use `/switch-character` first.',
       allowedMentions: { parse: [] },
@@ -326,7 +420,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
 
   const character = await characterDAO.findById(activeCharacterId);
   if (!character) {
-    await message.reply({
+    await executeDiscordSdkMethod(rpReplyPolicy, message, 'reply', {
       content:
         'You are in-character in this channel, but I could not find your active character. Use `/switch-character` to select one again.',
       allowedMentions: { parse: [] },
@@ -341,7 +435,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
   }
 
   if (content.length > RP_PROXY_TOTAL_CHARACTER_LIMIT) {
-    await message.reply({
+    await executeDiscordSdkMethod(rpReplyPolicy, message, 'reply', {
       content: `This RP post is ${content.length} characters, but the IC proxy limit is ${RP_PROXY_TOTAL_CHARACTER_LIMIT}. I left your original message in place so you can edit and repost it.`,
       allowedMentions: { parse: [] },
     });
@@ -355,7 +449,7 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
   const sends = chunks.length ? chunks : [''];
 
   for (let index = 0; index < sends.length; index++) {
-    const sent = await webhook.send({
+    const sent = await executeDiscordSdkMethod(rpSendPolicy, webhook, 'send', {
       content: sends[index],
       username: display.username,
       avatarURL: display.avatarURL,
@@ -375,6 +469,6 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
     });
   }
 
-  await message.delete();
+  await executeDiscordSdkMethod(rpSourceDeletePolicy, message, 'delete');
   return { status: 'proxied', chunks: sends.length };
 }

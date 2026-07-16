@@ -1,7 +1,11 @@
 // src/schedulers/per_thread_bump_manager.ts
 import { Client } from 'discord.js';
 import type { BumpThreadRow } from '../dao/thread_bump.dao';
-import { ThreadBumpService, isTerminalThreadError } from '../services/thread_bump.service';
+import {
+  ThreadBumpService,
+  isIndeterminateThreadBumpSendError,
+  isTerminalThreadError,
+} from '../services/thread_bump.service';
 
 const MIN_DELAY_MS = 30_000; // 30s floor
 const MAX_RETRY_DELAY_MS = 15 * 60_000;
@@ -155,6 +159,18 @@ export class PerThreadBumpManager {
         }
       } catch (err) {
         console.warn(`⚠️ [bump] fire failed thread=${row.thread_id}:`, err);
+
+        if (isIndeterminateThreadBumpSendError(err)) {
+          this.attempts.delete(row.thread_id);
+          const fresh = await this.service['dao'].get(row.thread_id);
+          if (fresh && this.acceptingWork) {
+            const nextDue = await this.service.nextDueAt(this.client, fresh);
+            this.armOneShot(fresh, Math.max(MIN_DELAY_MS, nextDue.getTime() - Date.now()));
+          } else {
+            this.clearTimer(row.thread_id);
+          }
+          return;
+        }
 
         if (isTerminalThreadError(err)) {
           // Hard stop: delete row and cancel timer

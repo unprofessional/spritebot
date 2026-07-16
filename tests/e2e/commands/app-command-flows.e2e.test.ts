@@ -1,17 +1,17 @@
 const createGameCommand = require('../../../src/commands/create-game') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const listGamesCommand = require('../../../src/commands/list-games') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const viewGameCommand = require('../../../src/commands/view-game') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const icCommand = require('../../../src/commands/ic') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const oocCommand = require('../../../src/commands/ooc') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 
 import { isUserInCharacterForChannel } from '../../../src/services/rp_channel_mode.service';
@@ -42,6 +42,7 @@ function createInteraction({
       reply,
     },
     reply,
+    responderContext: { responder: { respond: reply } },
   };
 }
 
@@ -67,10 +68,10 @@ describe('app command flows', () => {
       },
     });
 
-    await createGameCommand.execute(created.interaction);
+    await createGameCommand.execute(created.interaction, created.responderContext);
 
     const listed = createInteraction();
-    await listGamesCommand.execute(listed.interaction);
+    await listGamesCommand.execute(listed.interaction, listed.responderContext);
 
     expect(listed.reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -81,7 +82,7 @@ describe('app command flows', () => {
     expect(listed.reply.mock.calls[0][0].content).toEqual(expect.stringContaining('Active'));
 
     const viewed = createInteraction();
-    await viewGameCommand.execute(viewed.interaction);
+    await viewGameCommand.execute(viewed.interaction, viewed.responderContext);
 
     expect(viewed.reply).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -96,7 +97,7 @@ describe('app command flows', () => {
   test('/ic and /ooc persist the user channel roleplay mode', async () => {
     const ic = createInteraction({ userId: 'user-2', guildId: 'guild-2', channelId: 'channel-2' });
 
-    await icCommand.execute(ic.interaction);
+    await icCommand.execute(ic.interaction, ic.responderContext);
 
     await expect(isUserInCharacterForChannel('guild-2', 'channel-2', 'user-2')).resolves.toBe(true);
     expect(ic.reply).toHaveBeenCalledWith(
@@ -108,7 +109,7 @@ describe('app command flows', () => {
 
     const ooc = createInteraction({ userId: 'user-2', guildId: 'guild-2', channelId: 'channel-2' });
 
-    await oocCommand.execute(ooc.interaction);
+    await oocCommand.execute(ooc.interaction, ooc.responderContext);
 
     await expect(isUserInCharacterForChannel('guild-2', 'channel-2', 'user-2')).resolves.toBe(
       false,

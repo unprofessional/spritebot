@@ -33,7 +33,9 @@ describe('support server commands', () => {
       reply: jest.fn().mockResolvedValue(undefined),
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
@@ -53,7 +55,9 @@ describe('support server commands', () => {
     const member = { id: 'member-1' };
     const interaction = createVerifyInteraction({ member });
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.guild.members.fetch).toHaveBeenCalledWith('user-1');
     expect(verifySupportMemberMock).toHaveBeenCalledWith(member);
@@ -77,7 +81,9 @@ describe('support server commands', () => {
     const command = require('../../../src/commands/verify');
     const interaction = createVerifyInteraction();
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
@@ -91,7 +97,9 @@ describe('support server commands', () => {
     const command = require('../../../src/commands/verify');
     const interaction = createVerifyInteraction();
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content:
@@ -111,7 +119,7 @@ describe('support server commands', () => {
     const member = { id: 'member-1' };
     const interaction = createVerifyInteraction({ member });
 
-    await handle(interaction);
+    await handle(interaction, { respond: interaction.reply });
 
     expect(interaction.guild.members.fetch).toHaveBeenCalledWith('user-1');
     expect(verifySupportMemberMock).toHaveBeenCalledWith(member);
@@ -124,7 +132,7 @@ describe('support server commands', () => {
     });
   });
 
-  test('verify button does not reject when the interaction reply fails', async () => {
+  test('verify button lets the dispatcher contain an interaction reply failure', async () => {
     verifySupportMemberMock.mockResolvedValue({
       subscriberGuildIds: ['guild-1'],
       playerGuilds: [],
@@ -135,11 +143,8 @@ describe('support server commands', () => {
     const interaction = createVerifyInteraction();
     interaction.reply.mockRejectedValue(new Error('Unknown interaction'));
 
-    await expect(handle(interaction)).resolves.toBeUndefined();
-
-    expect(errorSpy).toHaveBeenCalledWith(
-      '[support_verify_button] Failed to reply to interaction:',
-      expect.any(Error),
+    await expect(handle(interaction, { respond: interaction.reply })).rejects.toThrow(
+      'Unknown interaction',
     );
   });
 
@@ -156,7 +161,9 @@ describe('support server commands', () => {
       }),
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     const payload = send.mock.calls[0][0];
     expect(payload.content).toContain('**Welcome to the SPRITEbot Support Server! 👋**');

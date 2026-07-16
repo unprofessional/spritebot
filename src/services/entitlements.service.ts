@@ -2,7 +2,10 @@
 
 import type { FeatureKey } from '../access/features';
 import { EntitlementsCacheDAO } from '../dao/entitlements_cache.dao';
-import { fetchGuildEntitlementsLazy } from './discord_entitlements_api';
+import {
+  fetchGuildEntitlementsLazy,
+  type DiscordEntitlementsFetchResult,
+} from './discord_entitlements_api';
 import { featuresForSkus } from './plans';
 
 const dao = new EntitlementsCacheDAO();
@@ -14,6 +17,11 @@ export type EntitlementResult = {
   expiresAt?: Date | null;
 };
 
+export type EntitlementUnavailableResult = {
+  status: 'unavailable';
+  failure: Extract<DiscordEntitlementsFetchResult, { ok: false }>['failure'];
+};
+
 /**
  * Guild-scoped entitlements resolution with lazy pull + cache.
  */
@@ -21,7 +29,7 @@ export async function getEntitlementsFor({
   guildId,
 }: {
   guildId: string | null;
-}): Promise<EntitlementResult | null> {
+}): Promise<EntitlementResult | EntitlementUnavailableResult | null> {
   if (!guildId) {
     console.debug('[Entitlements] No guildId provided → returning null');
     return null;
@@ -39,8 +47,16 @@ export async function getEntitlementsFor({
     const botToken = process.env.DISCORD_BOT_TOKEN!;
 
     console.debug(`[Entitlements] Cache miss → fetching entitlements from Discord API...`);
+    const fetchResult = await fetchGuildEntitlementsLazy({ applicationId, botToken, guildId });
+    if (!fetchResult.ok) {
+      console.warn(
+        `[Entitlements] Discord lookup unavailable guild=${guildId} category=${fetchResult.failure.category}`,
+      );
+      return { status: 'unavailable', failure: fetchResult.failure };
+    }
+
     try {
-      const ents = await fetchGuildEntitlementsLazy({ applicationId, botToken, guildId });
+      const ents = fetchResult.entitlements;
       console.debug(`[Entitlements] Discord API returned ${ents.length} entitlements`);
 
       for (const e of ents) {
@@ -69,8 +85,9 @@ export async function getEntitlementsFor({
 
       rows = await dao.findActiveByGuild(guildId);
       console.debug(`[Entitlements] Post-upsert cache rows=${rows.length}`);
-    } catch (err) {
-      console.warn('[Entitlements] ⚠️ Discord entitlements fetch failed:', err);
+    } catch (error) {
+      console.warn('[Entitlements] Failed to persist Discord entitlements:', error);
+      throw error;
     }
   }
 

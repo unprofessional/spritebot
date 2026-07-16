@@ -8,12 +8,19 @@ import {
   TextInputStyle,
 } from 'discord.js';
 
-import {
-  fetchProxyMessageContent,
-  type RpProxyContentResult,
-  type RpProxyMutationResult,
+import type {
+  RpProxyContentResult,
+  RpProxyMutationResult,
 } from '../services/rp_message_proxy.service';
+import { fetchProxyMessageContent } from '../services/rp_message_proxy.service';
 import { parseDiscordMessageReference } from '../utils/discord_message_reference';
+import {
+  gatedPreparedModalInteractionPolicy,
+  type InteractionCommandContext,
+  type InteractionDispatchPolicy,
+  type InteractionDispatchPolicySource,
+} from '../discord/interaction_dispatch';
+import { presentPreparedModal } from '../discord/prepared_modal';
 
 export function resultMessage(status: string, reason?: string): string {
   if (status === 'updated') return '✅ Updated your proxied RP message.';
@@ -40,14 +47,14 @@ export function resultMessage(status: string, reason?: string): string {
   return '❌ Failed to update that proxied RP message.';
 }
 
-export function buildIcEditModal(messageId: string, content: string): ModalBuilder {
+export function buildIcEditModal(messageId: string, content?: string): ModalBuilder {
   const input = new TextInputBuilder()
     .setCustomId('content')
     .setLabel('Message Content')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
-    .setMaxLength(2000)
-    .setValue(content);
+    .setMaxLength(2000);
+  if (content) input.setValue(content);
 
   return new ModalBuilder()
     .setCustomId(`ic-edit-modal:${messageId}`)
@@ -73,11 +80,21 @@ module.exports = {
         .setRequired(true),
     ),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
-    const { channelId, guildId, user } = interaction;
+  interactionPolicy: ((interaction: ChatInputCommandInteraction<CacheType>) =>
+    resolveIcEditPolicy(interaction)) satisfies InteractionDispatchPolicySource<
+    ChatInputCommandInteraction<CacheType>
+  >,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
+    if (responder.state === 'expired') return;
+
+    const { channelId, guildId } = interaction;
 
     if (!guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -88,7 +105,7 @@ module.exports = {
       channelId,
     );
     if (!reference || (reference.guildId && reference.guildId !== guildId)) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ Provide a valid message ID or a message link from this server.',
         ephemeral: true,
       });
@@ -98,19 +115,44 @@ module.exports = {
       client: interaction.client,
       guildId,
       channelId: reference.channelId,
-      userId: user.id,
+      userId: interaction.user.id,
       messageId: reference.messageId,
     });
 
     if (result.status !== 'found') {
-      return interaction.reply({
+      return responder.respond({
         content: resultMessage(result.status, resultReason(result)),
         ephemeral: true,
       });
     }
 
-    return interaction.showModal(buildIcEditModal(reference.messageId, result.content));
+    return presentPreparedModal({
+      modal: buildIcEditModal(reference.messageId, result.content),
+      responder,
+      userId: interaction.user.id,
+    });
   },
   resultMessage,
   resultReason,
 };
+
+function resolveIcEditPolicy(
+  interaction: ChatInputCommandInteraction<CacheType>,
+): InteractionDispatchPolicy {
+  const reference = parseDiscordMessageReference(
+    interaction.options.getString('message', true),
+    interaction.channelId,
+  );
+  if (
+    interaction.guildId &&
+    reference &&
+    (!reference.guildId || reference.guildId === interaction.guildId)
+  ) {
+    return gatedPreparedModalInteractionPolicy;
+  }
+
+  return {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  };
+}

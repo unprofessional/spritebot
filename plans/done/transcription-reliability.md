@@ -1,6 +1,6 @@
 # Transcription Reliability Plan
 
-> **Status:** Draft for review
+> **Status:** Complete — all phases shipped
 > **Target:** SPRITEbot voice transcription pipeline
 > **Goal:** Make long voice sessions (30min–2hr+) produce complete, reliable
 > transcripts instead of timing out and losing data.

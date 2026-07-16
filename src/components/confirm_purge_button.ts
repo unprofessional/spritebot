@@ -5,8 +5,14 @@ import {
   purgeSafeOrphans,
   type HousekeepingPurgeResult,
 } from '../services/admin_housekeeping.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 const id = 'confirmPurgeOrphans';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 const OWNER_IDS = new Set<string>([(process.env.OWNER_DISCORD_ID ?? '').trim()].filter(Boolean));
 const OPS_GUILD_ID = process.env.DEV_GUILD_ID ?? '';
 
@@ -24,11 +30,14 @@ function formatResults(results: HousekeepingPurgeResult[]): string {
   return [`🧹 Purge complete. Permanently deleted **${total}** row(s).`, ...lines].join('\n');
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, requestedBy] = interaction.customId.split(':');
 
   if (interaction.guildId !== OPS_GUILD_ID) {
-    await interaction.reply({
+    await responder.respond({
       content: '⛔ Purge confirmation is only available in the ops guild.',
       ephemeral: true,
     });
@@ -36,7 +45,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   }
 
   if (!OWNER_IDS.has(interaction.user.id) || interaction.user.id !== requestedBy) {
-    await interaction.reply({
+    await responder.respond({
       content: '⛔ Only the bot owner who requested this purge preview can confirm it.',
       ephemeral: true,
     });
@@ -45,18 +54,18 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
 
   try {
     const results = await purgeSafeOrphans();
-    await interaction.update({
+    await responder.respond({
       content: formatResults(results),
       embeds: [],
       components: [],
     });
   } catch (err) {
     console.error('Failed to purge safe orphan rows:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Something went wrong while purging safe orphan rows.',
       ephemeral: true,
     });
   }
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };

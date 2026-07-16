@@ -24,6 +24,18 @@ database behavior, constraints, hydration, and cross-table side effects.
 Current integration coverage includes character lifecycle and restore behavior, inventory, RP proxy
 message tracking, admin housekeeping audits, orphan purge previews, and lifecycle notifications.
 
+Discord boundary contract and deterministic fault-injection suites run with:
+
+```bash
+npm test -- --runTestsByPath tests/integration/discord/interaction_contract.test.ts
+npm test -- --runTestsByPath tests/integration/discord/operation_faults.test.ts
+```
+
+The contract suite exercises acknowledgement timing, expired/already-acknowledged callbacks, and
+fallback containment. The fault suite exercises timeout ambiguity, retry eligibility and bounds,
+rate limits, permanent authorization failures, duplicate prevention, and process drain behavior.
+Each fixture asserts that it leaves no unhandled rejection, process listener, or fake timer behind.
+
 ## Unit
 
 Unit tests live in `tests/unit`. They should stay fast and narrow: pure utilities, access-policy
