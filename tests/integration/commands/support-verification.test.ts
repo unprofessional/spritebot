@@ -164,7 +164,9 @@ describe('support server commands', () => {
       }),
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, {
+      responder: { respond: interaction.reply },
+    });
 
     const payload = send.mock.calls[0][0];
     expect(payload.content).toContain('**Welcome to the SPRITEbot Support Server! 👋**');
