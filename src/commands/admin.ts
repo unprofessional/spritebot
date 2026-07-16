@@ -96,7 +96,7 @@ module.exports = {
         return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminOrphans(interaction);
+      await handleAdminOrphans(interaction, responder);
       return;
     }
 
@@ -112,7 +112,7 @@ module.exports = {
         return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminOrphansPurge(interaction);
+      await handleAdminOrphansPurge(interaction, responder);
       return;
     }
 
@@ -121,7 +121,7 @@ module.exports = {
         return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminGlobalStats(interaction);
+      await handleAdminGlobalStats(interaction, responder);
       return;
     }
 
@@ -133,13 +133,13 @@ module.exports = {
         });
       }
 
-      await handleAdminGames(interaction);
+      await handleAdminGames(interaction, responder);
       return;
     }
 
     if (subcommand === 'characters') {
       if (isOwner(interaction.user.id)) {
-        await handleAdminCharacters(interaction);
+        await handleAdminCharacters(interaction, responder);
         return;
       }
 
@@ -160,7 +160,7 @@ module.exports = {
         });
       }
 
-      await handleAdminCharacters(interaction);
+      await handleAdminCharacters(interaction, responder);
       return;
     }
 
@@ -169,7 +169,7 @@ module.exports = {
         return responder.respond({ content: '⛔ Not authorized.', ephemeral: true });
       }
 
-      await handleAdminRestoreCharacter(interaction);
+      await handleAdminRestoreCharacter(interaction, responder);
     }
   },
 };

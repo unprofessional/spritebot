@@ -3,6 +3,7 @@ import {
   getPrivateCharacterAudit,
   type PrivateCharacterAuditRow,
 } from '../services/admin_housekeeping.service';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 function formatCharacter(row: PrivateCharacterAuditRow): string {
   const abandonedDraft = row.hasNoFilledStats ? ' ⚠️ no filled stats' : '';
@@ -16,12 +17,13 @@ function formatCharacter(row: PrivateCharacterAuditRow): string {
 
 export async function handleAdminCharacters(
   interaction: ChatInputCommandInteraction,
+  responder: DiscordInteractionResponder,
 ): Promise<void> {
   const guildId = interaction.guildId;
   const gameId = interaction.options.getString('game_id');
 
   if (!guildId) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ This command must be used in a server.',
       ephemeral: true,
     });
@@ -31,7 +33,7 @@ export async function handleAdminCharacters(
   const rows = await getPrivateCharacterAudit({ guildId, gameId });
 
   if (!rows.length) {
-    await interaction.reply({
+    await responder.respond({
       content: '✅ No private characters found for that scope.',
       ephemeral: true,
     });
@@ -56,5 +58,5 @@ export async function handleAdminCharacters(
     embed.setFooter({ text: `Showing 25 of ${rows.length} private characters.` });
   }
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+  await responder.respond({ embeds: [embed], ephemeral: true });
 }

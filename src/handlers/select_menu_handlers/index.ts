@@ -34,7 +34,22 @@ export function getSelectMenuInteractionPolicy(
   if (customId === 'restoreCharacterDropdown') return restoreCharacterPolicy;
   if (customId.startsWith('selectPublicCharacter')) return publicCharacterPolicy;
   if (customId.startsWith('paragraphFieldSelect')) return paragraphFieldPolicy;
-  return undefined;
+  if (customId.startsWith('editInventoryItemSelect:')) return inventoryItemSelect.interactionPolicy;
+  if (
+    customId.startsWith('editStatSelect:') ||
+    customId.startsWith('deleteStatSelect:') ||
+    customId.startsWith('selectStatType:') ||
+    customId.startsWith('createCharacterDropdown') ||
+    customId.startsWith('editCharacterFieldDropdown') ||
+    customId.startsWith('editCharacterStatDropdown:') ||
+    customId.startsWith('adjustStatSelect:')
+  ) {
+    return undefined;
+  }
+  return {
+    mode: { kind: 'component-update' },
+    acknowledgement: 'auto-defer',
+  };
 }
 
 export async function handleSelectMenu(
@@ -65,9 +80,9 @@ export async function handleSelectMenu(
   if (customId.startsWith('adjustStatSelect:'))
     return adjustNumericStatSelectHandler.handle(interaction);
   if (customId.startsWith('editInventoryItemSelect:'))
-    return inventoryItemSelect.handle(interaction);
+    return inventoryItemSelect.handle(interaction, responder!);
 
-  await interaction.reply({
+  await responder!.respond({
     content: '❌ Unknown menu selection.',
     ephemeral: true,
   });
