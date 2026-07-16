@@ -49,6 +49,9 @@ async function main() {
     );
   }
   console.log(`Discord boundary findings: ${boundaryFindings.length}`);
+  console.log(
+    `Discord boundary enforcement: ${boundaryFindings.length === 0 ? 'clean' : 'violations remain'}`,
+  );
 
   if (blockingResults.length > 0) {
     const formatter = await eslint.loadFormatter('stylish');

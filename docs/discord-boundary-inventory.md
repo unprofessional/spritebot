@@ -11,9 +11,13 @@ Run the inventory report with:
 npm run audit:discord-boundary
 ```
 
-Report mode exits successfully while migration warnings remain. Parser failures and unrelated
-ESLint errors still fail the report. Each finding includes file, line, operation family, method,
-and migration status.
+Report mode remains a non-blocking inventory view for boundary findings. Parser failures and
+unrelated ESLint errors still fail the report. Each finding includes file, line, operation family,
+method, and migration status. Enforcement runs separately with:
+
+```bash
+npm run check:discord-boundary
+```
 
 ## Audit Snapshot
 
@@ -188,6 +192,12 @@ operation through `src/discord`. The audit has fallen from 71 to 10 findings; al
 proxy-intercepted interaction callbacks in `/transcribe` and `/bump-thread`, with no non-interaction
 findings remaining.
 
+Task 9 removes those final 10 interaction callbacks. `/transcribe` now relies on its single
+dispatcher-owned auto-deferral and routes all start/stop results through the responder;
+`/bump-thread` routes its acknowledged error response through the same state machine. The audit is
+now zero. The local ESLint rule is an error, and both GitHub PR checks and Jenkins run the dedicated
+boundary check before build or deployment work.
+
 ### Task 8 Operation Policies
 
 | Operation family                         | Attempt / total budget                          | Retry policy                                      | Failure behavior                                                                                                   |
@@ -251,10 +261,10 @@ same modal behind owner-bound activation. No unreviewed direct `showModal()` cal
 
 ## Rule Scope and Allowlist
 
-The migration allowlist is intentionally limited to `src/discord/**`, the target boundary
+The enforcement allowlist is intentionally limited to `src/discord/**`, the target boundary
 directory. Existing bootstrap, command, component, handler, service, scheduler, and voice files are
-not exempt. Task 9 will promote the warning to an error after the inventory reaches zero unexplained
-violations.
+not exempt. The rule is enforced as an error. Any future exemption must be narrow and documented
+with its rationale, owner, and expiry date; feature-wide directory exemptions are prohibited.
 
 Two reviewed paths are retained in the matrix even though static receiver provenance cannot report
 them as direct Discord SDK calls:

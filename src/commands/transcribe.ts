@@ -83,7 +83,6 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === 'start') {
-      await interaction.deferReply({ ephemeral: true });
       const voiceChannel = interaction.options.getChannel('voice-channel', true);
       const textChannel = interaction.options.getChannel('text-channel', true);
 
@@ -92,7 +91,7 @@ module.exports = {
           voiceChannel.type !== ChannelType.GuildStageVoice) ||
         !('joinable' in voiceChannel)
       ) {
-        return interaction.editReply('⚠️ Choose a voice channel I can join.');
+        return responder.respond({ content: '⚠️ Choose a voice channel I can join.' });
       }
 
       if (
@@ -102,7 +101,9 @@ module.exports = {
         textChannel.type !== ChannelType.PrivateThread &&
         textChannel.type !== ChannelType.AnnouncementThread
       ) {
-        return interaction.editReply('⚠️ Choose a text channel for transcript output.');
+        return responder.respond({
+          content: '⚠️ Choose a text channel for transcript output.',
+        });
       }
 
       const missingPermissions = await getMissingTranscriptionPermissions(
@@ -111,7 +112,9 @@ module.exports = {
         textChannel as GuildTextBasedChannel,
       );
       if (missingPermissions.length > 0) {
-        return interaction.editReply(formatMissingTranscriptionPermissions(missingPermissions));
+        return responder.respond({
+          content: formatMissingTranscriptionPermissions(missingPermissions),
+        });
       }
 
       const status = await voiceManager.start({
@@ -121,27 +124,26 @@ module.exports = {
         textChannel: textChannel as GuildTextBasedChannel,
       });
 
-      return interaction.editReply(
-        `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
-      );
+      return responder.respond({
+        content: `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
+      });
     }
 
     if (subcommand === 'stop') {
-      await interaction.deferReply({ ephemeral: true });
       const result = await voiceManager.stop(interaction.guild.id);
       if (!result.stopped) {
-        return interaction.editReply('⚠️ No transcription session is active.');
+        return responder.respond({ content: '⚠️ No transcription session is active.' });
       }
 
       if (result.final) {
-        return interaction.editReply(
-          `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
-        );
+        return responder.respond({
+          content: `✅ Transcription stopped. Dumped ${result.segmentCount} segment(s) from ${result.participantCount} participant(s).`,
+        });
       }
 
-      return interaction.editReply(
-        `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
-      );
+      return responder.respond({
+        content: `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
+      });
     }
 
     const status = voiceManager.status(interaction.guild.id);

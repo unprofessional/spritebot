@@ -1,3 +1,4 @@
+import { ChannelType } from 'discord.js';
 import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
@@ -35,6 +36,19 @@ describe('remaining command responder migration', () => {
     expectEphemeralDeferral(interaction);
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: '⚠️ This command must be used in a server.',
+    });
+  });
+
+  test('/transcribe start uses the existing dispatcher deferral', async () => {
+    const interaction = commandInteraction({ userId: '818606180095885332' });
+    interaction.options.getSubcommand.mockReturnValue('start');
+    interaction.options.getChannel.mockReturnValue({ type: ChannelType.GuildText });
+
+    await executePreDeferred(transcribeCommand, interaction);
+
+    expect(interaction.deferReply).toHaveBeenCalledTimes(1);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: '⚠️ Choose a voice channel I can join.',
     });
   });
 
