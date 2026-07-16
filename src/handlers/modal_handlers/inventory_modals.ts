@@ -1,6 +1,7 @@
 // src/handlers/modal_handlers/inventory_modals.ts
 
-import type { ModalMessageModalSubmitInteraction, ModalSubmitInteraction } from 'discord.js';
+import type { ModalSubmitInteraction } from 'discord.js';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import { build as buildInventoryCard } from '../../components/view_inventory_card';
 import { belongsToUser } from '../../services/character.service';
 import {
@@ -12,26 +13,32 @@ import {
 /**
  * Handles modals related to inventory item creation.
  */
-export async function handle(interaction: ModalSubmitInteraction): Promise<void> {
+export async function handle(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const { customId } = interaction;
 
   if (customId.startsWith('addInventoryModal:')) {
-    await handleAddInventoryModal(interaction);
+    await handleAddInventoryModal(interaction, responder);
     return;
   }
 
   if (customId.startsWith('editInventoryModal:')) {
-    await handleEditInventoryModal(interaction);
+    await handleEditInventoryModal(interaction, responder);
   }
 }
 
-async function handleAddInventoryModal(interaction: ModalSubmitInteraction): Promise<void> {
+async function handleAddInventoryModal(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId, rawPage] = interaction.customId.split(':');
 
   try {
     const ownsCharacter = await belongsToUser(characterId, interaction.user.id);
     if (!ownsCharacter) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ You can only manage inventory for your own characters.',
         ephemeral: true,
       });
@@ -45,7 +52,7 @@ async function handleAddInventoryModal(interaction: ModalSubmitInteraction): Pro
     const quantity = parseQuantity(quantityInput);
 
     if (!name || name.length > 100) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Invalid item name.',
         ephemeral: true,
       });
@@ -53,7 +60,7 @@ async function handleAddInventoryModal(interaction: ModalSubmitInteraction): Pro
     }
 
     if (quantity === null) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Quantity must be a positive whole number.',
         ephemeral: true,
       });
@@ -71,26 +78,30 @@ async function handleAddInventoryModal(interaction: ModalSubmitInteraction): Pro
     const page = parseInt(rawPage, 10) || 0;
     await updateInventoryModalMessage(
       interaction,
+      responder,
       characterId,
       page,
       `✅ Added **${item.name}**${item.quantity > 1 ? ` x${item.quantity}` : ''}.`,
     );
   } catch (err) {
     console.error('[addInventoryModal] Error:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to add inventory item.',
       ephemeral: true,
     });
   }
 }
 
-async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Promise<void> {
+async function handleEditInventoryModal(
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, characterId, itemId, rawPage] = interaction.customId.split(':');
 
   try {
     const ownsCharacter = await belongsToUser(characterId, interaction.user.id);
     if (!ownsCharacter) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ You can only manage inventory for your own characters.',
         ephemeral: true,
       });
@@ -104,7 +115,7 @@ async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Pr
     const quantity = parseQuantity(quantityInput);
 
     if (!name || name.length > 100) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Invalid item name.',
         ephemeral: true,
       });
@@ -112,7 +123,7 @@ async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Pr
     }
 
     if (quantity === null) {
-      await interaction.reply({
+      await responder.respond({
         content: '⚠️ Quantity must be a positive whole number.',
         ephemeral: true,
       });
@@ -127,7 +138,7 @@ async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Pr
     });
 
     if (!item) {
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Inventory item not found.',
         ephemeral: true,
       });
@@ -136,7 +147,7 @@ async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Pr
 
     const character = await getCharacterWithInventory(characterId);
     if (!character) {
-      await interaction.reply({
+      await responder.respond({
         content: `✅ Updated **${item.name}**.`,
         ephemeral: true,
       });
@@ -146,13 +157,14 @@ async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Pr
     const page = parseInt(rawPage, 10) || 0;
     await updateInventoryModalMessage(
       interaction,
+      responder,
       characterId,
       page,
       `✅ Updated **${item.name}**${item.quantity > 1 ? ` x${item.quantity}` : ''}.`,
     );
   } catch (err) {
     console.error('[editInventoryModal] Error:', err);
-    await interaction.reply({
+    await responder.respond({
       content: '❌ Failed to update inventory item.',
       ephemeral: true,
     });
@@ -161,13 +173,14 @@ async function handleEditInventoryModal(interaction: ModalSubmitInteraction): Pr
 
 async function updateInventoryModalMessage(
   interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
   characterId: string,
   page: number,
   content: string,
 ): Promise<void> {
   const character = await getCharacterWithInventory(characterId);
   if (!character) {
-    await interaction.reply({
+    await responder.respond({
       content,
       ephemeral: true,
     });
@@ -176,20 +189,11 @@ async function updateInventoryModalMessage(
 
   const { embeds, components } = buildInventoryCard(character, page);
 
-  if (interaction.message) {
-    await (interaction as ModalMessageModalSubmitInteraction).update({
-      content,
-      embeds,
-      components,
-    });
-    return;
-  }
-
-  await interaction.reply({
+  await responder.respond({
     content,
     embeds,
     components,
-    ephemeral: true,
+    ...(interaction.message ? {} : { ephemeral: true }),
   });
 }
 

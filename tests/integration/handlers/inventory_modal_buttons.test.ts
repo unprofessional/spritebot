@@ -66,7 +66,10 @@ describe('inventory button prepared-modal boundary', () => {
       acknowledgement: 'auto-defer',
       authorization: 'modal-submit',
     });
-    expect(getButtonInteractionPolicy('inventoryPage:next:character-1:0')).toBeUndefined();
+    expect(getButtonInteractionPolicy('inventoryPage:next:character-1:0')).toEqual({
+      mode: { kind: 'component-update' },
+      acknowledgement: 'auto-defer',
+    });
   });
 
   test('preserves the immediate add-item modal on the fast path', async () => {

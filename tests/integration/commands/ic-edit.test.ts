@@ -12,6 +12,7 @@ import {
   getButtonInteractionPolicy,
   handleButton,
 } from '../../../src/handlers/button_handlers/index';
+import { getModalInteractionPolicy, handleModal } from '../../../src/handlers/modal_handlers';
 
 jest.mock('../../../src/services/rp_message_proxy.service', () => ({
   editRoleplayProxyMessage: jest.fn(),
@@ -191,10 +192,13 @@ describe('IC message editing commands', () => {
 
   test('modal submission preserves multi-line content', async () => {
     editMessageMock.mockResolvedValue({ status: 'updated' });
-    const { handle } = require('../../../src/handlers/modal_handlers/ic_edit_modal');
     const interaction = modalSubmitInteraction();
 
-    await handle(interaction);
+    await dispatchInteractionWithDeadline({
+      interaction: interaction as never,
+      policy: getModalInteractionPolicy(interaction as never),
+      handler: handleModal,
+    });
 
     expect(editMessageMock).toHaveBeenCalledWith({
       client: interaction.client,
@@ -211,10 +215,13 @@ describe('IC message editing commands', () => {
 
   test('modal submission performs the authoritative ownership check', async () => {
     editMessageMock.mockResolvedValue({ status: 'forbidden' });
-    const { handle } = require('../../../src/handlers/modal_handlers/ic_edit_modal');
     const interaction = modalSubmitInteraction();
 
-    await handle(interaction);
+    await dispatchInteractionWithDeadline({
+      interaction: interaction as never,
+      policy: getModalInteractionPolicy(interaction as never),
+      handler: handleModal,
+    });
 
     expect(interaction.reply).toHaveBeenCalledWith({
       content: '⛔ You can only edit your own proxied RP messages.',
