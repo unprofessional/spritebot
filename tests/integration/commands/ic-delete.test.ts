@@ -26,7 +26,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-1' },
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, { responder: { respond: interaction.reply } });
 
     const reply = interaction.reply.mock.calls[0][0];
     const row = reply.components[0].toJSON();
@@ -65,7 +65,7 @@ describe('IC message delete commands', () => {
       user: { id: 'user-2' },
     };
 
-    await command.execute(interaction);
+    await command.execute(interaction, { responder: { respond: interaction.reply } });
 
     const reply = interaction.reply.mock.calls[0][0];
     const row = reply.components[0].toJSON();
