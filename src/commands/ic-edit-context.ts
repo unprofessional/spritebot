@@ -5,39 +5,53 @@ import {
   MessageContextMenuCommandInteraction,
 } from 'discord.js';
 
-import { fetchProxyMessageContent } from '../services/rp_message_proxy.service';
-import { buildIcEditModal, resultMessage, resultReason } from './ic-edit';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+  InteractionDispatchPolicySource,
+} from '../discord/interaction_dispatch';
+import { buildIcEditModal } from './ic-edit';
 
 module.exports = {
   data: new ContextMenuCommandBuilder()
     .setName('Edit IC Message')
     .setType(ApplicationCommandType.Message),
 
-  async execute(interaction: MessageContextMenuCommandInteraction<CacheType>) {
-    const { guildId, targetMessage, user } = interaction;
+  interactionPolicy: ((interaction: MessageContextMenuCommandInteraction<CacheType>) =>
+    resolveIcEditContextPolicy(interaction)) satisfies InteractionDispatchPolicySource<
+    MessageContextMenuCommandInteraction<CacheType>
+  >,
+
+  async execute(
+    interaction: MessageContextMenuCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
+    const { guildId, targetMessage } = interaction;
 
     if (!guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
     }
 
-    const result = await fetchProxyMessageContent({
-      client: interaction.client,
-      guildId,
-      channelId: targetMessage.channelId,
-      userId: user.id,
-      messageId: targetMessage.id,
-    });
-
-    if (result.status !== 'found') {
-      return interaction.reply({
-        content: resultMessage(result.status, resultReason(result)),
-        ephemeral: true,
-      });
-    }
-
-    return interaction.showModal(buildIcEditModal(targetMessage.id, result.content));
+    return responder.showModal(buildIcEditModal(targetMessage.id));
   },
 };
+
+function resolveIcEditContextPolicy(
+  interaction: MessageContextMenuCommandInteraction<CacheType>,
+): InteractionDispatchPolicy {
+  if (interaction.guildId) {
+    return {
+      mode: { kind: 'modal' },
+      acknowledgement: 'manual',
+      authorization: 'modal-submit',
+    };
+  }
+
+  return {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  };
+}

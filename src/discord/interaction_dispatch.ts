@@ -15,6 +15,7 @@ export const INTERACTION_ACKNOWLEDGEMENT_SAFETY_CEILING_MS = 2_500;
 export interface InteractionDispatchPolicy {
   mode: InteractionMode;
   acknowledgement: 'auto-defer' | 'manual';
+  authorization?: 'command' | 'modal-submit';
 }
 
 export type InteractionDispatchPolicySource<I extends BaseInteraction = BaseInteraction> =

@@ -208,7 +208,7 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
       await startTrackedInteractionDispatch({
         interaction,
         policy,
-        guard: guardCommand,
+        guard: policy.authorization === 'modal-submit' ? undefined : guardCommand,
         handler: (routedInteraction, responder) =>
           command.execute(routedInteraction, { responder }),
       });
