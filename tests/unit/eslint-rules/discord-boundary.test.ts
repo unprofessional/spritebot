@@ -110,7 +110,13 @@ describe('discord-boundary ESLint rule', () => {
     const findings = results.flatMap((result) =>
       result.messages
         .filter((message) => message.ruleId === 'local/discord-boundary')
-        .map((message) => ({ filePath: result.filePath, message: message.message })),
+        .map((message) => ({
+          filePath: result.filePath,
+          line: message.line,
+          column: message.column,
+          severity: message.severity,
+          message: message.message,
+        })),
     );
     const messages = findings.map((finding) => finding.message);
 
@@ -136,6 +142,18 @@ describe('discord-boundary ESLint rule', () => {
       ]),
     );
     expect(findings).toHaveLength(20);
+    expect(findings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          filePath: expect.stringContaining('violations.ts'),
+          line: expect.any(Number),
+          column: expect.any(Number),
+          severity: 2,
+          message: expect.stringContaining('family=interaction method=reply'),
+        }),
+      ]),
+    );
+    expect(findings.every((finding) => finding.severity === 2)).toBe(true);
     expect(findings.some((finding) => finding.filePath.endsWith('allowed.ts'))).toBe(false);
   });
 });
@@ -166,7 +184,7 @@ async function lintFixture(fixtureRoot: string): Promise<ESLint.LintResult[]> {
         },
         rules: {
           'local/discord-boundary': [
-            'warn',
+            'error',
             {
               allowlist: ['src/discord/**'],
             },

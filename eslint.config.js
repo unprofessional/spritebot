@@ -47,9 +47,10 @@ module.exports = [
 
       '@typescript-eslint/no-require-imports': 'off', // 👈 Allow CommonJS `require()`
 
-      // Migration audit; Task 9 promotes this to an error after call sites move behind src/discord.
+      // Repository-local Discord boundary implementation. No bootstrap or feature-directory
+      // exemptions are currently required; keep any future exemption narrow, owned, and expiring.
       'local/discord-boundary': [
-        'warn',
+        'error',
         {
           allowlist: ['src/discord/**'],
         },
