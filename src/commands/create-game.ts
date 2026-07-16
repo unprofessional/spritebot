@@ -12,6 +12,10 @@ import { getOrCreatePlayer, setCurrentGame } from '../services/player.service';
 import { build as buildDefineStatsButton } from '../components/define_stats_button';
 import { build as buildTogglePublishButton } from '../components/toggle_publish_button';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -27,19 +31,28 @@ module.exports = {
         .setRequired(false),
     ),
 
-  async execute(interaction: ChatInputCommandInteraction<CacheType>) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+
+  async execute(
+    interaction: ChatInputCommandInteraction<CacheType>,
+    { responder }: InteractionCommandContext,
+  ) {
     const name = interaction.options.getString('name')?.trim();
     const description = interaction.options.getString('description')?.trim() ?? '';
     const guildId = interaction.guild?.id;
     const userId = interaction.user.id;
 
     if (!guildId || !name) {
-      return await interaction.reply({
+      return await responder.respond({
         content: '⚠️ This command must be used within a server and include a name.',
         ephemeral: true,
       });
     }
 
+    let response: Record<string, unknown>;
     try {
       const game = await createGame({
         name,
@@ -84,17 +97,19 @@ module.exports = {
         'create-game',
       );
 
-      await interaction.reply({
+      response = {
         content: appendNudge(content, nudge),
         components: [row.toJSON()],
         ephemeral: true,
-      });
+      };
     } catch (err) {
       console.error('[COMMAND ERROR] /create-game:', err);
-      await interaction.reply({
+      response = {
         content: '❌ Failed to create game. Please try again later.',
         ephemeral: true,
-      });
+      };
     }
+
+    await responder.respond(response);
   },
 };

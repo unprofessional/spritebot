@@ -1,5 +1,5 @@
 const createGameCommand = require('../../../src/commands/create-game') as {
-  execute(interaction: unknown): Promise<void>;
+  execute(interaction: unknown, context: unknown): Promise<void>;
 };
 const listGamesCommand = require('../../../src/commands/list-games') as {
   execute(interaction: unknown, context: unknown): Promise<void>;
@@ -68,7 +68,7 @@ describe('app command flows', () => {
       },
     });
 
-    await createGameCommand.execute(created.interaction);
+    await createGameCommand.execute(created.interaction, created.responderContext);
 
     const listed = createInteraction();
     await listGamesCommand.execute(listed.interaction, listed.responderContext);
