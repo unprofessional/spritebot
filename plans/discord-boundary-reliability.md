@@ -362,7 +362,8 @@ Do not use a single ambiguous boolean. Support modes such as:
 type InteractionMode =
   | { kind: 'reply'; visibility: 'ephemeral' | 'public' }
   | { kind: 'component-update' }
-  | { kind: 'modal' };
+  | { kind: 'modal' }
+  | { kind: 'modal-or-reply'; visibility: 'ephemeral' | 'public' };
 ```
 
 Expose narrow methods rather than the raw interaction:
@@ -520,6 +521,14 @@ git commit -m "Migrate core commands to Discord responder"
 
 **Responder design note (from batch 1 review):** Many components have mixed response patterns — `update()` for success, `reply({ ephemeral: true })` for errors. After `deferUpdate()`, `editReply()` would overwrite the original message with the error. The responder now handles this: when `respond()` is called with `ephemeral: true` in `component-update` mode, it routes to `followUp({ ephemeral: true })` instead, leaving the original message intact and sending a private error to the user. `followUp()` also preserves ephemeral in component-update mode. **All future component migrations should use `responder.respond({ ..., ephemeral: true })` for error paths — the responder does the right thing automatically.**
 
+**Prepared-modal design note:** Prefilled editors must preserve their existing values. Use
+`modal-or-reply` mode with `presentPreparedModal()`: preparation that completes inside the
+acknowledgement budget opens the prefilled modal immediately; if the dispatcher has already
+deferred ephemerally, the prepared modal is retained behind a short-lived, owner-bound opaque
+token and an **Open editor** button. Modal data must never be encoded in `customId`. A slow path may
+add one activation click, but it must never replace a prefilled editor with a blank modal. Prepared
+state is process-local and bounded; activation after a restart returns explicit retry guidance.
+
 **Remaining: Batch 2 (modal-opening components), Batch 3 (button/select handler files), Batch 4 (modal handler files)**
 
 **Step 1: Classify before migration**
@@ -539,6 +548,8 @@ Mixed routes must choose their contract synchronously before database/network wo
 1. Fetch the required values while building the earlier message/component and carry only a safe opaque lookup key into the modal-opening interaction.
 2. Add an intermediate loading/setup interaction that performs the I/O, then renders a new button whose next click can show the modal synchronously.
 3. Show a minimal modal immediately and perform authoritative lookup/validation on modal submission when prefilled values are not required.
+4. For an editor that requires prefetched values, use the prepared-modal boundary so the fast path
+   opens immediately and the slow path safely presents an owner-bound activation button.
 
 Do not encode secrets or oversized state in `customId`, and do not use stale prefetched data without revalidation on submission. Record the selected restructuring pattern for each affected route in `docs/discord-boundary-inventory.md`.
 
@@ -801,7 +812,8 @@ Any `10062` should be a contained, redacted event. Any boundary-related unhandle
 
 - Every interaction entry point uses the responder/dispatcher contract.
 - Potentially slow deferable interactions acknowledge within the configured margin below three seconds.
-- Modal-first paths call `showModal()` before any deferral or slow work.
+- Immediate modal paths call `showModal()` before any deferral or slow work. Prefilled modal paths
+  either show within the acknowledgement budget or defer ephemerally and use prepared activation.
 - Commands/components no longer choose raw `reply` versus `editReply` versus `followUp` themselves.
 - `10062` and `40060` are classified, logged safely, never blindly retried, and never escape as unhandled rejections.
 - Every inventoried outbound Discord operation has an explicit timeout and retry policy.
@@ -827,6 +839,9 @@ Implement as reviewable phases rather than a monolith:
 
 Each PR must update `docs/discord-boundary-inventory.md`, include focused RED/GREEN evidence, and pass existing repository quality gates.
 
-## Known Regressions
+## Resolved Regressions
 
-- **IC edit modal no longer pre-populates original message content.** The pre-`showModal()` fetch of proxy message content was removed to eliminate deadline risk. The modal now opens with a blank paragraph field; ownership and existence validation occur on submission. `buildIcEditModal()` still accepts optional `content` — restoration requires a UX pattern that doesn't block the initial acknowledgement (e.g. optimistic prefill, or a secondary fetch after modal display). Track as a follow-up outside this plan.
+- **IC edit prefill restored through prepared-modal activation.** `/ic-edit` and Edit IC Message
+  fetch and prefill the original proxy content. Fast preparation opens the modal immediately; slow
+  preparation completes the deferred ephemeral response with an owner-bound **Open editor** button.
+  Modal submission still performs authoritative ownership and existence validation.

@@ -3,6 +3,10 @@
 import type { ButtonInteraction } from 'discord.js';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import type { InteractionDispatchPolicy } from '../../discord/interaction_dispatch';
+import {
+  activatePreparedModal,
+  preparedModalInteractionPolicy,
+} from '../../discord/prepared_modal';
 
 import { handle as handleCalculateStatsButton } from '../../components/calculate_character_stats_button';
 import { handle as handleCharPageButton } from '../../components/character_page_buttons';
@@ -44,6 +48,7 @@ type ButtonRoute = [
 ];
 
 const directRoutes: ButtonRoute[] = [
+  [/^preparedModal:/, (i, r) => activatePreparedModal(i, r!), preparedModalInteractionPolicy],
   [/^defineStats:/, handleDefineStats],
   [/^editGameStats:/, handleEditGameStats],
   [/^deleteStats:/, handleDeleteStats],

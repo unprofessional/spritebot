@@ -136,6 +136,39 @@ describe('DiscordInteractionResponder', () => {
     expect(responder.state).toBe('modal_shown');
   });
 
+  test('shows a prepared modal immediately when hybrid mode is still unacknowledged', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'modal-or-reply',
+      visibility: 'ephemeral',
+    });
+    const modal = { customId: 'edit:modal' };
+
+    await expect(responder.presentModal(modal as never)).resolves.toBe('shown');
+
+    expect(interaction.showModal).toHaveBeenCalledWith(modal);
+    expect(interaction.deferReply).not.toHaveBeenCalled();
+    expect(responder.state).toBe('modal_shown');
+  });
+
+  test('requests activation when hybrid mode was deferred before modal preparation completed', async () => {
+    const interaction = componentInteraction();
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'modal-or-reply',
+      visibility: 'ephemeral',
+    });
+
+    await responder.acknowledge();
+    await expect(responder.presentModal({ customId: 'edit:modal' } as never)).resolves.toBe(
+      'requires_activation',
+    );
+    await responder.respond({ content: 'Editor ready.', ephemeral: true });
+
+    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
+    expect(interaction.showModal).not.toHaveBeenCalled();
+    expect(interaction.editReply).toHaveBeenCalledWith({ content: 'Editor ready.' });
+  });
+
   test('marks an expired session and suppresses every later callback', async () => {
     const interaction = replyInteraction();
     interaction.reply.mockRejectedValueOnce({ code: 10062, status: 404 });
