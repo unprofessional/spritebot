@@ -1,5 +1,7 @@
 # Discord Boundary Reliability Implementation Plan
 
+> **Status:** Complete — Tasks 1-10 shipped, Task 11 (production rollout) pending deploy.
+>
 > **For Codex:** Use TDD and implement this plan in phased pull requests. Do not combine the migration into one release. The expired-interaction hotfix must land first.
 
 **Goal:** Establish one durable boundary for Discord interaction contracts and outbound Discord API behavior so slow, expired, rate-limited, or failed Discord calls cannot silently violate acknowledgement deadlines or crash SPRITEbot.
