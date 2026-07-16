@@ -1,7 +1,7 @@
 import type { BaseInteraction } from 'discord.js';
 
 import { classifyDiscordError } from './errors';
-import { logDiscordFailure } from './logging';
+import { interactionMetadataString, logDiscordFailure } from './logging';
 
 export type InteractionMode =
   | { kind: 'reply'; visibility: 'ephemeral' | 'public' }
@@ -258,8 +258,8 @@ export class DiscordInteractionResponder {
       error,
       attempt: 1,
       elapsedMs,
-      commandName: interactionString(this.interaction, 'commandName'),
-      customId: interactionString(this.interaction, 'customId'),
+      commandName: interactionMetadataString(this.interaction, 'commandName'),
+      customId: interactionMetadataString(this.interaction, 'customId'),
     });
   }
 
@@ -274,9 +274,4 @@ function withoutEphemeral(payload: InteractionPayload): InteractionPayload {
   const result = { ...payload };
   delete result.ephemeral;
   return result;
-}
-
-function interactionString(interaction: BaseInteraction, key: string): string | undefined {
-  const value = (interaction as unknown as Record<string, unknown>)[key];
-  return typeof value === 'string' ? value : undefined;
 }

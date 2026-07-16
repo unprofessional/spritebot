@@ -2,7 +2,7 @@ import type { BaseInteraction } from 'discord.js';
 
 import { DRAINING_REPLY, isDrainInProgressError, trackOperation } from '../runtime/lifecycle';
 import { DiscordOperationTimeoutError } from './errors';
-import { logDiscordFailure } from './logging';
+import { interactionMetadataString, logDiscordFailure } from './logging';
 import {
   DiscordInteractionResponder,
   InteractionResponseStateError,
@@ -10,6 +10,7 @@ import {
 } from './interaction_responder';
 
 export const DEFAULT_INTERACTION_ACKNOWLEDGEMENT_BUDGET_MS = 1_750;
+export const INTERACTION_ACKNOWLEDGEMENT_SAFETY_CEILING_MS = 2_500;
 
 export interface InteractionDispatchPolicy {
   mode: InteractionMode;
@@ -39,8 +40,12 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
   options: InteractionDispatchOptions<I>,
 ): Promise<void> {
   const budgetMs = options.acknowledgementBudgetMs ?? DEFAULT_INTERACTION_ACKNOWLEDGEMENT_BUDGET_MS;
-  if (!Number.isSafeInteger(budgetMs) || budgetMs <= 0 || budgetMs >= 3_000) {
-    throw new TypeError('Interaction acknowledgement budget must be between 1ms and 2999ms.');
+  if (
+    !Number.isSafeInteger(budgetMs) ||
+    budgetMs <= 0 ||
+    budgetMs >= INTERACTION_ACKNOWLEDGEMENT_SAFETY_CEILING_MS
+  ) {
+    throw new TypeError('Interaction acknowledgement budget must be between 1ms and 2499ms.');
   }
 
   const responder = new DiscordInteractionResponder(options.interaction, options.policy.mode);
@@ -109,8 +114,8 @@ export async function startTrackedInteractionDispatch<I extends BaseInteraction>
         error,
         attempt: 1,
         elapsedMs: 0,
-        commandName: interactionString(options.interaction, 'commandName'),
-        customId: interactionString(options.interaction, 'customId'),
+        commandName: interactionMetadataString(options.interaction, 'commandName'),
+        customId: interactionMetadataString(options.interaction, 'customId'),
       },
       console.error,
     );
@@ -143,8 +148,8 @@ export async function respondBestEffort(
       error,
       attempt: 1,
       elapsedMs: 0,
-      commandName: interactionString(interaction, 'commandName'),
-      customId: interactionString(interaction, 'customId'),
+      commandName: interactionMetadataString(interaction, 'commandName'),
+      customId: interactionMetadataString(interaction, 'customId'),
     });
   }
 }
@@ -184,9 +189,4 @@ function normalizePayload(payload: unknown): Record<string, unknown> {
   if (typeof payload === 'string') return { content: payload };
   if (payload && typeof payload === 'object') return payload as Record<string, unknown>;
   throw new InteractionResponseStateError('Interaction responses require a payload object.');
-}
-
-function interactionString(interaction: BaseInteraction, key: string): string | undefined {
-  const value = (interaction as unknown as Record<string, unknown>)[key];
-  return typeof value === 'string' ? value : undefined;
 }

@@ -1,6 +1,7 @@
 import {
   DEFAULT_INTERACTION_ACKNOWLEDGEMENT_BUDGET_MS,
   InteractionAcknowledgementDeadlineError,
+  INTERACTION_ACKNOWLEDGEMENT_SAFETY_CEILING_MS,
   dispatchInteractionWithDeadline,
   respondBestEffort,
   startTrackedInteractionDispatch,
@@ -28,6 +29,20 @@ describe('deadline-aware interaction dispatch', () => {
     resetLifecycleForTests();
     errorSpy.mockRestore();
     warnSpy.mockRestore();
+  });
+
+  test('rejects acknowledgement budgets at or above the safety ceiling', async () => {
+    const interaction = replyInteraction();
+
+    await expect(
+      dispatchInteractionWithDeadline({
+        interaction: interaction as never,
+        policy: replyPolicy(),
+        handler: async () => undefined,
+        acknowledgementBudgetMs: INTERACTION_ACKNOWLEDGEMENT_SAFETY_CEILING_MS,
+      }),
+    ).rejects.toThrow('between 1ms and 2499ms');
+    expect(interaction.deferReply).not.toHaveBeenCalled();
   });
 
   test('defers a slow guarded command before the acknowledgement budget and edits its first response', async () => {
