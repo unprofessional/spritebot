@@ -222,7 +222,7 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
       await startTrackedInteractionDispatch({
         interaction,
         policy,
-        guard: guardComponent,
+        guard: policy.authorization === 'modal-submit' ? undefined : guardComponent,
         handler: handleButton,
       });
       return;
@@ -235,7 +235,7 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
       await startTrackedInteractionDispatch({
         interaction,
         policy,
-        guard: guardComponent,
+        guard: policy.authorization === 'modal-submit' ? undefined : guardComponent,
         handler: handleSelectMenu,
       });
       return;
