@@ -5,6 +5,10 @@ import {
   SlashCommandBuilder,
 } from 'discord.js';
 import { LifecycleNotificationChannelDAO } from '../dao/lifecycle_notification_channel.dao';
+import type {
+  InteractionCommandContext,
+  InteractionDispatchPolicy,
+} from '../discord/interaction_dispatch';
 
 const lifecycleNotificationChannelDAO = new LifecycleNotificationChannelDAO();
 
@@ -38,10 +42,17 @@ export const data = new SlashCommandBuilder()
 
 module.exports = {
   data,
-  async execute(interaction: ChatInputCommandInteraction) {
+  interactionPolicy: {
+    mode: { kind: 'reply', visibility: 'ephemeral' },
+    acknowledgement: 'auto-defer',
+  } satisfies InteractionDispatchPolicy,
+  async execute(
+    interaction: ChatInputCommandInteraction,
+    { responder }: InteractionCommandContext,
+  ) {
     const guildId = interaction.guildId;
     if (!guildId) {
-      return interaction.reply({
+      return responder.respond({
         content: '⚠️ This command must be used in a server.',
         ephemeral: true,
       });
@@ -53,7 +64,7 @@ module.exports = {
       const channel = interaction.options.getChannel('channel', true);
 
       if (!('guildId' in channel) || channel.guildId !== guildId) {
-        return interaction.reply({
+        return responder.respond({
           content: 'That channel must belong to this server.',
           ephemeral: true,
         });
@@ -65,7 +76,7 @@ module.exports = {
         updatedBy: interaction.user.id,
       });
 
-      return interaction.reply({
+      return responder.respond({
         content: `Bot announcements will now be posted in ${channel}.`,
         ephemeral: true,
       });
@@ -73,7 +84,7 @@ module.exports = {
 
     if (subcommand === 'clear') {
       await lifecycleNotificationChannelDAO.clear(guildId);
-      return interaction.reply({
+      return responder.respond({
         content: 'Bot announcements are now disabled for this server.',
         ephemeral: true,
       });
@@ -81,7 +92,7 @@ module.exports = {
 
     if (subcommand === 'status') {
       const row = await lifecycleNotificationChannelDAO.findByGuild(guildId);
-      return interaction.reply({
+      return responder.respond({
         content: row
           ? `Bot announcements are currently set to <#${row.channel_id}>.`
           : 'Bot announcements are currently disabled for this server.',
@@ -89,7 +100,7 @@ module.exports = {
       });
     }
 
-    return interaction.reply({
+    return responder.respond({
       content: 'Unknown bot announcements command.',
       ephemeral: true,
     });
