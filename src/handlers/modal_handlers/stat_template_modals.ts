@@ -17,12 +17,16 @@ import {
   getStatTemplates,
   updateStatTemplate,
 } from '../../services/game.service';
+import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 
 import type { Game } from '../../types/game';
 import type { StatTemplate } from '../../types/stat_template';
 import { rebuildCreateGameResponse } from '../../utils/rebuild_create_game_response';
 
-const handle = async (interaction: ModalSubmitInteraction): Promise<void> => {
+const handle = async (
+  interaction: ModalSubmitInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> => {
   const { customId } = interaction;
 
   if (customId.startsWith('editStatTemplateModal:')) {
@@ -35,7 +39,7 @@ const handle = async (interaction: ModalSubmitInteraction): Promise<void> => {
       const sortOrder = isNaN(parseInt(sortOrderRaw, 10)) ? 0 : parseInt(sortOrderRaw, 10);
 
       if (!label) {
-        await interaction.reply({
+        await responder.respond({
           content: '⚠️ Field label is required.',
           ephemeral: true,
         });
@@ -52,7 +56,7 @@ const handle = async (interaction: ModalSubmitInteraction): Promise<void> => {
       const gameId = fieldRecord?.game_id;
 
       if (!gameId) {
-        await interaction.reply({
+        await responder.respond({
           content: '❌ Could not determine the game associated with this field.',
           ephemeral: true,
         });
@@ -70,8 +74,7 @@ const handle = async (interaction: ModalSubmitInteraction): Promise<void> => {
         label,
       ) as InteractionEditReplyOptions;
 
-      await interaction.deferUpdate();
-      await interaction.editReply({
+      await responder.respond({
         ...response,
         components: response.components?.map((row) =>
           'toJSON' in row && typeof row.toJSON === 'function'
@@ -81,7 +84,7 @@ const handle = async (interaction: ModalSubmitInteraction): Promise<void> => {
       });
     } catch (err) {
       console.error('Error in editStatTemplateModal:', err);
-      await interaction.reply({
+      await responder.respond({
         content: '❌ Failed to update stat template.',
         ephemeral: true,
       });

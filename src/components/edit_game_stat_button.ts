@@ -10,12 +10,18 @@ import {
 } from 'discord.js';
 
 import { getGame, getStatTemplates } from '../services/game.service';
+import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
+import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
 import { build as buildEditStatSelectorRow } from './edit_stat_selector';
 import { build as buildCancelButton } from './finish_stat_setup_button';
 
 const id = 'editGameStats';
+const interactionPolicy = {
+  mode: { kind: 'component-update' },
+  acknowledgement: 'auto-defer',
+} satisfies InteractionDispatchPolicy;
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
@@ -24,14 +30,17 @@ function build(gameId: string): ButtonBuilder {
     .setStyle(ButtonStyle.Secondary);
 }
 
-async function handle(interaction: ButtonInteraction): Promise<void> {
+async function handle(
+  interaction: ButtonInteraction,
+  responder: DiscordInteractionResponder,
+): Promise<void> {
   const [, gameId] = interaction.customId.split(':');
 
   const game = (await getGame({ id: gameId })) as Game | null;
   const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
 
   if (!game || game.created_by !== interaction.user.id) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ Only the GM can edit this game.',
       ephemeral: true,
     });
@@ -39,7 +48,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   }
 
   if (!statTemplates.length) {
-    await interaction.reply({
+    await responder.respond({
       content: '⚠️ No stats to edit yet. Use "Define Required Stats" first.',
       ephemeral: true,
     });
@@ -49,7 +58,7 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   const selectRow = buildEditStatSelectorRow(gameId, statTemplates);
   const cancelBtn = new ButtonBuilder(buildCancelButton(gameId));
 
-  await interaction.update({
+  await responder.respond({
     content: `🎲 Select a field to edit for **${game.name}**`,
     components: [
       selectRow,
@@ -59,4 +68,4 @@ async function handle(interaction: ButtonInteraction): Promise<void> {
   });
 }
 
-export { build, handle, id };
+export { build, handle, id, interactionPolicy };
