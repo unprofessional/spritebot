@@ -46,10 +46,7 @@ export function getSelectMenuInteractionPolicy(
   ) {
     return undefined;
   }
-  return {
-    mode: { kind: 'component-update' },
-    acknowledgement: 'auto-defer',
-  };
+  return undefined;
 }
 
 export async function handleSelectMenu(
@@ -82,8 +79,9 @@ export async function handleSelectMenu(
   if (customId.startsWith('editInventoryItemSelect:'))
     return inventoryItemSelect.handle(interaction, responder!);
 
-  await responder!.respond({
-    content: '❌ Unknown menu selection.',
-    ephemeral: true,
-  });
+  if (responder) {
+    await responder.respond({ content: '❌ Unknown menu selection.', ephemeral: true });
+  } else {
+    await interaction.reply({ content: '❌ Unknown menu selection.', ephemeral: true });
+  }
 }
