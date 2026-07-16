@@ -10,7 +10,7 @@ const API_BASE = 'https://discord.com/api/v10';
 
 export const entitlementReadPolicy = defineDiscordOperationPolicy({
   operation: 'entitlements.fetch-guild',
-  timeoutMs: 900,
+  timeoutMs: 800,
   totalBudgetMs: 2_000,
   retry: 'safe-read',
   maxAttempts: 2,
