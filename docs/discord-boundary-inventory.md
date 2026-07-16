@@ -198,6 +198,12 @@ dispatcher-owned auto-deferral and routes all start/stop results through the res
 now zero. The local ESLint rule is an error, and both GitHub PR checks and Jenkins run the dedicated
 boundary check before build or deployment work.
 
+Task 10 adds deterministic integration contracts for the boundary rather than changing the
+inventory. The suites cover responses immediately before/after the acknowledgement budget,
+`10062`, concurrent `40060`, delayed success after timeout, connection reset, bounded `429`,
+permanent `401/403`, drain-start behavior, and retry-safe versus non-idempotent attempt counts. Each
+fixture verifies that no unhandled rejection, listener, or fake timer escapes its test.
+
 ### Task 8 Operation Policies
 
 | Operation family                         | Attempt / total budget                          | Retry policy                                      | Failure behavior                                                                                                   |
