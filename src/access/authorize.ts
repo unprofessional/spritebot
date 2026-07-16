@@ -49,7 +49,22 @@ export async function authorizeInteraction(
     return { ok: true, planName: 'Admin Bypass' };
   }
 
-  // 4) Resolve entitlements (guild-level only)
+  // 4) Gifted guild access (local lookup before remote entitlement resolution)
+  console.debug(`[authorizeInteraction] Checking gifted access for guild=${guildId}`);
+  try {
+    const gifted = await giftedDAO.isGifted(guildId);
+    if (gifted) {
+      console.debug(`[authorizeInteraction] ✅ Gifted access granted for guild=${guildId}`);
+      return { ok: true, planName: 'Gifted' };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'unknown error';
+    console.warn(
+      `[authorizeInteraction] Gifted lookup failed guild=${guildId}; continuing to entitlements: ${message}`,
+    );
+  }
+
+  // 5) Resolve entitlements (guild-level only)
   console.debug(`[authorizeInteraction] Fetching entitlements for guild=${guildId}`);
   const ent = await getEntitlementsFor({ guildId });
 
@@ -81,15 +96,7 @@ export async function authorizeInteraction(
     }
   }
 
-  // 5) Gifted guild fallback (grants all features)
-  console.debug(`[authorizeInteraction] Checking gifted fallback for guild=${guildId}`);
-  const gifted = await giftedDAO.isGifted(guildId);
-  if (gifted) {
-    console.debug(`[authorizeInteraction] ✅ Gifted access granted for guild=${guildId}`);
-    return { ok: true, planName: 'Gifted' };
-  }
-
   // 6) Final deny
-  console.debug(`[authorizeInteraction] ❌ Access denied (no paid entitlement and not gifted)`);
+  console.debug(`[authorizeInteraction] ❌ Access denied (no paid entitlement or gift)`);
   return entitlementOutcome ?? { ok: false, reason: 'UNKNOWN' };
 }
