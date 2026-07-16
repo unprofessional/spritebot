@@ -12,6 +12,7 @@ import type {
   HydratedCustomField,
   UserDefinedField,
 } from '../types/character';
+import { getCountStatDefaults } from '../utils/count_stat_defaults';
 import { getStatTemplates } from './game.service';
 import { getInventory } from './inventory.service';
 import { getCurrentGame, setCurrentCharacter } from './player.service';
@@ -96,10 +97,15 @@ export async function getCharacterWithStats(
 
   const enrichedStats: HydratedStatField[] = templates.map((template) => {
     const stat = statMap.get(template.id);
+    const countDefaults = template.field_type === 'count' ? getCountStatDefaults(template) : null;
     return {
       template_id: template.id,
       value: stat?.value ?? template.default_value ?? '',
-      meta: stat?.meta ?? {},
+      meta:
+        stat?.meta ??
+        (countDefaults && countDefaults.max !== null
+          ? { max: countDefaults.max, current: countDefaults.current }
+          : {}),
       label: template.label || template.id,
       field_type: template.field_type || 'short',
       sort_index: template.sort_order ?? 999,
