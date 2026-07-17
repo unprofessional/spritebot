@@ -17,6 +17,25 @@ function character(overrides: Partial<CharacterWithStats> = {}): CharacterWithSt
 }
 
 describe('view_character_card', () => {
+  test('renders count stats using the shared current/max format', () => {
+    const view = build(
+      character({
+        stats: [
+          {
+            template_id: 'hp',
+            label: 'HP',
+            field_type: 'count',
+            value: '',
+            meta: { current: 8, max: 12 },
+          },
+        ],
+      }),
+    );
+
+    const values = (view.embeds[0].data.fields ?? []).map((field) => field.value);
+    expect(values).toContain('**HP**: 8 / 12');
+  });
+
   test('renders equipped inventory items at the end of the character sheet', () => {
     const view = build(
       character({
