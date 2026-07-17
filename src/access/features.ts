@@ -39,6 +39,7 @@ export const CommandPolicy: Record<string, FeatureKey> = {
   'join-game': 'core',
   'switch-game': 'core',
   roll: 'core',
+  help: 'core',
 
   // === Premium (stateful) ===
   'create-character': 'rpg:characters',
