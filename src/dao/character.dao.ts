@@ -39,8 +39,11 @@ export class CharacterDAO {
         bio,
         visibility
       )
-      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
-      RETURNING *
+      SELECT $1, g.id, $3, $4, $5, $6, $7, $8
+      FROM game g
+      WHERE g.id = $2
+        AND g.deleted_at IS NULL
+      RETURNING character.*
     `;
     const params = [
       user_id.trim(),
@@ -53,7 +56,9 @@ export class CharacterDAO {
       visibility,
     ];
     const result = await query<Character>(sql, params);
-    return result.rows[0];
+    const character = result.rows[0];
+    if (!character) throw new Error(`Cannot create a character for inactive game ${game_id}`);
+    return character;
   }
 
   async findById(characterId: string): Promise<Character | null> {
@@ -141,6 +146,7 @@ export class CharacterDAO {
       `
         UPDATE character
         SET deleted_at = CURRENT_TIMESTAMP,
+            deleted_by_game = FALSE,
             visibility = 'private',
             last_updated_at = CURRENT_TIMESTAMP
         WHERE id = $1
@@ -157,6 +163,7 @@ export class CharacterDAO {
       `
         UPDATE character
         SET deleted_at = NULL,
+            deleted_by_game = FALSE,
             visibility = 'private',
             last_updated_at = CURRENT_TIMESTAMP
         WHERE id = $1

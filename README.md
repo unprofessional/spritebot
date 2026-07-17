@@ -28,6 +28,7 @@ At a high level, the bot supports:
 The repo currently defines these slash and context-menu commands:
 
 - `/create-game` - Create a campaign for the current server
+- `/restore-game` - Restore one of your games within 30 days of deletion
 - `/view-game` - View the current active game
 - `/list-games` - Show game information for the server
 - `/join-game` - Join a public game in the current server
@@ -71,6 +72,10 @@ A `game` is the campaign container for a server. It stores:
 - Whether the game is public
 
 Games can define their own stat templates so each campaign can decide what a character sheet should look like.
+
+GMs can delete their own games from `/view-game`. Game deletion is reversible for 30 days with
+`/restore-game`; restoring a game also restores characters deleted as part of that game deletion.
+Characters that players deleted independently remain deleted.
 
 ### Characters
 

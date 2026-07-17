@@ -215,6 +215,7 @@ describe('admin_housekeeping.service', () => {
     const counts = Object.fromEntries(results.map((result) => [result.category, result.count]));
 
     expect(counts).toEqual({
+      'soft-deleted-games': 0,
       'soft-deleted-characters': 1,
       'stale-proxy-messages': 1,
       'stale-channel-modes': 1,
@@ -253,6 +254,46 @@ describe('admin_housekeeping.service', () => {
     ).resolves.toMatchObject({ rows: [{ count: 0 }] });
   });
 
+  test('purges expired soft-deleted games and their dependent rows', async () => {
+    const game = await createGame('Expired Deleted Game');
+    const template = await statTemplateDAO.create({
+      game_id: game.id,
+      label: 'HP',
+      field_type: 'number',
+    });
+    const character = await characterDAO.create({
+      user_id: 'player-1',
+      game_id: game.id,
+      name: 'Cascaded Hero',
+    });
+    await query(
+      `UPDATE game SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [game.id],
+    );
+
+    const results = await purgeSafeOrphans();
+
+    expect(results).toContainEqual(
+      expect.objectContaining({ category: 'soft-deleted-games', count: 1 }),
+    );
+    await expect(
+      query<{ count: string | number }>(`SELECT COUNT(*) AS count FROM game WHERE id = $1`, [
+        game.id,
+      ]),
+    ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(
+      query<{ count: string | number }>(
+        `SELECT COUNT(*) AS count FROM stat_template WHERE id = $1`,
+        [template.id],
+      ),
+    ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+    await expect(
+      query<{ count: string | number }>(`SELECT COUNT(*) AS count FROM character WHERE id = $1`, [
+        character.id,
+      ]),
+    ).resolves.toMatchObject({ rows: [{ count: 0 }] });
+  });
+
   test('audits games in a guild with activity and visibility counts', async () => {
     const game = await createGame('Busy Table', { isPublic: true });
     await statTemplateDAO.create({
@@ -286,6 +327,24 @@ describe('admin_housekeeping.service', () => {
         publicCharacterCount: 1,
         privateCharacterCount: 1,
         inactiveOver60Days: false,
+      }),
+    ]);
+  });
+
+  test('audits soft-deleted games with their remaining recovery time', async () => {
+    const game = await createGame('Recoverable Deleted Table');
+    await query(
+      `UPDATE game SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '5 days' WHERE id = $1`,
+      [game.id],
+    );
+
+    const rows = await getGameAudit('guild-1');
+
+    expect(rows).toEqual([
+      expect.objectContaining({
+        id: game.id,
+        deletedAt: expect.any(String),
+        daysUntilPurge: 25,
       }),
     ]);
   });
