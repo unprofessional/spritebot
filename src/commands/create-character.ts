@@ -5,7 +5,11 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'dis
 import { getOrCreatePlayer, getCurrentGame } from '../services/player.service';
 import { getGame, getStatTemplates } from '../services/game.service';
 import { getUserDefinedFields } from '../services/character.service';
-import { initDraft, getTempCharacterData } from '../services/character_draft.service';
+import {
+  getRemainingRequiredFields,
+  initDraft,
+  getTempCharacterData,
+} from '../services/character_draft.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateCharacterResponse } from '../utils/rebuild_create_character_response';
 import { applyCountStatDefaultsToDraft } from '../utils/count_stat_defaults';
@@ -16,11 +20,6 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../discord/interaction_dispatch';
-
-interface LabeledField {
-  name: string;
-  label: string;
-}
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -98,51 +97,14 @@ module.exports = {
     applyCountStatDefaultsToDraft(draft.data, statTemplates);
     console.log(`🧾 Draft initialized for user ${userId} with game_id: ${gameId}`);
 
-    const coreFields: LabeledField[] = [
-      { name: 'core:name', label: '[CORE] Name' },
-      { name: 'core:bio', label: '[CORE] Bio' },
-      { name: 'core:avatar_url', label: '[CORE] Avatar URL' },
-      { name: 'core:rp_display_name', label: '[CORE] RP Display Name' },
-      { name: 'core:rp_display_avatar_url', label: '[CORE] RP Display Avatar URL' },
-    ];
-
-    const gameFields: LabeledField[] = statTemplates.map((f) => ({
-      name: `game:${f.id}`,
-      label: `[GAME] ${f.label || f.id}`,
-    }));
-
-    const userFieldsFormatted: LabeledField[] = userFields
-      .filter((f): f is UserDefinedField => typeof f?.name === 'string')
-      .map((f) => ({
-        name: `user:${f.name}`,
-        label: `[USER] ${f.label || f.name}`,
-      }));
-
-    const allFields: LabeledField[] = [...coreFields, ...gameFields, ...userFieldsFormatted];
-
-    const safeFields = allFields.filter(
-      (f): f is LabeledField =>
-        typeof f.label === 'string' &&
-        typeof f.name === 'string' &&
-        f.label.trim().length > 0 &&
-        f.name.trim().length > 0 &&
-        f.name.includes(':'),
-    );
-
-    if (!safeFields.length) {
-      return responder.respond({
-        content: '⚠️ No valid fields found to show in the dropdown.',
-        ephemeral: true,
-      });
-    }
-
     const hydratedDraft = await getTempCharacterData(userId);
     const draftData: Record<string, unknown> = hydratedDraft?.data ?? {};
+    const requiredFieldsRemaining = await getRemainingRequiredFields(userId);
     const response = rebuildCreateCharacterResponse(
       game,
       statTemplates,
       userFields,
-      safeFields,
+      requiredFieldsRemaining,
       draftData,
     );
 
