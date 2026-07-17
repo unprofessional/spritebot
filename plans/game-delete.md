@@ -64,7 +64,7 @@ Follow the character delete pattern exactly:
 - [x] `confirm_delete_game_button.ts` — Confirmation button with cancel option
 - [x] Delete handler: ownership check → show confirmation with warning message
 - [x] Confirm handler: ownership re-check → call `GameService.deleteGame` → show result with character/player counts affected
-- [x] Warning text: _"⚠️ This will soft-delete the game and all its characters. Players will be removed from the game. You have **30 days** to restore it before it is permanently removed. Use `/restore-game` to recover it."_
+- [x] Warning text: _"⚠️ This will delete the game and all its characters. Players will be removed from the game. You have **30 days** to restore it before it is permanently removed. Use `/restore-game` to recover it."_
 - [x] Register both handlers in `button_handlers/index.ts`
 
 ### 5. Command: `/restore-game`
