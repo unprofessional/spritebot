@@ -27,6 +27,7 @@ At a high level, the bot supports:
 
 The repo currently defines these slash and context-menu commands:
 
+- `/help` - Browse role- and subscription-aware guidance for available commands
 - `/create-game` - Create a campaign for the current server
 - `/restore-game` - Restore one of your games within 30 days of deletion
 - `/view-game` - View the current active game
