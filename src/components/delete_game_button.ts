@@ -37,7 +37,7 @@ async function handle(
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       buildConfirmDeleteGameButton(gameId),
       new ButtonBuilder()
-        .setCustomId(`cancelDeleteGame:${gameId}`)
+        .setCustomId(`goBackToGame:${gameId}`)
         .setLabel('↩️ Cancel')
         .setStyle(ButtonStyle.Secondary),
     );

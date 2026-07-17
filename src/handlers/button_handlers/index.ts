@@ -49,6 +49,7 @@ import { interactionPolicy as viewParagraphFieldsPolicy } from '../../components
 
 import * as characterViewButtons from './character_view_buttons';
 import * as fallbackButtons from './fallback_buttons';
+import * as gameViewButtons from './game_view_buttons';
 import * as inventoryButtons from './inventory_buttons';
 
 type ButtonRoute = [
@@ -70,7 +71,6 @@ const directRoutes: ButtonRoute[] = [
   [/^deleteCharacter/, (i, r) => handleDeleteCharacter(i, r!), deleteCharacterPolicy],
   [/^deleteGame:/, (i, r) => handleDeleteGame(i, r!), deleteGamePolicy],
   [/^confirmDeleteGame:/, (i, r) => handleConfirmDeleteGame(i, r!), confirmDeleteGamePolicy],
-  [/^cancelDeleteGame:/, (i, r) => handleConfirmDeleteGame(i, r!), confirmDeleteGamePolicy],
   [
     /^confirmDeleteCharacter/,
     (i, r) => handleConfirmDeleteCharacterButton(i, r!),
@@ -99,6 +99,7 @@ export function getButtonInteractionPolicy(customId: string): InteractionDispatc
   if (directRoute) return directRoute[2];
   if (isInventoryButton(customId)) return inventoryButtons.getInteractionPolicy(customId);
   if (customId.startsWith('goBackToCharacter:')) return characterViewButtons.interactionPolicy;
+  if (customId.startsWith('goBackToGame:')) return gameViewButtons.interactionPolicy;
   return fallbackButtons.interactionPolicy;
 }
 
@@ -124,6 +125,10 @@ export async function handleButton(
 
   if (customId.startsWith('goBackToCharacter:')) {
     return characterViewButtons.handle(interaction, responder);
+  }
+
+  if (customId.startsWith('goBackToGame:')) {
+    return gameViewButtons.handle(interaction, responder);
   }
 
   return fallbackButtons.handle(interaction, responder);

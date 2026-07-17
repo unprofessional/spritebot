@@ -21,7 +21,7 @@ describe('remaining Task 7 interaction policies', () => {
     'deleteCharacter:character-1',
     'deleteGame:game-1',
     'confirmDeleteGame:game-1',
-    'cancelDeleteGame:game-1',
+    'goBackToGame:game-1',
     'deleteStats:game-1',
     'editCharacterStat:character-1',
     'editGameStats:game-1',
