@@ -12,6 +12,7 @@ import { handle as handleJoinGameSelector } from '../../components/join_game_sel
 import { handle as handleParagraphFieldSelector } from '../../components/paragraph_field_selector';
 import { handle as handlePublicCharacterSelector } from '../../components/public_character_selector';
 import { handle as handleRestoreCharacterSelector } from '../../components/restore_character_selector';
+import { handle as handleRestoreGameSelector } from '../../components/restore_game_selector';
 import { handle as statTypeSelectorHandler } from '../../components/stat_type_selector';
 import { handle as handleSwitchCharacterSelector } from '../../components/switch_character_selector';
 import { handle as handleSwitchGameSelector } from '../../components/switch_game_selector';
@@ -23,6 +24,7 @@ import { interactionPolicy as deleteStatPolicy } from '../../components/delete_s
 import { interactionPolicy as paragraphFieldPolicy } from '../../components/paragraph_field_selector';
 import { interactionPolicy as publicCharacterPolicy } from '../../components/public_character_selector';
 import { interactionPolicy as restoreCharacterPolicy } from '../../components/restore_character_selector';
+import { interactionPolicy as restoreGamePolicy } from '../../components/restore_game_selector';
 import { interactionPolicy as switchCharacterPolicy } from '../../components/switch_character_selector';
 import { interactionPolicy as switchGamePolicy } from '../../components/switch_game_selector';
 import { interactionPolicy as statTypePolicy } from '../../components/stat_type_selector';
@@ -40,6 +42,7 @@ export function getSelectMenuInteractionPolicy(customId: string): InteractionDis
   if (customId === 'switchGameDropdown') return switchGamePolicy;
   if (customId === 'joinGameDropdown') return joinGamePolicy;
   if (customId === 'restoreCharacterDropdown') return restoreCharacterPolicy;
+  if (customId === 'restoreGameDropdown') return restoreGamePolicy;
   if (customId.startsWith('selectPublicCharacter')) return publicCharacterPolicy;
   if (customId.startsWith('paragraphFieldSelect')) return paragraphFieldPolicy;
   if (customId.startsWith('editInventoryItemSelect:')) return inventoryItemSelect.interactionPolicy;
@@ -68,6 +71,7 @@ export async function handleSelectMenu(
   if (customId === 'joinGameDropdown') return handleJoinGameSelector(interaction, responder);
   if (customId === 'restoreCharacterDropdown')
     return handleRestoreCharacterSelector(interaction, responder);
+  if (customId === 'restoreGameDropdown') return handleRestoreGameSelector(interaction, responder);
   if (customId.startsWith('editStatSelect:'))
     return editStatSelectorHandler(interaction, responder);
   if (customId.startsWith('deleteStatSelect:'))

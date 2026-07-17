@@ -13,6 +13,7 @@ CREATE TABLE game (
   description TEXT,
   is_public BOOLEAN DEFAULT FALSE,
   created_by TEXT NOT NULL,
+  deleted_at TIMESTAMP DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
@@ -42,6 +43,7 @@ CREATE TABLE character (
   bio TEXT,
   visibility TEXT DEFAULT 'private' CHECK (visibility IN ('private', 'public', 'link-only')),
   deleted_at TIMESTAMP,
+  deleted_by_game BOOLEAN NOT NULL DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   last_updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );

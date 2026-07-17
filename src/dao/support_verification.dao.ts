@@ -42,6 +42,7 @@ export class SupportVerificationDAO {
         JOIN player_server_link psl ON psl.player_id = p.id
         JOIN game g ON g.id = psl.current_game_id
           AND g.guild_id = psl.guild_id
+          AND g.deleted_at IS NULL
         WHERE p.discord_id = $1
           AND (
             EXISTS (

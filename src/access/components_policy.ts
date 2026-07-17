@@ -20,6 +20,9 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['finishStatSetup:', 'rpg:game-admin'],
   ['togglePublishGame:', 'rpg:game-admin'],
   ['confirmDeleteStat:', 'rpg:game-admin'],
+  ['deleteGame:', 'rpg:game-admin'],
+  ['confirmDeleteGame:', 'rpg:game-admin'],
+  ['restoreGameDropdown', 'rpg:game-admin'],
   ['editStatSelect:', 'rpg:game-admin'],
   ['deleteStatSelect:', 'rpg:game-admin'],
   ['selectStatType:', 'rpg:game-admin'],
@@ -74,6 +77,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['supportVerify:', 'core'], // support-server role verification
   ['charPage:', 'core'], // pagination on char views
   ['goBackToCharacter:', 'core'], // nav
+  ['goBackToGame:', 'core'], // nav
   ['viewParagraphFields', 'core'], // open long fields
   ['paragraphFieldSelect', 'core'], // select which long field
   ['switchCharacterDropdown', 'core'], // switch context

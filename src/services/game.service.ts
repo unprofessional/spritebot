@@ -1,9 +1,22 @@
-import { Game } from 'types/game';
+import type { Game } from 'types/game';
 import { GameDAO } from '../dao/game.dao';
 import { StatTemplateDAO } from '../dao/stat_template.dao';
 
 const gameDAO = new GameDAO();
 const statTemplateDAO = new StatTemplateDAO();
+const RESTORE_WINDOW_DAYS = 30;
+
+export type GameMutationResult =
+  | {
+      ok: true;
+      game: Game;
+      characterCount: number;
+      playerCount: number;
+    }
+  | {
+      ok: false;
+      reason: 'not_found' | 'not_owner' | 'not_deleted' | 'already_deleted' | 'expired';
+    };
 
 interface StatTemplateInput {
   label: string;
@@ -75,6 +88,45 @@ export async function getGamesByUser(
     return allGames.filter((g) => g.guild_id === guildId);
   }
   return allGames;
+}
+
+export async function getRestorableGames(userId: string, guildId: string): Promise<Game[]> {
+  return gameDAO.findRestorableByUserInGuild(userId, guildId);
+}
+
+function restoreWindowExpired(deletedAt?: string | null): boolean {
+  if (!deletedAt) return false;
+  const deletedTime = new Date(deletedAt).getTime();
+  const cutoff = Date.now() - RESTORE_WINDOW_DAYS * 24 * 60 * 60 * 1000;
+  return deletedTime < cutoff;
+}
+
+export async function deleteGame(gameId: string, requesterId: string): Promise<GameMutationResult> {
+  const game = await gameDAO.findByIdIncludingDeleted(gameId);
+  if (!game) return { ok: false, reason: 'not_found' };
+  if (game.created_by !== requesterId) return { ok: false, reason: 'not_owner' };
+  if (game.deleted_at) return { ok: false, reason: 'already_deleted' };
+
+  const deleted = await gameDAO.softDeleteWithDependencies(gameId, requesterId);
+  if (!deleted) return { ok: false, reason: 'not_found' };
+
+  return { ok: true, ...deleted };
+}
+
+export async function restoreGame(
+  gameId: string,
+  requesterId: string,
+): Promise<GameMutationResult> {
+  const game = await gameDAO.findByIdIncludingDeleted(gameId);
+  if (!game) return { ok: false, reason: 'not_found' };
+  if (game.created_by !== requesterId) return { ok: false, reason: 'not_owner' };
+  if (!game.deleted_at) return { ok: false, reason: 'not_deleted' };
+  if (restoreWindowExpired(game.deleted_at)) return { ok: false, reason: 'expired' };
+
+  const restored = await gameDAO.restoreWithDependencies(gameId, requesterId);
+  if (!restored) return { ok: false, reason: 'not_found' };
+
+  return { ok: true, ...restored };
 }
 
 export async function getStatTemplates(gameId: string) {
