@@ -25,6 +25,8 @@ describe('remaining Task 7 interaction policies', () => {
     'deleteStats:game-1',
     'editCharacterStat:character-1',
     'editGameStats:game-1',
+    'help:role:player',
+    'help:back',
   ])('routes button %s through component update auto-deferral', (customId) => {
     expect(getButtonInteractionPolicy(customId)).toEqual(componentUpdatePolicy);
   });
@@ -37,6 +39,10 @@ describe('remaining Task 7 interaction policies', () => {
 
   test('routes the restore-game selector through component update auto-deferral', () => {
     expect(getSelectMenuInteractionPolicy('restoreGameDropdown')).toEqual(componentUpdatePolicy);
+  });
+
+  test('routes the help category selector through component update auto-deferral', () => {
+    expect(getSelectMenuInteractionPolicy('help:category:player')).toEqual(componentUpdatePolicy);
   });
 
   test.each([

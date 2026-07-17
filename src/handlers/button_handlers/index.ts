@@ -47,6 +47,7 @@ import { interactionPolicy as toggleCharacterVisibilityPolicy } from '../../comp
 import { interactionPolicy as togglePublishPolicy } from '../../components/toggle_publish_button';
 import { interactionPolicy as viewParagraphFieldsPolicy } from '../../components/view_paragraph_fields_button';
 
+import * as helpRoleButtons from '../help/help_role_button';
 import * as characterViewButtons from './character_view_buttons';
 import * as fallbackButtons from './fallback_buttons';
 import * as gameViewButtons from './game_view_buttons';
@@ -59,6 +60,7 @@ type ButtonRoute = [
 ];
 
 const directRoutes: ButtonRoute[] = [
+  [/^help:(?:role:(?:player|gm)|back)$/, helpRoleButtons.handle, helpRoleButtons.interactionPolicy],
   [/^preparedModal:/, (i, r) => activatePreparedModal(i, r!), preparedModalInteractionPolicy],
   [/^defineStats:/, (i, r) => handleDefineStats(i, r!), defineStatsPolicy],
   [/^editGameStats:/, (i, r) => handleEditGameStats(i, r!), editGameStatsPolicy],
