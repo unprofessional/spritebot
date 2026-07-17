@@ -126,6 +126,8 @@ src/components/help/
 
 - All responses are ephemeral — help is a private experience
 - Use `update` on button/select interactions to edit the original message in-place
+- Card builders omit response visibility; the responder policy makes the initial reply ephemeral
+  while allowing component responses to update that same message
 - Custom IDs: `help:role:player`, `help:role:gm`, `help:category:<name>`, `help:back`
 - Content lives in one file (`help_content.ts`) so updating help text doesn't require touching handlers
 - No new persistence — rendering only reads the existing entitlement and gifted-guild sources
