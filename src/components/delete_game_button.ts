@@ -45,7 +45,7 @@ async function handle(
     await responder.respond({
       content: [
         `🗑️ Are you sure you want to delete **${game.name}**?`,
-        '⚠️ This will soft-delete the game and all its characters. Players will be removed from the game. You have **30 days** to restore it before it is permanently removed. Use `/restore-game` to recover it.',
+        '⚠️ This will delete the game and all its characters. Players will be removed from the game. You have **30 days** to restore it before it is permanently removed. Use `/restore-game` to recover it.',
       ].join('\n'),
       embeds: [],
       components: [confirmRow],
