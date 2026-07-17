@@ -1,6 +1,7 @@
 import type { StatTemplate } from '../../../src/types/stat_template';
 import {
   applyCountStatDefaultsToDraft,
+  formatCountStatValue,
   formatStatTemplateDefault,
   getCountStatDefaults,
   parseCountDefault,
@@ -22,6 +23,12 @@ function countTemplate(overrides: Partial<StatTemplate> = {}): StatTemplate {
 }
 
 describe('count stat defaults', () => {
+  test('formats current and max from numeric or legacy string metadata', () => {
+    expect(formatCountStatValue({ current: 4, max: 10 })).toBe('4 / 10');
+    expect(formatCountStatValue({ max: '10' })).toBe('10 / 10');
+    expect(formatCountStatValue({ current: 4 })).toBeNull();
+  });
+
   test('uses max as current when no explicit current default exists', () => {
     expect(getCountStatDefaults(countTemplate())).toEqual({ max: 10, current: 10 });
     expect(formatStatTemplateDefault(countTemplate())).toBe('10 / 10');
