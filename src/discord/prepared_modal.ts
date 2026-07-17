@@ -9,6 +9,7 @@ import {
 } from 'discord.js';
 
 import type { InteractionDispatchPolicy } from './interaction_dispatch';
+import { logDiscordModalFlow } from './logging';
 import {
   DiscordInteractionResponder,
   InteractionResponseStateError,
@@ -21,6 +22,7 @@ const PREPARED_MODAL_TTL_MS = 10 * 60 * 1_000;
 const PREPARED_MODAL_LIMIT = 500;
 
 type PreparedModalEntry = {
+  createdAt: number;
   expiresAt: number;
   modal: unknown;
   userId: string;
@@ -71,6 +73,13 @@ export async function presentPreparedModal({
   }
 
   const outcome = await responder.presentModal(modal);
+  logDiscordModalFlow({
+    event:
+      outcome === 'shown' ? 'fast' : outcome === 'requires_activation' ? 'prepared' : 'expired',
+    elapsedMs: responder.elapsedMs,
+    interactionKey: responder.telemetryKey,
+    flowKey: responder.modalFlowKey,
+  });
   if (outcome !== 'requires_activation') return;
 
   const token = storePreparedModal({
@@ -102,6 +111,11 @@ export async function activatePreparedModal(
   const entry = takePreparedModal(token, interaction.user.id);
 
   if (!entry) {
+    logDiscordModalFlow({
+      event: 'expired',
+      elapsedMs: responder.elapsedMs,
+      interactionKey: responder.telemetryKey,
+    });
     await responder.respond({
       content: '⚠️ This prepared editor expired. Please start the edit again.',
       ephemeral: true,
@@ -120,6 +134,12 @@ export async function activatePreparedModal(
   }
 
   await responder.showModal(entry.modal);
+  logDiscordModalFlow({
+    event: 'activation',
+    elapsedMs: Date.now() - entry.createdAt,
+    interactionKey: responder.telemetryKey,
+    flowKey: responder.modalFlowKey,
+  });
 }
 
 export function isPreparedModalCustomId(customId: string): boolean {
@@ -162,8 +182,10 @@ function storePreparedModal({
   }
 
   const token = randomUUID();
+  const createdAt = Date.now();
   preparedModals.set(token, {
-    expiresAt: Date.now() + PREPARED_MODAL_TTL_MS,
+    createdAt,
+    expiresAt: createdAt + PREPARED_MODAL_TTL_MS,
     modal,
     userId,
     updateOriginal,

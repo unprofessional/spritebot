@@ -1,3 +1,5 @@
+import { createHmac, randomBytes, randomUUID } from 'node:crypto';
+
 import { classifyDiscordError, type ClassifiedDiscordError } from './errors';
 
 export interface DiscordFailureLogInput {
@@ -10,6 +12,28 @@ export interface DiscordFailureLogInput {
   interactionKind?: string;
   acknowledgementMethod?: string;
   acknowledgementMs?: number;
+}
+
+export interface DiscordInteractionLifecycleLogInput {
+  phase: 'received' | 'completed';
+  outcome: 'success' | 'failure';
+  elapsedMs: number;
+  gatewayLagMs?: number;
+  guardMs?: number;
+  handlerMs?: number;
+  state?: string;
+  commandName?: string;
+  customId?: string;
+  interactionKind?: string;
+  interactionKey?: string;
+  flowKey?: string;
+}
+
+export interface DiscordModalFlowLogInput {
+  event: 'fast' | 'prepared' | 'activation' | 'expired';
+  elapsedMs: number;
+  interactionKey?: string;
+  flowKey?: string;
 }
 
 export type DiscordLogSink = (line: string) => void;
@@ -26,9 +50,16 @@ export interface DiscordOperationTelemetryLogInput {
   interactionKind?: string;
   acknowledgementMethod?: string;
   acknowledgementMs?: number;
+  callbackStartMs?: number;
+  interactionKey?: string;
+  flowKey?: string;
 }
 
 const safeLabel = /^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$/;
+const telemetryCorrelationSecret = randomBytes(32);
+const MODAL_FLOW_TTL_MS = 15 * 60 * 1_000;
+const MODAL_FLOW_LIMIT = 1_000;
+const modalFlows = new Map<string, { expiresAt: number; flowKey: string }>();
 
 export function formatDiscordFailureLog(input: DiscordFailureLogInput): string {
   const error = classifyDiscordError(input.error);
@@ -56,6 +87,63 @@ export function formatDiscordFailureLog(input: DiscordFailureLogInput): string {
       ? []
       : [`acknowledgementMs=${safeNonNegativeInteger(input.acknowledgementMs)}`]),
   ].join(' ');
+}
+
+export function formatDiscordInteractionLifecycleLog(
+  input: DiscordInteractionLifecycleLogInput,
+): string {
+  const commandName = safeMetadata(input.commandName);
+  const customIdPrefix = safeCustomIdPrefix(input.customId);
+  const kind = safeMetadata(input.interactionKind);
+  const state = safeMetadata(input.state);
+  const interactionKey = safeMetadata(input.interactionKey);
+  const flowKey = safeMetadata(input.flowKey);
+
+  return [
+    '[discord-interaction]',
+    `phase=${input.phase}`,
+    `outcome=${input.outcome}`,
+    `elapsedMs=${safeNonNegativeInteger(input.elapsedMs)}`,
+    ...(input.gatewayLagMs === undefined
+      ? []
+      : [`gatewayLagMs=${safeNonNegativeInteger(input.gatewayLagMs)}`]),
+    ...(input.guardMs === undefined ? [] : [`guardMs=${safeNonNegativeInteger(input.guardMs)}`]),
+    ...(input.handlerMs === undefined
+      ? []
+      : [`handlerMs=${safeNonNegativeInteger(input.handlerMs)}`]),
+    ...(kind ? [`interactionKind=${kind}`] : []),
+    ...(commandName ? [`command=${commandName}`] : []),
+    ...(customIdPrefix ? [`customIdPrefix=${customIdPrefix}`] : []),
+    ...(state ? [`state=${state}`] : []),
+    ...(interactionKey ? [`interactionKey=${interactionKey}`] : []),
+    ...(flowKey ? [`flowKey=${flowKey}`] : []),
+  ].join(' ');
+}
+
+export function logDiscordInteractionLifecycle(
+  input: DiscordInteractionLifecycleLogInput,
+  sink: DiscordLogSink = input.outcome === 'failure' ? console.warn : console.debug,
+): void {
+  sink(formatDiscordInteractionLifecycleLog(input));
+}
+
+export function formatDiscordModalFlowLog(input: DiscordModalFlowLogInput): string {
+  const interactionKey = safeMetadata(input.interactionKey);
+  const flowKey = safeMetadata(input.flowKey);
+  return [
+    '[discord-modal]',
+    `event=${input.event}`,
+    `elapsedMs=${safeNonNegativeInteger(input.elapsedMs)}`,
+    ...(interactionKey ? [`interactionKey=${interactionKey}`] : []),
+    ...(flowKey ? [`flowKey=${flowKey}`] : []),
+  ].join(' ');
+}
+
+export function logDiscordModalFlow(
+  input: DiscordModalFlowLogInput,
+  sink: DiscordLogSink = console.debug,
+): void {
+  sink(formatDiscordModalFlowLog(input));
 }
 
 export function logDiscordFailure(
@@ -88,6 +176,11 @@ export function formatDiscordOperationTelemetryLog(
     ...(input.acknowledgementMs === undefined
       ? []
       : [`acknowledgementMs=${safeNonNegativeInteger(input.acknowledgementMs)}`]),
+    ...(input.callbackStartMs === undefined
+      ? []
+      : [`callbackStartMs=${safeNonNegativeInteger(input.callbackStartMs)}`]),
+    ...(safeMetadata(input.interactionKey) ? [`interactionKey=${input.interactionKey}`] : []),
+    ...(safeMetadata(input.flowKey) ? [`flowKey=${input.flowKey}`] : []),
     ...(input.classified
       ? [
           `category=${input.classified.category}`,
@@ -137,6 +230,55 @@ export function interactionKind(interaction: unknown): string {
   return typeof type === 'number' ? `type-${type}` : 'unknown';
 }
 
+export function interactionTelemetryKey(interaction: unknown): string | undefined {
+  if (!interaction || typeof interaction !== 'object') return undefined;
+  const id = (interaction as Record<string, unknown>).id;
+  return typeof id === 'string' ? correlationKey('interaction', id) : undefined;
+}
+
+export function registerModalFlowTelemetry(
+  modalOrCustomId: unknown,
+  interaction: unknown,
+): string | undefined {
+  const customId = extractCustomId(modalOrCustomId);
+  const userId = interactionUserId(interaction);
+  if (!customId || !userId) return undefined;
+
+  pruneModalFlows();
+  while (modalFlows.size >= MODAL_FLOW_LIMIT) {
+    const oldestKey = modalFlows.keys().next().value as string | undefined;
+    if (!oldestKey) break;
+    modalFlows.delete(oldestKey);
+  }
+
+  const flowKey = correlationKey('modal-flow', randomUUID());
+  modalFlows.set(modalFlowLookupKey(userId, customId), {
+    expiresAt: Date.now() + MODAL_FLOW_TTL_MS,
+    flowKey,
+  });
+  return flowKey;
+}
+
+export function resolveModalFlowTelemetry(
+  customId: string,
+  interaction: unknown,
+): string | undefined {
+  const userId = interactionUserId(interaction);
+  if (!userId) return undefined;
+  pruneModalFlows();
+  return modalFlows.get(modalFlowLookupKey(userId, customId))?.flowKey;
+}
+
+export function interactionGatewayLagMs(
+  interaction: unknown,
+  now = Date.now(),
+): number | undefined {
+  if (!interaction || typeof interaction !== 'object') return undefined;
+  const createdTimestamp = (interaction as Record<string, unknown>).createdTimestamp;
+  if (typeof createdTimestamp !== 'number' || !Number.isFinite(createdTimestamp)) return undefined;
+  return Math.max(0, now - createdTimestamp);
+}
+
 function safeMetadata(value: string | undefined): string | undefined {
   if (!value || !safeLabel.test(value)) return undefined;
   return value;
@@ -149,4 +291,47 @@ function safeCustomIdPrefix(customId: string | undefined): string | undefined {
 
 function safeNonNegativeInteger(value: number): number {
   return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function correlationKey(namespace: string, value: string): string {
+  return createHmac('sha256', telemetryCorrelationSecret)
+    .update(namespace)
+    .update('\0')
+    .update(value)
+    .digest('hex')
+    .slice(0, 12);
+}
+
+function extractCustomId(value: unknown): string | undefined {
+  if (typeof value === 'string') return value;
+  if (!value || typeof value !== 'object') return undefined;
+
+  const direct = (value as Record<string, unknown>).customId;
+  if (typeof direct === 'string') return direct;
+
+  const toJSON = (value as { toJSON?: () => unknown }).toJSON;
+  if (typeof toJSON !== 'function') return undefined;
+  const json = toJSON.call(value);
+  if (!json || typeof json !== 'object') return undefined;
+  const customId = (json as Record<string, unknown>).custom_id;
+  return typeof customId === 'string' ? customId : undefined;
+}
+
+function interactionUserId(interaction: unknown): string | undefined {
+  if (!interaction || typeof interaction !== 'object') return undefined;
+  const user = (interaction as Record<string, unknown>).user;
+  if (!user || typeof user !== 'object') return undefined;
+  const id = (user as Record<string, unknown>).id;
+  return typeof id === 'string' ? id : undefined;
+}
+
+function modalFlowLookupKey(userId: string, customId: string): string {
+  return `${userId}\0${customId}`;
+}
+
+function pruneModalFlows(): void {
+  const now = Date.now();
+  for (const [key, entry] of modalFlows) {
+    if (entry.expiresAt <= now) modalFlows.delete(key);
+  }
 }

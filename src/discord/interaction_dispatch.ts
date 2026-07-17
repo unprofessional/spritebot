@@ -2,7 +2,14 @@ import type { BaseInteraction } from 'discord.js';
 
 import { DRAINING_REPLY, isDrainInProgressError, trackOperation } from '../runtime/lifecycle';
 import { DiscordOperationTimeoutError } from './errors';
-import { interactionMetadataString, logDiscordFailure } from './logging';
+import {
+  interactionGatewayLagMs,
+  interactionKind,
+  interactionMetadataString,
+  interactionTelemetryKey,
+  logDiscordFailure,
+  logDiscordInteractionLifecycle,
+} from './logging';
 import {
   DiscordInteractionResponder,
   InteractionCallbackError,
@@ -71,6 +78,7 @@ export interface InteractionDispatchOptions<I extends BaseInteraction = BaseInte
   handler: (interaction: I, responder: DiscordInteractionResponder) => Promise<unknown>;
   acknowledgementBudgetMs?: number;
   preparedComponentUpdateTarget?: PreparedComponentUpdateTarget;
+  modalFlowKey?: string;
 }
 
 export class InteractionAcknowledgementDeadlineError extends DiscordOperationTimeoutError {
@@ -101,6 +109,25 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
     options.policy.mode,
     options.preparedComponentUpdateTarget,
   );
+  const dispatchStartedAt = Date.now();
+  const commandName = interactionMetadataString(options.interaction, 'commandName');
+  const customId = interactionMetadataString(options.interaction, 'customId');
+  const kind = interactionKind(options.interaction);
+  const interactionKey = interactionTelemetryKey(options.interaction);
+  let guardMs: number | undefined;
+  let handlerMs: number | undefined;
+  let outcome: 'success' | 'failure' = 'success';
+  logDiscordInteractionLifecycle({
+    phase: 'received',
+    outcome: 'success',
+    elapsedMs: 0,
+    gatewayLagMs: interactionGatewayLagMs(options.interaction, dispatchStartedAt),
+    commandName,
+    customId,
+    interactionKind: kind,
+    interactionKey,
+    flowKey: options.modalFlowKey,
+  });
   const routedInteraction = createResponderInteraction(options.interaction, responder);
   let rejectDeadline!: (reason: InteractionAcknowledgementDeadlineError | unknown) => void;
   const deadlineFailure = new Promise<never>((_resolve, reject) => {
@@ -120,13 +147,24 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
   }, budgetMs);
 
   const work = Promise.resolve().then(async () => {
-    const guardResult = options.guard ? await options.guard(routedInteraction) : true;
+    const guardStartedAt = Date.now();
+    let guardResult: true | string;
+    try {
+      guardResult = options.guard ? await options.guard(routedInteraction) : true;
+    } finally {
+      guardMs = Date.now() - guardStartedAt;
+    }
     if (guardResult !== true) {
       await responder.respond({ content: guardResult });
       return;
     }
 
-    await options.handler(routedInteraction, responder);
+    const handlerStartedAt = Date.now();
+    try {
+      await options.handler(routedInteraction, responder);
+    } finally {
+      handlerMs = Date.now() - handlerStartedAt;
+    }
     if (
       !responder.acknowledged &&
       responder.state !== 'expired' &&
@@ -138,8 +176,24 @@ export async function dispatchInteractionWithDeadline<I extends BaseInteraction>
 
   try {
     await Promise.race([work, deadlineFailure]);
+  } catch (error) {
+    outcome = 'failure';
+    throw error;
   } finally {
     clearTimeout(deadline);
+    logDiscordInteractionLifecycle({
+      phase: 'completed',
+      outcome,
+      elapsedMs: Date.now() - dispatchStartedAt,
+      guardMs,
+      handlerMs,
+      state: responder.state,
+      commandName,
+      customId,
+      interactionKind: kind,
+      interactionKey,
+      flowKey: options.modalFlowKey ?? responder.modalFlowKey,
+    });
   }
 }
 
