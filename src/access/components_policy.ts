@@ -85,4 +85,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['joinGameDropdown', 'core'], // join game (request)
   ['selectPublicCharacter', 'core'], // filter public list
   ['calculateCharacterStats:', 'core'], // compute/display only (non-mutating)
+  ['help:role:', 'core'], // help navigation
+  ['help:category:', 'core'], // help navigation
+  ['help:back', 'core'], // help navigation
 ];
