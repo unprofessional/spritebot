@@ -17,6 +17,7 @@ import { isActiveCharacter } from '../utils/is_active_character';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { formatCharacterStatValue } from '../utils/character_stat_display';
 import { build as buildCharacterCard } from './view_character_card';
 
 export const interactionPolicy = {
@@ -87,15 +88,7 @@ export async function build(
         return aOrder !== bOrder ? aOrder - bOrder : a.label.localeCompare(b.label);
       })
       .slice(0, 4)
-      .map((s) => {
-        if (s.field_type === 'count') {
-          const current = s.meta?.current ?? '?';
-          const max = s.meta?.max ?? '?';
-          return `${s.label}: ${current} / ${max}`;
-        } else {
-          return `${s.label}: ${s.value}`;
-        }
-      });
+      .map((stat) => `${stat.label}: ${formatCharacterStatValue(stat) ?? 'Not set'}`);
 
     const visibilityBadge = fullCharacter.visibility === 'public' ? '✅ Public' : '🔒 Private';
     const createdAt = fullCharacter.created_at
