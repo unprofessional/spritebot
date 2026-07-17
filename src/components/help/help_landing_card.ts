@@ -17,5 +17,5 @@ export function build() {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  return { embeds: [embed], components: [roles], ephemeral: true as const };
+  return { embeds: [embed], components: [roles] };
 }
