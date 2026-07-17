@@ -1,7 +1,7 @@
 import type { ButtonInteraction, StringSelectMenuInteraction } from 'discord.js';
 
 import type { FeatureKey } from '../../../src/access/features';
-import type { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
+import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
 
 const getHelpFeatures = jest.fn();
 jest.mock('../../../src/services/help.service', () => ({ getHelpFeatures }));
@@ -62,6 +62,36 @@ describe('help handlers', () => {
       components: [],
     });
   });
+
+  test('updates the original message when role selection completes before auto-deferral', async () => {
+    const interaction = callbackInteraction('help:role:player');
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'component-update',
+    });
+
+    await handleRole(interaction as unknown as ButtonInteraction, responder);
+
+    expect(interaction.update).toHaveBeenCalledWith(
+      expect.objectContaining({ embeds: expect.any(Array), components: expect.any(Array) }),
+    );
+    expect(interaction.followUp).not.toHaveBeenCalled();
+  });
+
+  test('edits the original message when category selection completes after auto-deferral', async () => {
+    const interaction = callbackInteraction('help:category:player', ['characters']);
+    const responder = new DiscordInteractionResponder(interaction as never, {
+      kind: 'component-update',
+    });
+    await responder.acknowledge();
+
+    await handleCategory(interaction as unknown as StringSelectMenuInteraction, responder);
+
+    expect(interaction.deferUpdate).toHaveBeenCalledTimes(1);
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({ embeds: expect.any(Array), components: expect.any(Array) }),
+    );
+    expect(interaction.followUp).not.toHaveBeenCalled();
+  });
 });
 
 function mockResponder() {
@@ -80,4 +110,21 @@ function select(customId: string, value: string): StringSelectMenuInteraction {
     values: [value],
     guildId: 'guild-1',
   } as unknown as StringSelectMenuInteraction;
+}
+
+function callbackInteraction(customId: string, values: string[] = []) {
+  return {
+    customId,
+    values,
+    guildId: 'guild-1',
+    replied: false,
+    deferred: false,
+    reply: jest.fn().mockResolvedValue(undefined),
+    deferReply: jest.fn().mockResolvedValue(undefined),
+    editReply: jest.fn().mockResolvedValue(undefined),
+    followUp: jest.fn().mockResolvedValue(undefined),
+    update: jest.fn().mockResolvedValue(undefined),
+    deferUpdate: jest.fn().mockResolvedValue(undefined),
+    showModal: jest.fn().mockResolvedValue(undefined),
+  };
 }
