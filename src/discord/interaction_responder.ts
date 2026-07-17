@@ -4,7 +4,9 @@ import { classifyDiscordError } from './errors';
 import {
   interactionKind,
   interactionMetadataString,
+  interactionTelemetryKey,
   logDiscordOperationTelemetry,
+  registerModalFlowTelemetry,
 } from './logging';
 
 export type InteractionMode =
@@ -65,6 +67,7 @@ export class DiscordInteractionResponder {
   private readonly createdAt = Date.now();
   private acknowledgementMethod?: string;
   private acknowledgementMs?: number;
+  private lastModalFlowKey?: string;
 
   constructor(
     private readonly interaction: BaseInteraction,
@@ -84,6 +87,18 @@ export class DiscordInteractionResponder {
 
   get acknowledged(): boolean {
     return this.currentState !== 'unacknowledged' && this.currentState !== 'expired';
+  }
+
+  get elapsedMs(): number {
+    return Date.now() - this.createdAt;
+  }
+
+  get telemetryKey(): string | undefined {
+    return interactionTelemetryKey(this.interaction);
+  }
+
+  get modalFlowKey(): string | undefined {
+    return this.lastModalFlowKey;
   }
 
   expire(): void {
@@ -198,7 +213,10 @@ export class DiscordInteractionResponder {
         );
       }
 
-      await this.invoke('showModal', () => this.callbacks.showModal(modal), 'modal_shown');
+      this.lastModalFlowKey = registerModalFlowTelemetry(modal, this.interaction);
+      await this.invoke('showModal', () => this.callbacks.showModal(modal), 'modal_shown', {
+        flowKey: this.lastModalFlowKey,
+      });
     });
   }
 
@@ -224,7 +242,10 @@ export class DiscordInteractionResponder {
         );
       }
 
-      await this.invoke('showModal', () => this.callbacks.showModal(modal), 'modal_shown');
+      this.lastModalFlowKey = registerModalFlowTelemetry(modal, this.interaction);
+      await this.invoke('showModal', () => this.callbacks.showModal(modal), 'modal_shown', {
+        flowKey: this.lastModalFlowKey,
+      });
       return this.state === 'expired' ? 'expired' : 'shown';
     });
   }
@@ -328,8 +349,10 @@ export class DiscordInteractionResponder {
     operation: string,
     callback: () => Promise<unknown>,
     successState: InteractionResponseState,
+    metadata: { flowKey?: string } = {},
   ): Promise<boolean> {
     const startedAt = Date.now();
+    const callbackStartMs = startedAt - this.createdAt;
     const acknowledging = this.currentState === 'unacknowledged';
     try {
       await callback();
@@ -338,7 +361,14 @@ export class DiscordInteractionResponder {
         this.acknowledgementMethod = operation;
         this.acknowledgementMs = Date.now() - this.createdAt;
       }
-      this.logTelemetry(operation, 'success', Date.now() - startedAt);
+      this.logTelemetry(
+        operation,
+        'success',
+        Date.now() - startedAt,
+        undefined,
+        callbackStartMs,
+        metadata.flowKey,
+      );
       return true;
     } catch (error) {
       const classified = classifyDiscordError(error);
@@ -346,7 +376,14 @@ export class DiscordInteractionResponder {
         this.acknowledgementMethod = operation;
         this.acknowledgementMs = Date.now() - this.createdAt;
       }
-      this.logTelemetry(operation, 'failure', Date.now() - startedAt, error);
+      this.logTelemetry(
+        operation,
+        'failure',
+        Date.now() - startedAt,
+        error,
+        callbackStartMs,
+        metadata.flowKey,
+      );
       if (classified.category === 'interaction_expired') {
         this.currentState = 'expired';
         return false;
@@ -382,6 +419,8 @@ export class DiscordInteractionResponder {
     outcome: 'success' | 'failure',
     elapsedMs: number,
     error?: unknown,
+    callbackStartMs?: number,
+    flowKey?: string,
   ): void {
     if (outcome === 'failure' && this.terminalFailureLogged) return;
     if (outcome === 'failure') this.terminalFailureLogged = true;
@@ -397,6 +436,9 @@ export class DiscordInteractionResponder {
       interactionKind: interactionKind(this.interaction),
       acknowledgementMethod: this.acknowledgementMethod,
       acknowledgementMs: this.acknowledgementMs,
+      callbackStartMs,
+      interactionKey: interactionTelemetryKey(this.interaction),
+      flowKey,
     });
   }
 
