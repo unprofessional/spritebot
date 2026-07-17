@@ -4,6 +4,7 @@ import { ActionRowBuilder, ButtonBuilder, StringSelectMenuBuilder } from 'discor
 
 import { getCharacterWithStats } from '../services/character.service';
 import { getCurrentCharacter } from '../services/player.service';
+import { formatCharacterStatValue } from '../utils/character_stat_display';
 import { formatTimeAgo } from '../utils/time_ago';
 
 import type { CharacterStatWithLabel } from '../types/character';
@@ -50,15 +51,12 @@ async function rebuildListCharactersResponse(
       const baseLabel = `${full.name} — ${formatTimeAgo(full.created_at || '')}`;
       const label = isActive ? `⭐ ${baseLabel} (ACTIVE)` : baseLabel;
 
-      const topStats = [...(full.stats || [])].slice(0, 4).map((stat: CharacterStatWithLabel) => {
-        if (stat.field_type === 'count') {
-          const current = stat.meta?.current ?? '?';
-          const max = stat.meta?.max ?? '?';
-          return `${stat.label}: ${current} / ${max}`;
-        } else {
-          return `${stat.label}: ${stat.value}`;
-        }
-      });
+      const topStats = [...(full.stats || [])]
+        .slice(0, 4)
+        .map(
+          (stat: CharacterStatWithLabel) =>
+            `${stat.label}: ${formatCharacterStatValue(stat) ?? 'Not set'}`,
+        );
 
       const description = topStats.join(' • ') || full.bio || 'No stats available';
 

@@ -34,6 +34,16 @@ function parseCountDefault(value: unknown): number | null {
   return Number.isSafeInteger(parsed) ? parsed : null;
 }
 
+function formatCountStatValue(
+  meta: { current?: unknown; max?: unknown } | null | undefined,
+): string | null {
+  const max = parseCountDefault(meta?.max);
+  if (max === null) return null;
+
+  const current = parseCountDefault(meta?.current) ?? max;
+  return `${current} / ${max}`;
+}
+
 function getCountStatDefaults(
   template: Pick<StatTemplate, 'default_value' | 'meta'>,
 ): CountStatDefaults {
@@ -60,11 +70,12 @@ function formatStatTemplateDefault(template: StatTemplate): string | null {
   if (template.field_type !== 'count') return template.default_value;
 
   const defaults = getCountStatDefaults(template);
-  return defaults.max === null ? null : `${defaults.current} / ${defaults.max}`;
+  return formatCountStatValue(defaults);
 }
 
 export {
   applyCountStatDefaultsToDraft,
+  formatCountStatValue,
   formatStatTemplateDefault,
   getCountStatDefaults,
   parseCountDefault,
