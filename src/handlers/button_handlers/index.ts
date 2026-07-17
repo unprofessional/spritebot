@@ -16,6 +16,8 @@ import { handle as handleConfirmDeleteStat } from '../../components/confirm_dele
 import { handle as handleConfirmPurgeButton } from '../../components/confirm_purge_button';
 import { handle as handleDefineStats } from '../../components/define_stats_button';
 import { handle as handleDeleteCharacter } from '../../components/delete_character_button';
+import { handle as handleDeleteGame } from '../../components/delete_game_button';
+import { handle as handleConfirmDeleteGame } from '../../components/confirm_delete_game_button';
 import { handle as handleDeleteStats } from '../../components/delete_stat_button';
 import { handle as handleEditCharacterStatsButton } from '../../components/edit_character_stats_button';
 import { handle as handleEditGameStats } from '../../components/edit_game_stat_button';
@@ -33,6 +35,8 @@ import { interactionPolicy as confirmDeleteStatPolicy } from '../../components/c
 import { interactionPolicy as confirmPurgePolicy } from '../../components/confirm_purge_button';
 import { interactionPolicy as defineStatsPolicy } from '../../components/define_stats_button';
 import { interactionPolicy as deleteCharacterPolicy } from '../../components/delete_character_button';
+import { interactionPolicy as deleteGamePolicy } from '../../components/delete_game_button';
+import { interactionPolicy as confirmDeleteGamePolicy } from '../../components/confirm_delete_game_button';
 import { interactionPolicy as deleteStatsPolicy } from '../../components/delete_stat_button';
 import { interactionPolicy as editCharacterStatsPolicy } from '../../components/edit_character_stats_button';
 import { interactionPolicy as editGameStatsPolicy } from '../../components/edit_game_stat_button';
@@ -64,6 +68,9 @@ const directRoutes: ButtonRoute[] = [
   [/^confirmPurgeOrphans:/, (i, r) => handleConfirmPurgeButton(i, r!), confirmPurgePolicy],
   [/^submitNewCharacter/, (i, r) => handleSubmitCharacter(i, r!), submitCharacterPolicy],
   [/^deleteCharacter/, (i, r) => handleDeleteCharacter(i, r!), deleteCharacterPolicy],
+  [/^deleteGame:/, (i, r) => handleDeleteGame(i, r!), deleteGamePolicy],
+  [/^confirmDeleteGame:/, (i, r) => handleConfirmDeleteGame(i, r!), confirmDeleteGamePolicy],
+  [/^cancelDeleteGame:/, (i, r) => handleConfirmDeleteGame(i, r!), confirmDeleteGamePolicy],
   [
     /^confirmDeleteCharacter/,
     (i, r) => handleConfirmDeleteCharacterButton(i, r!),

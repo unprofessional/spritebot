@@ -38,6 +38,8 @@ export interface GameAuditRow {
   privateCharacterCount: number;
   lastActivityAt: string;
   inactiveOver60Days: boolean;
+  deletedAt: string | null;
+  daysUntilPurge: number | null;
 }
 
 export interface PrivateCharacterAuditRow {
@@ -79,6 +81,7 @@ interface CategoryDefinition {
 type CountRow = { count: string | number };
 type ExampleRow = { id: string; name: string | null; detail: string | null };
 type PurgeRow = {
+  soft_deleted_games: string | number;
   soft_deleted_characters: string | number;
   stale_proxy_messages: string | number;
   stale_channel_modes: string | number;
@@ -88,6 +91,27 @@ type PurgeRow = {
 
 const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
   {
+    category: 'soft-deleted-games',
+    label: '🪦 Soft-deleted games (>30 days)',
+    safeToPurge: true,
+    countSql: `
+      SELECT COUNT(*) AS count
+      FROM game g
+      WHERE g.deleted_at IS NOT NULL
+        AND g.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+    `,
+    examplesSql: `
+      SELECT g.id::text AS id,
+             g.name AS name,
+             'deleted ' || g.deleted_at::text AS detail
+      FROM game g
+      WHERE g.deleted_at IS NOT NULL
+        AND g.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+      ORDER BY g.deleted_at ASC
+      LIMIT $1
+    `,
+  },
+  {
     category: 'abandoned-games',
     label: '🎲 Abandoned games (unpublished, no stats, no characters)',
     safeToPurge: false,
@@ -95,6 +119,7 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
       SELECT COUNT(*) AS count
       FROM game g
       WHERE g.is_public = FALSE
+        AND g.deleted_at IS NULL
         AND g.created_at < CURRENT_TIMESTAMP - INTERVAL '7 days'
         AND NOT EXISTS (SELECT 1 FROM stat_template st WHERE st.game_id = g.id)
         AND NOT EXISTS (
@@ -107,6 +132,7 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
              'created ' || g.created_at::text AS detail
       FROM game g
       WHERE g.is_public = FALSE
+        AND g.deleted_at IS NULL
         AND g.created_at < CURRENT_TIMESTAMP - INTERVAL '7 days'
         AND NOT EXISTS (SELECT 1 FROM stat_template st WHERE st.game_id = g.id)
         AND NOT EXISTS (
@@ -124,6 +150,7 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
       SELECT COUNT(*) AS count
       FROM game g
       WHERE g.is_public = TRUE
+        AND g.deleted_at IS NULL
         AND g.created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
         AND NOT EXISTS (
           SELECT 1 FROM character c WHERE c.game_id = g.id AND c.deleted_at IS NULL
@@ -135,6 +162,7 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
              'published, created ' || g.created_at::text AS detail
       FROM game g
       WHERE g.is_public = TRUE
+        AND g.deleted_at IS NULL
         AND g.created_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
         AND NOT EXISTS (
           SELECT 1 FROM character c WHERE c.game_id = g.id AND c.deleted_at IS NULL
@@ -322,10 +350,23 @@ export async function purgeSafeOrphans(
   client: QueryClient = DEFAULT_CLIENT,
 ): Promise<HousekeepingPurgeResult[]> {
   const result = await client.query<PurgeRow>(`
-    WITH deleted_characters AS (
+    WITH deleted_games AS (
+      DELETE FROM game g
+      WHERE g.deleted_at IS NOT NULL
+        AND g.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+      RETURNING 1
+    ),
+    deleted_characters AS (
       DELETE FROM character c
       WHERE c.deleted_at IS NOT NULL
         AND c.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM game g
+          WHERE g.id = c.game_id
+            AND g.deleted_at IS NOT NULL
+            AND g.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+        )
       RETURNING 1
     ),
     deleted_proxy_messages AS (
@@ -351,6 +392,7 @@ export async function purgeSafeOrphans(
       RETURNING 1
     )
     SELECT
+      (SELECT COUNT(*) FROM deleted_games) AS soft_deleted_games,
       (SELECT COUNT(*) FROM deleted_characters) AS soft_deleted_characters,
       (SELECT COUNT(*) FROM deleted_proxy_messages) AS stale_proxy_messages,
       (SELECT COUNT(*) FROM deleted_channel_modes) AS stale_channel_modes,
@@ -362,6 +404,11 @@ export async function purgeSafeOrphans(
   if (!row) return [];
 
   return [
+    {
+      category: 'soft-deleted-games',
+      label: labelForCategory('soft-deleted-games'),
+      count: toCount(row.soft_deleted_games),
+    },
     {
       category: 'soft-deleted-characters',
       label: labelForCategory('soft-deleted-characters'),
@@ -430,10 +477,12 @@ export async function getGlobalStats(client: QueryClient = DEFAULT_CLIENT): Prom
         SELECT COUNT(*)
         FROM game
         WHERE is_public = TRUE
+          AND deleted_at IS NULL
       ) AS public_games,
       (
         SELECT COUNT(*)
         FROM game
+        WHERE deleted_at IS NULL
       ) AS total_games,
       (
         SELECT COUNT(*)
@@ -507,6 +556,8 @@ export async function getGameAudit(
     private_character_count: string | number;
     last_activity_at: string;
     inactive_over_60_days: boolean;
+    deleted_at: string | null;
+    days_until_purge: string | number | null;
   }>(
     `
       SELECT g.id::text AS id,
@@ -514,6 +565,16 @@ export async function getGameAudit(
              g.created_by,
              g.is_public,
              g.created_at::text AS created_at,
+             g.deleted_at::text AS deleted_at,
+             CASE
+               WHEN g.deleted_at IS NULL THEN NULL
+               ELSE GREATEST(
+                 0,
+                 CEIL(EXTRACT(EPOCH FROM (
+                   g.deleted_at + INTERVAL '30 days' - CURRENT_TIMESTAMP
+                 )) / 86400)
+               )
+             END AS days_until_purge,
              COUNT(DISTINCT st.id) AS stat_template_count,
              COUNT(DISTINCT c.id) FILTER (WHERE c.deleted_at IS NULL) AS character_count,
              COUNT(DISTINCT c.id) FILTER (
@@ -529,25 +590,31 @@ export async function getGameAudit(
       LEFT JOIN stat_template st ON st.game_id = g.id
       LEFT JOIN character c ON c.game_id = g.id
       WHERE g.guild_id = $1
-      GROUP BY g.id, g.name, g.created_by, g.is_public, g.created_at, g.updated_at
-      ORDER BY g.created_at DESC
+      GROUP BY g.id, g.name, g.created_by, g.is_public, g.created_at, g.updated_at, g.deleted_at
+      ORDER BY g.deleted_at DESC NULLS LAST, g.created_at DESC
     `,
     [guildId],
   );
 
-  return result.rows.map((row) => ({
-    id: row.id,
-    name: row.name,
-    createdBy: row.created_by,
-    isPublic: row.is_public,
-    createdAt: row.created_at,
-    statTemplateCount: toCount(row.stat_template_count),
-    characterCount: toCount(row.character_count),
-    publicCharacterCount: toCount(row.public_character_count),
-    privateCharacterCount: toCount(row.private_character_count),
-    lastActivityAt: row.last_activity_at,
-    inactiveOver60Days: row.inactive_over_60_days,
-  }));
+  return result.rows.map((row) => {
+    const deletedAt = row.deleted_at;
+    return {
+      id: row.id,
+      name: row.name,
+      createdBy: row.created_by,
+      isPublic: row.is_public,
+      createdAt: row.created_at,
+      statTemplateCount: toCount(row.stat_template_count),
+      characterCount: toCount(row.character_count),
+      publicCharacterCount: toCount(row.public_character_count),
+      privateCharacterCount: toCount(row.private_character_count),
+      lastActivityAt: row.last_activity_at,
+      inactiveOver60Days: row.inactive_over_60_days,
+      deletedAt,
+      daysUntilPurge:
+        row.days_until_purge === null ? null : Math.max(0, Number(row.days_until_purge)),
+    };
+  });
 }
 
 export async function getPrivateCharacterAudit(
@@ -588,6 +655,7 @@ export async function getPrivateCharacterAudit(
       LEFT JOIN character_stat_field csf ON csf.character_id = c.id
       WHERE g.guild_id = $1
         ${gameFilter}
+        AND g.deleted_at IS NULL
         AND c.visibility = 'private'
         AND c.deleted_at IS NULL
       GROUP BY c.id, c.name, c.game_id, g.name, c.user_id, c.created_at
@@ -622,7 +690,7 @@ export async function userOwnsGameInGuild(
     `
       SELECT EXISTS (
         SELECT 1 FROM game
-        WHERE guild_id = $1 AND created_by = $2
+        WHERE guild_id = $1 AND created_by = $2 AND deleted_at IS NULL
       ) AS exists
     `,
     [guildId, userId],
@@ -641,7 +709,7 @@ export async function userOwnsGame(
     `
       SELECT EXISTS (
         SELECT 1 FROM game
-        WHERE id = $1 AND guild_id = $2 AND created_by = $3
+        WHERE id = $1 AND guild_id = $2 AND created_by = $3 AND deleted_at IS NULL
       ) AS exists
     `,
     [gameId, guildId, userId],

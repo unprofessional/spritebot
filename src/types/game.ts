@@ -7,6 +7,7 @@ export interface Game {
   created_by: string;
   guild_id?: string | null;
   is_public: boolean;
+  deleted_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }

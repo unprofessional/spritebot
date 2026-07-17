@@ -87,10 +87,16 @@ export class PlayerDAO {
       `UPDATE player_server_link
        SET current_game_id = $1, updated_at = CURRENT_TIMESTAMP
        WHERE player_id = $2 AND guild_id = $3
+         AND EXISTS (
+           SELECT 1 FROM game g
+           WHERE g.id = $1 AND g.guild_id = $3 AND g.deleted_at IS NULL
+         )
        RETURNING *`,
       [gameId, link.player_id, guildId],
     );
-    return result.rows[0];
+    const updated = result.rows[0];
+    if (!updated) throw new Error(`Game ${gameId} is not active in guild ${guildId}`);
+    return updated;
   }
 
   async getCurrentGame(discordId: string, guildId: string): Promise<string | null> {

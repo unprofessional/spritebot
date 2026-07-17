@@ -6,7 +6,7 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 | Plan                                                             | Status                                   |
 | ---------------------------------------------------------------- | ---------------------------------------- |
-| [game-delete.md](game-delete.md)                                 | Next up — low-hanging fruit              |
+| [game-delete.md](game-delete.md)                                 | Implemented — merge/migration pending    |
 | [voice-transcription.md](voice-transcription.md)                 | Phase 3 implemented — live smoke pending |
 | [support-server-verification.md](support-server-verification.md) | Draft                                    |
 

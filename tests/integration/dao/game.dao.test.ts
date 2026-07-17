@@ -1,4 +1,5 @@
 import { GameDAO } from '../../../src/dao/game.dao';
+import { query } from '../../../src/db/client';
 
 describe('GameDAO', () => {
   const dao = new GameDAO();
@@ -55,5 +56,51 @@ describe('GameDAO', () => {
 
     expect(games).toHaveLength(1);
     expect(games[0].name).toBe('Guild One Game');
+  });
+
+  test('soft-deletes, filters, and restores a game', async () => {
+    const game = await dao.create({
+      name: 'Recoverable Table',
+      description: '',
+      created_by: 'gm-1',
+      guild_id: 'guild-1',
+    });
+
+    const deleted = await dao.softDelete(game.id);
+
+    expect(deleted?.deleted_at).toBeTruthy();
+    await expect(dao.findById(game.id)).resolves.toBeNull();
+    await expect(dao.findByGuild('guild-1')).resolves.toEqual([]);
+    await expect(dao.findByIdIncludingDeleted(game.id)).resolves.toMatchObject({ id: game.id });
+
+    const restored = await dao.restore(game.id);
+
+    expect(restored?.deleted_at).toBeNull();
+    await expect(dao.findById(game.id)).resolves.toMatchObject({ id: game.id });
+  });
+
+  test('finds only expired soft-deleted games', async () => {
+    const expired = await dao.create({
+      name: 'Expired Table',
+      description: '',
+      created_by: 'gm-1',
+      guild_id: 'guild-1',
+    });
+    const recoverable = await dao.create({
+      name: 'Recoverable Table',
+      description: '',
+      created_by: 'gm-1',
+      guild_id: 'guild-1',
+    });
+    await dao.softDelete(expired.id);
+    await dao.softDelete(recoverable.id);
+    await query(
+      `UPDATE game SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [expired.id],
+    );
+
+    await expect(dao.findExpiredSoftDeletes(30)).resolves.toEqual([
+      expect.objectContaining({ id: expired.id }),
+    ]);
   });
 });

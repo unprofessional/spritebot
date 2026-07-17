@@ -3,6 +3,15 @@ import { getGameAudit, type GameAuditRow } from '../services/admin_housekeeping.
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 
 function formatGame(row: GameAuditRow): string {
+  if (row.deletedAt) {
+    return [
+      `Status: **Soft-deleted**`,
+      `GM: \`${row.createdBy}\``,
+      `Deleted: ${row.deletedAt}`,
+      `Purge in: **${row.daysUntilPurge ?? 0} day(s)**`,
+      `Stats: **${row.statTemplateCount}**`,
+    ].join('\n');
+  }
   const visibility = row.isPublic ? 'Public' : 'Private';
   const stale = row.inactiveOver60Days ? ' ⚠️ inactive 60+ days' : '';
   return [

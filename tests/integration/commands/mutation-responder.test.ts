@@ -8,6 +8,7 @@ import {
 } from '../../../src/discord/interaction_responder';
 import * as joinGameSelector from '../../../src/components/join_game_selector';
 import * as restoreCharacterSelector from '../../../src/components/restore_character_selector';
+import * as restoreGameSelector from '../../../src/components/restore_game_selector';
 import * as switchCharacterSelector from '../../../src/components/switch_character_selector';
 import * as switchGameSelector from '../../../src/components/switch_game_selector';
 
@@ -21,6 +22,7 @@ const createGameCommand = require('../../../src/commands/create-game') as Mutati
 const joinGameCommand = require('../../../src/commands/join-game') as MutationCommand;
 const restoreCharacterCommand =
   require('../../../src/commands/restore-character') as MutationCommand;
+const restoreGameCommand = require('../../../src/commands/restore-game') as MutationCommand;
 const switchCharacterCommand = require('../../../src/commands/switch-character') as MutationCommand;
 const switchGameCommand = require('../../../src/commands/switch-game') as MutationCommand;
 
@@ -93,6 +95,7 @@ describe('character and game mutation command responder migration', () => {
       restoreCharacterSelector,
       '♻️ Choose a character to restore.',
     ],
+    ['restore-game', restoreGameCommand, restoreGameSelector, '♻️ Choose a game to restore.'],
   ])(
     '/%s preserves selector content and components after deferral',
     async (_name, command, module, content) => {
@@ -116,6 +119,7 @@ describe('character and game mutation command responder migration', () => {
     ['switch-game', switchGameCommand],
     ['switch-character', switchCharacterCommand],
     ['restore-character', restoreCharacterCommand],
+    ['restore-game', restoreGameCommand],
   ])('stops /%s cleanly when its responder is expired', async (_name, command) => {
     const interaction = commandInteraction({ guildId: null, strings: { name: null } });
     const responder = new DiscordInteractionResponder(
