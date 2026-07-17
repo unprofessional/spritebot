@@ -8,6 +8,10 @@ import { build as rebuildEditFieldSelector } from '../components/edit_character_
 import { build as buildSubmitCharacterButton } from '../components/submit_character_button';
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
+import {
+  buildCharacterFieldOptions,
+  getUnfilledCharacterFieldOptions,
+} from './character_field_options';
 
 /**
  * Truncates long field values for display (max 40 chars).
@@ -30,7 +34,7 @@ function buildCreateCharacterMessage(
   statTemplates: StatTemplate[] = [],
   userFields: CustomField[] = [],
   draftData: Record<string, unknown> = {},
-  fieldOptions: { name: string; label: string }[] = [],
+  requiredFieldsRemaining: { name: string; label: string }[] = [],
 ): string {
   const lines: string[] = [];
 
@@ -143,10 +147,11 @@ function buildCreateCharacterMessage(
   }
 
   lines.push('');
-  if (fieldOptions.length > 0) {
-    lines.push(`⚠️ ALL above fields MUST be filled out before you can submit your character!`);
+  if (requiredFieldsRemaining.length > 0) {
+    lines.push(`⚠️ Required CORE and GAME fields must be filled before you can submit.`);
     lines.push('');
-    lines.push(`Use the dropdown below to continue filling out the required fields.`);
+    lines.push(`Use the dropdown below to continue filling character fields.`);
+    lines.push(`Optional RP Proxy and USER fields remain available until set.`);
     lines.push('');
   } else {
     lines.push(`✅ All required fields are filled! You can now submit your character.`);
@@ -163,7 +168,7 @@ function rebuildCreateCharacterResponse(
   game: Game,
   statTemplates: StatTemplate[],
   userFields: CustomField[],
-  fieldOptions: { name: string; label: string }[],
+  requiredFieldsRemaining: { name: string; label: string }[],
   draftData: Record<string, unknown> = {},
 ): {
   content: string;
@@ -175,38 +180,23 @@ function rebuildCreateCharacterResponse(
     statTemplates,
     userFields,
     draftData,
-    fieldOptions,
+    requiredFieldsRemaining,
   );
 
   const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [];
+  const allFields = buildCharacterFieldOptions(statTemplates, userFields);
+  const unfilledFields = getUnfilledCharacterFieldOptions(allFields, draftData);
 
-  if (fieldOptions.length > 0) {
-    components.push(rebuildFieldSelector(fieldOptions, statTemplates));
+  if (unfilledFields.length > 0) {
+    components.push(rebuildFieldSelector(unfilledFields, statTemplates));
   }
-
-  const allFields: CustomField[] = [
-    { name: 'core:name', label: '[CORE] Name' },
-    { name: 'core:avatar_url', label: '[CORE] Avatar URL' },
-    { name: 'core:rp_display_name', label: '[CORE] RP Display Name' },
-    { name: 'core:rp_display_avatar_url', label: '[CORE] RP Display Avatar URL' },
-    { name: 'core:bio', label: '[CORE] Bio' },
-    ...statTemplates.map((t) => ({
-      name: `game:${t.id}`,
-      label: `[GAME] ${t.label}`,
-      field_type: t.field_type,
-    })),
-    ...userFields.map((f) => ({
-      name: `user:${f.name}`,
-      label: `[USER] ${f.label || f.name}`,
-    })),
-  ];
 
   const editDropdown = rebuildEditFieldSelector(allFields, draftData);
   if (editDropdown) {
     components.push(editDropdown);
   }
 
-  const submitRow = buildSubmitCharacterButton(fieldOptions.length > 0);
+  const submitRow = buildSubmitCharacterButton(requiredFieldsRemaining.length > 0);
   components.push(submitRow);
 
   return {
