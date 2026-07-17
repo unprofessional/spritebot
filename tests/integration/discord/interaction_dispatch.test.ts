@@ -18,10 +18,12 @@ import {
 describe('deadline-aware interaction dispatch', () => {
   let errorSpy: jest.SpiedFunction<typeof console.error>;
   let warnSpy: jest.SpiedFunction<typeof console.warn>;
+  let debugSpy: jest.SpiedFunction<typeof console.debug>;
 
   beforeEach(() => {
     errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
     warnSpy = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    debugSpy = jest.spyOn(console, 'debug').mockImplementation(() => {});
   });
 
   afterEach(() => {
@@ -29,6 +31,7 @@ describe('deadline-aware interaction dispatch', () => {
     resetLifecycleForTests();
     errorSpy.mockRestore();
     warnSpy.mockRestore();
+    debugSpy.mockRestore();
   });
 
   test('rejects acknowledgement budgets at or above the safety ceiling', async () => {
@@ -135,9 +138,41 @@ describe('deadline-aware interaction dispatch', () => {
     expect(interaction.deferReply).not.toHaveBeenCalled();
   });
 
+  test('logs correlated receipt and completion timing around guard and handler work', async () => {
+    const interaction = replyInteraction();
+    interaction.id = 'interaction-1';
+    interaction.createdTimestamp = Date.now() - 25;
+
+    await dispatchInteractionWithDeadline({
+      interaction: interaction as never,
+      policy: replyPolicy(),
+      guard: async () => true,
+      handler: async (routed) => {
+        await (routed as typeof interaction).reply({ content: 'ready', ephemeral: true });
+      },
+    });
+
+    const lifecycleLines = debugSpy.mock.calls
+      .map(([line]) => String(line))
+      .filter((line) => line.startsWith('[discord-interaction]'));
+    expect(lifecycleLines).toHaveLength(2);
+    expect(lifecycleLines[0]).toContain('phase=received');
+    expect(lifecycleLines[0]).toMatch(/gatewayLagMs=\d+/);
+    expect(lifecycleLines[1]).toContain('phase=completed');
+    expect(lifecycleLines[1]).toContain('state=replied');
+    expect(lifecycleLines[1]).toMatch(/guardMs=\d+/);
+    expect(lifecycleLines[1]).toMatch(/handlerMs=\d+/);
+    const receivedKey = lifecycleLines[0].match(/interactionKey=([a-f0-9]+)/)?.[1];
+    expect(receivedKey).toBeDefined();
+    expect(lifecycleLines[1]).toContain(`interactionKey=${receivedKey}`);
+    expect(lifecycleLines.join(' ')).not.toContain('interaction-1');
+  });
+
   test('never auto-defers a modal-first handler', async () => {
     jest.useFakeTimers();
     const interaction = componentInteraction();
+    interaction.id = 'modal-opener-interaction';
+    interaction.user = { id: 'modal-owner' };
     const modal = { customId: 'edit:modal' };
 
     await dispatchInteractionWithDeadline({
@@ -151,6 +186,16 @@ describe('deadline-aware interaction dispatch', () => {
     expect(interaction.showModal).toHaveBeenCalledWith(modal);
     expect(interaction.deferReply).not.toHaveBeenCalled();
     expect(interaction.deferUpdate).not.toHaveBeenCalled();
+    const telemetryLines = debugSpy.mock.calls.map(([line]) => String(line));
+    const operationFlowKey = telemetryLines
+      .find((line) => line.includes('operation=interaction.showModal'))
+      ?.match(/flowKey=([a-f0-9]+)/)?.[1];
+    expect(operationFlowKey).toBeDefined();
+    expect(
+      telemetryLines.find(
+        (line) => line.startsWith('[discord-interaction]') && line.includes('phase=completed'),
+      ),
+    ).toContain(`flowKey=${operationFlowKey}`);
   });
 
   test('fails a late modal handler at the deadline and suppresses its late callback', async () => {
@@ -275,6 +320,9 @@ function replyPolicy(): InteractionDispatchPolicy {
 
 function replyInteraction() {
   return {
+    id: undefined as string | undefined,
+    createdTimestamp: undefined as number | undefined,
+    user: undefined as { id: string } | undefined,
     type: 2,
     commandName: 'create-character',
     replied: false,
