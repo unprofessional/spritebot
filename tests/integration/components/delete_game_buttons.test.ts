@@ -1,6 +1,7 @@
 import { GameDAO } from '../../../src/dao/game.dao';
 import { handle as handleDeleteGame } from '../../../src/components/delete_game_button';
 import { handle as handleConfirmDeleteGame } from '../../../src/components/confirm_delete_game_button';
+import { handle as handleGameViewButton } from '../../../src/handlers/button_handlers/game_view_buttons';
 
 describe('game deletion buttons', () => {
   const gameDAO = new GameDAO();
@@ -60,5 +61,23 @@ describe('game deletion buttons', () => {
       }),
     );
     await expect(gameDAO.findById(game.id)).resolves.toBeNull();
+  });
+
+  test('returns to the game view through the dedicated navigation handler', async () => {
+    const game = await createGame();
+    const response = responder();
+
+    await handleGameViewButton(
+      { customId: `goBackToGame:${game.id}`, user: { id: 'gm-1' } } as never,
+      response as never,
+    );
+
+    expect(response.respond).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('Button Campaign'),
+        components: expect.any(Array),
+      }),
+    );
+    await expect(gameDAO.findById(game.id)).resolves.toMatchObject({ id: game.id });
   });
 });

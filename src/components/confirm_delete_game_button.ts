@@ -2,9 +2,7 @@ import { ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
 
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
-import { deleteGame, getGameById, getStatTemplates } from '../services/game.service';
-import type { StatTemplate } from '../types/stat_template';
-import { build as buildViewGameCard } from './view_game_card';
+import { deleteGame } from '../services/game.service';
 
 const id = 'confirmDeleteGame';
 const interactionPolicy = {
@@ -24,21 +22,6 @@ async function handle(
   responder: DiscordInteractionResponder,
 ): Promise<void> {
   const [, gameId] = interaction.customId.split(':');
-
-  if (interaction.customId.startsWith('cancelDeleteGame:')) {
-    const game = await getGameById(gameId);
-    if (!game || game.created_by !== interaction.user.id) {
-      await responder.respond({
-        content: '❌ This game is no longer available.',
-        embeds: [],
-        components: [],
-      });
-      return;
-    }
-    const templates = (await getStatTemplates(gameId)) as StatTemplate[];
-    await responder.respond({ ...buildViewGameCard(game, templates, interaction.user.id) });
-    return;
-  }
 
   try {
     const result = await deleteGame(gameId, interaction.user.id);
