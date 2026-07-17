@@ -12,6 +12,7 @@ import {
 import { getCharacterWithStats } from '../services/character.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { formatCharacterStatValue } from '../utils/character_stat_display';
 import { isActiveCharacter } from '../utils/is_active_character';
 
 const id = 'calculateCharacterStats';
@@ -86,10 +87,8 @@ async function handle(
   const options = adjustableStats.map((stat: StatField) => {
     const label = stat.label || 'Unnamed';
     const value = `adjust:${stat.template_id}`;
-    const desc =
-      stat.field_type === 'count'
-        ? `Current: ${stat.meta?.current ?? stat.meta?.max ?? 0} / ${stat.meta?.max ?? '?'}`
-        : `Current: ${stat.value ?? '??'}`;
+    const displayValue = formatCharacterStatValue(stat);
+    const desc = displayValue ? `Current: ${displayValue}` : 'No value set';
 
     return new StringSelectMenuOptionBuilder().setLabel(label).setValue(value).setDescription(desc);
   });

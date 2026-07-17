@@ -68,6 +68,7 @@ describe('rebuildCreateCharacterResponse', () => {
     expect(response.content).toContain(
       'Optional RP Proxy and USER fields remain available until set.',
     );
+    expect(response.content).toContain('- [GAME] HP 🟢 4 / 4');
     expect(response.components.at(-1)?.toJSON().components[0]).toEqual(
       expect.objectContaining({ custom_id: 'submitNewCharacter', disabled: true }),
     );
