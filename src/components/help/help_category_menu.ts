@@ -19,7 +19,6 @@ export function build(role: HelpRole, features: ReadonlySet<FeatureKey>) {
   return {
     embeds: [embed],
     components: buildNavigation(role, features),
-    ephemeral: true as const,
   };
 }
 

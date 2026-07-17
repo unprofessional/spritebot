@@ -7,6 +7,8 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | Plan                                                             | Status                                   |
 | ---------------------------------------------------------------- | ---------------------------------------- |
 | [help-command.md](help-command.md)                               | Implemented — merge pending              |
+| [ux-bdd-stories.md](ux-bdd-stories.md)                           | TODO — UX behavior specs                 |
+| [discord-ui-testing.md](discord-ui-testing.md)                   | TODO — browser-driven UI tests           |
 | [feature-policy-enforcement.md](feature-policy-enforcement.md)   | TODO — low-hanging fruit                 |
 | [game-delete.md](game-delete.md)                                 | Merged — production migration pending    |
 | [voice-transcription.md](voice-transcription.md)                 | Phase 3 implemented — live smoke pending |
