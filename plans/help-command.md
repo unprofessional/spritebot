@@ -1,6 +1,6 @@
 # Plan: `/help` Command
 
-> **Status:** Draft
+> **Status:** Implemented — merge pending
 
 ## Goal
 
@@ -128,12 +128,13 @@ src/components/help/
 - Use `update` on button/select interactions to edit the original message in-place
 - Custom IDs: `help:role:player`, `help:role:gm`, `help:category:<name>`, `help:back`
 - Content lives in one file (`help_content.ts`) so updating help text doesn't require touching handlers
-- No database interaction — pure UI component work
-- Should work identically with or without a subscription (help is always free)
+- No new persistence — rendering only reads the existing entitlement and gifted-guild sources
+- Help itself is always free; its visible categories reflect the server's current access
 
 ### Feature Gating Awareness
 
-Help content should indicate which commands require a subscription without being pushy about it. A small `⭐` next to premium commands is enough. Don't turn the help menu into an upsell page.
+Help content hides commands the server cannot currently use. It does not show locks, premium badges, or
+teasers, so the menu stays useful without becoming an upsell page.
 
 ### Context Menu Commands
 
@@ -141,27 +142,29 @@ Help content should indicate which commands require a subscription without being
 
 ## Tasks
 
-- [ ] 1. Create `help_content.ts` with all help text organized by role and category
-- [ ] 2. Build the landing card component (role selection embed + buttons)
-- [ ] 3. Build the category menu component (select menu builder)
-- [ ] 4. Build the category detail component (category embed builder)
-- [ ] 5. Implement the `/help` command (sends landing card)
-- [ ] 6. Implement role button handler (updates to category menu)
-- [ ] 7. Implement category select handler (updates to category detail)
-- [ ] 8. Implement "back to roles" button handler
-- [ ] 9. Register button/select custom IDs in the handler index
-- [ ] 10. Tests for all components and handlers
-- [ ] 11. Add `/help` to command policy as `core`
+- [x] 1. Create `help_content.ts` with all help text organized by role and category
+- [x] 2. Build the landing card component (role selection embed + buttons)
+- [x] 3. Build the category menu component (select menu builder)
+- [x] 4. Build the category detail component (category embed builder)
+- [x] 5. Implement the `/help` command (sends landing card)
+- [x] 6. Implement role button handler (updates to category menu)
+- [x] 7. Implement category select handler (updates to category detail)
+- [x] 8. Implement "back to roles" button handler
+- [x] 9. Register button/select custom IDs in the handler index
+- [x] 10. Tests for all components and handlers
+- [x] 11. Add `/help` to command policy as `core`
 
 ## Resolved Questions
 
 - [x] **Subscription-aware help?** Yes. Hide commands the user's tier doesn't grant access to. No ⭐ badges, no lock icons, no teasers. If you can't use it, you don't see it. This keeps the help menu clean and avoids advertising features users can't purchase yet (e.g. Pro tier transcription before Pro exists in Discord's SKU system).
 - [x] **Transcription visibility?** Voice Transcription category is only shown to users with `pro:transcription` access. Since Pro tier doesn't exist as a purchasable plan yet, this effectively hides it from everyone. When Pro launches, it appears automatically.
 
-## Open Questions
+## Additional Resolved Questions
 
-- [ ] Should the Getting Started walkthrough link to external docs or stay fully self-contained in Discord?
-- [ ] Do we want a `/help <topic>` shortcut? e.g. `/help roleplay` jumps straight to that category without the role selection step
+- [x] **External docs?** Keep the first version fully self-contained in Discord. The guided flow is
+      short enough that external links would add friction rather than clarity.
+- [x] **`/help <topic>` shortcut?** Not initially. Preserve the simple, two-tap role-first flow and
+      add shortcuts later only if usage shows a need.
 
 ## Dependencies
 

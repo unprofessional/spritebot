@@ -4,6 +4,9 @@ This guide explains how to use Spritebot inside Discord. It is written for playe
 
 ## Quick Start For Players
 
+Run `/help` at any time for a private, interactive guide tailored to players or GMs and the
+features available in your server.
+
 1. Join a game with `/join-game`.
 2. Pick the game you want from the menu.
 3. Create a character with `/create-character`.
@@ -252,6 +255,8 @@ Spritebot uses cryptographic local randomness for dice rolls. That is appropriat
 play, but it is not publicly verifiable like a commit-reveal or shared-seed system.
 
 ## Troubleshooting
+
+If you are not sure which command to use, run `/help` and choose your role and topic.
 
 If `/create-character` says you have not joined a game, use `/join-game` first.
 
