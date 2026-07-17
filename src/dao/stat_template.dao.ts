@@ -19,8 +19,11 @@ export class StatTemplateDAO {
     INSERT INTO stat_template (
       game_id, label, field_type, default_value, is_required, sort_order, meta
     )
-    VALUES ($1, $2, $3, $4, $5, $6, $7)
-    RETURNING *
+    SELECT g.id, $2, $3, $4, $5, $6, $7
+    FROM game g
+    WHERE g.id = $1
+      AND g.deleted_at IS NULL
+    RETURNING stat_template.*
   `;
     const result = await query<StatTemplate>(sql, [
       game_id,
@@ -31,7 +34,9 @@ export class StatTemplateDAO {
       sort_order,
       JSON.stringify(meta),
     ]);
-    return result.rows[0];
+    const template = result.rows[0];
+    if (!template) throw new Error(`Cannot add a stat template to inactive game ${game_id}`);
+    return template;
   }
 
   async bulkCreate(
@@ -48,8 +53,9 @@ export class StatTemplateDAO {
 
   async findById(statId: string): Promise<StatTemplate | null> {
     const sql = `
-      SELECT * FROM stat_template
-      WHERE id = $1
+      SELECT st.* FROM stat_template st
+      JOIN game g ON g.id = st.game_id AND g.deleted_at IS NULL
+      WHERE st.id = $1
       LIMIT 1
     `;
     const result = await query<StatTemplate>(sql, [statId]);
@@ -58,9 +64,10 @@ export class StatTemplateDAO {
 
   async findByGame(gameId: string): Promise<StatTemplate[]> {
     const sql = `
-      SELECT * FROM stat_template
-      WHERE game_id = $1
-      ORDER BY sort_order ASC, label ASC
+      SELECT st.* FROM stat_template st
+      JOIN game g ON g.id = st.game_id AND g.deleted_at IS NULL
+      WHERE st.game_id = $1
+      ORDER BY st.sort_order ASC, st.label ASC
     `;
     const result = await query<StatTemplate>(sql, [gameId]);
     return result.rows;
@@ -82,6 +89,10 @@ export class StatTemplateDAO {
       UPDATE stat_template
       SET ${fields.join(', ')}
       WHERE id = $${idx}
+        AND EXISTS (
+          SELECT 1 FROM game g
+          WHERE g.id = stat_template.game_id AND g.deleted_at IS NULL
+        )
       RETURNING *
     `;
 
@@ -91,10 +102,22 @@ export class StatTemplateDAO {
   }
 
   async deleteByGame(gameId: string): Promise<void> {
-    await query(`DELETE FROM stat_template WHERE game_id = $1`, [gameId]);
+    await query(
+      `DELETE FROM stat_template
+       WHERE game_id = $1
+         AND EXISTS (SELECT 1 FROM game g WHERE g.id = $1 AND g.deleted_at IS NULL)`,
+      [gameId],
+    );
   }
 
   async deleteById(templateId: string): Promise<void> {
-    await query(`DELETE FROM stat_template WHERE id = $1`, [templateId]);
+    await query(
+      `DELETE FROM stat_template st
+       WHERE st.id = $1
+         AND EXISTS (
+           SELECT 1 FROM game g WHERE g.id = st.game_id AND g.deleted_at IS NULL
+         )`,
+      [templateId],
+    );
   }
 }

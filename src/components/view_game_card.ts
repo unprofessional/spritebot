@@ -8,6 +8,7 @@ import { formatStatTemplateDefault } from '../utils/count_stat_defaults';
 
 import { build as buildDefineStats } from './define_stats_button';
 import { build as buildDeleteStats } from './delete_stat_button';
+import { build as buildDeleteGame } from './delete_game_button';
 import { build as buildEditGameStats } from './edit_game_stat_button';
 import { build as buildToggleVisibility } from './toggle_publish_button';
 
@@ -106,7 +107,7 @@ function buildButtons(
     row.addComponents(buildEditGameStats(gameId), buildDeleteStats(gameId));
   }
 
-  row.addComponents(buildToggleVisibility(gameId));
+  row.addComponents(buildToggleVisibility(gameId), buildDeleteGame(gameId));
 
   return row;
 }

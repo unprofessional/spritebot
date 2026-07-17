@@ -23,6 +23,7 @@ export interface Character {
   bio?: string | null;
   visibility?: 'public' | 'private' | 'link-only';
   deleted_at?: string | null;
+  deleted_by_game?: boolean;
   created_at?: string;
   updated_at?: string;
 }

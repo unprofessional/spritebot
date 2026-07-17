@@ -23,6 +23,10 @@ Use `/view-game` to see your currently active game.
 
 Your active game controls which characters and character fields Spritebot uses for you.
 
+GMs can delete their own game from the `/view-game` controls. This removes the game from players'
+active selections and temporarily deletes its characters. Use `/restore-game` within 30 days to
+restore the game and those game-deleted characters. Players must rejoin or switch back afterward.
+
 ## Characters
 
 Use `/create-character` after joining a game. Spritebot will show an interactive character draft.
