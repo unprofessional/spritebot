@@ -2,6 +2,7 @@
 
 import { ActionRowBuilder, ButtonBuilder, EmbedBuilder } from 'discord.js';
 import type { CharacterWithStats } from '../types/character';
+import { formatCharacterStatValue } from '../utils/character_stat_display';
 import { formatTimeAgo } from '../utils/time_ago';
 import { build as buildCalculateStatsButton } from './calculate_character_stats_button';
 import { build as buildDeleteCharacterButton } from './delete_character_button';
@@ -113,8 +114,7 @@ function buildActionRow(character: CharacterWithStats) {
 interface ParsedStat {
   label: string;
   value: string | null;
-  current: number | null;
-  max: number | null;
+  displayValue: string | null;
   type: string;
   sort_index: number;
 }
@@ -123,27 +123,17 @@ function parseCharacterStats(stats: CharacterWithStats['stats']) {
   const statMap = new Map<string, ParsedStat>();
 
   for (const stat of stats) {
-    const { label, value, meta = {}, field_type, template_id } = stat;
+    const { label, value, field_type, template_id } = stat;
     const key = (label || template_id || '??').toUpperCase();
     if (!key) continue;
 
     const bucket: ParsedStat = {
       label: key,
-      value: null,
-      current: null,
-      max: null,
+      value: field_type === 'count' ? null : (value ?? null),
+      displayValue: formatCharacterStatValue(stat),
       type: field_type,
       sort_index: stat.sort_index ?? 999,
     };
-
-    if (field_type === 'count') {
-      const max = typeof meta.max === 'number' ? meta.max : null;
-      const current = typeof meta.current === 'number' ? meta.current : max;
-      bucket.max = max;
-      bucket.current = current;
-    } else {
-      bucket.value = value ?? null;
-    }
 
     statMap.set(key, bucket);
   }
@@ -167,13 +157,7 @@ function parseCharacterStats(stats: CharacterWithStats['stats']) {
 }
 
 function formatStatDisplay(stat: ParsedStat): string {
-  if (stat.type === 'count' && stat.max !== null) {
-    return `**${stat.label}**: ${stat.current ?? stat.max} / ${stat.max}`;
-  } else if (stat.value !== undefined && stat.value !== null && stat.value !== '') {
-    return `**${stat.label}**: ${stat.value}`;
-  } else {
-    return `**${stat.label}**: _Not set_`;
-  }
+  return `**${stat.label}**: ${stat.displayValue ?? '_Not set_'}`;
 }
 
 function formatEquippedItems(character: CharacterWithStats): string | null {

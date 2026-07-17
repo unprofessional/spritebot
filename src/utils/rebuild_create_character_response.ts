@@ -8,6 +8,7 @@ import { build as rebuildEditFieldSelector } from '../components/edit_character_
 import { build as buildSubmitCharacterButton } from '../components/submit_character_button';
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
+import { formatCharacterStatValue } from './character_stat_display';
 import {
   buildCharacterFieldOptions,
   getUnfilledCharacterFieldOptions,
@@ -93,7 +94,7 @@ function buildCreateCharacterMessage(
       const fieldKey = `game:${t.id}`;
       if (t.field_type === 'count') {
         const meta = draftData[`meta:${fieldKey}`];
-        return isRecord(meta) && meta.max != null;
+        return isRecord(meta) && formatCharacterStatValue({ field_type: 'count', meta }) !== null;
       } else {
         const value = draftData[fieldKey];
         return value && value.toString().trim();
@@ -113,9 +114,12 @@ function buildCreateCharacterMessage(
 
       if (t.field_type === 'count') {
         const meta = draftData[`meta:${fieldKey}`];
-        if (isRecord(meta) && meta.max != null) {
+        const formatted = isRecord(meta)
+          ? formatCharacterStatValue({ field_type: 'count', meta })
+          : null;
+        if (formatted) {
           filled = true;
-          display = `${meta.current ?? meta.max} / ${meta.max}`;
+          display = formatted;
         }
       } else {
         const value = draftData[fieldKey];

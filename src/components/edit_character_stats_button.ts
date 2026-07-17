@@ -13,6 +13,7 @@ import { getCharacterWithStats } from '../services/character.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { CharacterStatWithLabel } from '../types/character';
+import { formatCharacterStatValue } from '../utils/character_stat_display';
 import { isActiveCharacter } from '../utils/is_active_character';
 import { build as buildCharacterCard } from './view_character_card';
 
@@ -82,10 +83,11 @@ async function handle(
     )
     .map((stat: EditableStat) => {
       const identifier = stat.template_id || stat.name;
+      const currentValue = formatCharacterStatValue(stat);
       return {
         label: String(stat.label || identifier || 'Unnamed'),
         value: String(identifier),
-        description: stat.value != null ? truncate(`Current: ${stat.value}`) : 'No value set',
+        description: currentValue ? truncate(`Current: ${currentValue}`) : 'No value set',
       };
     });
 
