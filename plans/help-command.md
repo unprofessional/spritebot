@@ -153,8 +153,17 @@ Help content should indicate which commands require a subscription without being
 - [ ] 10. Tests for all components and handlers
 - [ ] 11. Add `/help` to command policy as `core`
 
+## Resolved Questions
+
+- [x] **Subscription-aware help?** Yes. Hide commands the user's tier doesn't grant access to. No ⭐ badges, no lock icons, no teasers. If you can't use it, you don't see it. This keeps the help menu clean and avoids advertising features users can't purchase yet (e.g. Pro tier transcription before Pro exists in Discord's SKU system).
+- [x] **Transcription visibility?** Voice Transcription category is only shown to users with `pro:transcription` access. Since Pro tier doesn't exist as a purchasable plan yet, this effectively hides it from everyone. When Pro launches, it appears automatically.
+
 ## Open Questions
 
-- [ ] Should `/help` show different content based on the user's actual subscription status? (e.g. hide premium commands they can't use, or show them with a lock icon)
 - [ ] Should the Getting Started walkthrough link to external docs or stay fully self-contained in Discord?
 - [ ] Do we want a `/help <topic>` shortcut? e.g. `/help roleplay` jumps straight to that category without the role selection step
+
+## Dependencies
+
+- The tier-awareness logic should use the existing `getEntitlementsFor` service to check the guild's feature set. Help content filtering happens at render time — categories with zero visible commands are hidden entirely.
+- Pro tier scaffolding (SKU mapping in `plans.ts`, tier-level abstraction for display names) is tracked in `pro-tier-transcription.md`. The help command doesn't need Pro to ship — it just won't show the transcription category until Pro features are granted.
