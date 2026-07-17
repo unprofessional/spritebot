@@ -1,7 +1,12 @@
 import {
   formatDiscordFailureLog,
+  formatDiscordInteractionLifecycleLog,
+  formatDiscordModalFlowLog,
   formatDiscordOperationTelemetryLog,
+  interactionTelemetryKey,
   logDiscordFailure,
+  registerModalFlowTelemetry,
+  resolveModalFlowTelemetry,
 } from '../../../src/discord/logging';
 
 describe('Discord failure logging', () => {
@@ -98,6 +103,9 @@ describe('Discord failure logging', () => {
       customId: 'inventory-edit:secret-item-id',
       acknowledgementMethod: 'deferReply',
       acknowledgementMs: 1_742,
+      callbackStartMs: 1_700,
+      interactionKey: 'abc123',
+      flowKey: 'def456',
     });
 
     expect(line).toContain('operation=interaction.deferReply');
@@ -106,6 +114,70 @@ describe('Discord failure logging', () => {
     expect(line).toContain('customIdPrefix=inventory-edit');
     expect(line).toContain('acknowledgementMethod=deferReply');
     expect(line).toContain('acknowledgementMs=1742');
+    expect(line).toContain('callbackStartMs=1700');
+    expect(line).toContain('interactionKey=abc123');
+    expect(line).toContain('flowKey=def456');
     expect(line).not.toContain('secret-item-id');
+  });
+
+  test('formats safe interaction lifecycle timing without raw custom IDs', () => {
+    const line = formatDiscordInteractionLifecycleLog({
+      phase: 'completed',
+      outcome: 'success',
+      elapsedMs: 1_148,
+      gatewayLagMs: 24,
+      guardMs: 31,
+      handlerMs: 1_093,
+      state: 'modal_shown',
+      interactionKind: 'string-select',
+      customId: 'editCharacterStatDropdown:character-secret',
+      interactionKey: 'abc123',
+      flowKey: 'def456',
+    });
+
+    expect(line).toContain('phase=completed');
+    expect(line).toContain('gatewayLagMs=24');
+    expect(line).toContain('guardMs=31');
+    expect(line).toContain('handlerMs=1093');
+    expect(line).toContain('state=modal_shown');
+    expect(line).toContain('customIdPrefix=editCharacterStatDropdown');
+    expect(line).not.toContain('character-secret');
+  });
+
+  test('creates stable process-local correlation keys without exposing source IDs', () => {
+    const interaction = { id: 'raw-interaction-id' };
+    const modal = { toJSON: () => ({ custom_id: 'editCharacterField:character-secret' }) };
+    const user = { user: { id: 'raw-user-id' } };
+
+    const interactionKey = interactionTelemetryKey(interaction);
+    const flowKey = registerModalFlowTelemetry(modal, user);
+    const nextFlowKey = registerModalFlowTelemetry(modal, user);
+
+    expect(interactionKey).toMatch(/^[a-f0-9]{12}$/);
+    expect(interactionTelemetryKey(interaction)).toBe(interactionKey);
+    expect(flowKey).toMatch(/^[a-f0-9]{12}$/);
+    expect(nextFlowKey).toMatch(/^[a-f0-9]{12}$/);
+    expect(nextFlowKey).not.toBe(flowKey);
+    expect(resolveModalFlowTelemetry('editCharacterField:character-secret', user)).toBe(
+      nextFlowKey,
+    );
+    expect(
+      resolveModalFlowTelemetry('editCharacterField:character-secret', {
+        user: { id: 'different-user' },
+      }),
+    ).toBeUndefined();
+    expect(interactionKey).not.toContain('raw-interaction-id');
+    expect(flowKey).not.toContain('character-secret');
+  });
+
+  test('formats prepared modal path telemetry', () => {
+    expect(
+      formatDiscordModalFlowLog({
+        event: 'activation',
+        elapsedMs: 2_400,
+        interactionKey: 'abc123',
+        flowKey: 'def456',
+      }),
+    ).toBe('[discord-modal] event=activation elapsedMs=2400 interactionKey=abc123 flowKey=def456');
   });
 });

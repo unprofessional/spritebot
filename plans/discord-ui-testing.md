@@ -11,14 +11,14 @@ Bots can't interact with their own UI components through the Discord API. The on
 
 ## Approach
 
-Use OpenClaw's browser automation (Chromium) to drive Discord's web client as a test user. The browser session is already proven — it's currently used for X/Twitter link rendering.
+Use OpenClaw's browser automation (Chromium) to drive Discord's web client as a test user. The existing Chromium browser session used for X/Twitter link rendering belongs to the Hermes agent (Seb's runtime), not Moldy's. The UI test harness needs its own dedicated browser profile rather than sharing Seb's session.
 
 ### Architecture
 
 ```
 Test Runner (Node.js / Jest)
   ↓
-OpenClaw Browser Control API
+OpenClaw Browser Control API (dedicated test profile)
   ↓
 Chromium (logged into Discord as test user)
   ↓
@@ -66,9 +66,10 @@ The browser harness can verify things unit tests cannot:
 
 ### Browser Session
 
-- Use OpenClaw's existing Chromium browser control
-- Profile: `user` (logged-in session) or a dedicated test profile
+- Dedicated Chromium profile for SPRITE UI testing (not Seb/Hermes's existing session)
+- Logged in as the test Discord account
 - Must handle Discord's SPA nature (no full page reloads between interactions)
+- Runs on yharnam via OpenClaw browser control API
 
 ## Implementation
 

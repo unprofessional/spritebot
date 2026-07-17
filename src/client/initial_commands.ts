@@ -37,7 +37,7 @@ import {
   type InteractionDispatchPolicy,
   type InteractionDispatchPolicySource,
 } from '../discord/interaction_dispatch';
-import { logDiscordFailure } from '../discord/logging';
+import { logDiscordFailure, resolveModalFlowTelemetry } from '../discord/logging';
 import { defineDiscordOperationPolicy } from '../discord/operation_policy';
 import {
   applicationCommandsRoute,
@@ -284,6 +284,7 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
   }
 
   if (interaction.isModalSubmit()) {
+    const modalFlowKey = resolveModalFlowTelemetry(interaction.customId, interaction);
     const preparedSubmission = resolvePreparedModalSubmission(interaction);
     const routedInteraction = preparedSubmission.interaction;
     const policy = getModalInteractionPolicy(routedInteraction);
@@ -293,6 +294,7 @@ export async function dispatchInteraction(client: Client, interaction: BaseInter
       guard: guardComponent,
       handler: handleModal,
       preparedComponentUpdateTarget: preparedSubmission.updateOriginal,
+      modalFlowKey,
     });
     return;
   }
