@@ -16,13 +16,14 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Future
 
-| Plan                                                   | Status                                   |
+| Plan | Status |
+| [lfg-board.md](lfg-board.md) | Future — needs critical mass |
 | ------------------------------------------------------ | ---------------------------------------- |
-| [discord-premium-apps.md](discord-premium-apps.md)     | Planning (replaces stripe-subscriptions) |
-| [admin-housekeeping.md](admin-housekeeping.md)         | Planning                                 |
-| [onboarding-nudges.md](onboarding-nudges.md)           | Planning                                 |
-| [pro-tier-transcription.md](pro-tier-transcription.md) | Planning                                 |
-| [stripe-subscriptions.md](stripe-subscriptions.md)     | Superseded by discord-premium-apps       |
+| [discord-premium-apps.md](discord-premium-apps.md) | Planning (replaces stripe-subscriptions) |
+| [admin-housekeeping.md](admin-housekeeping.md) | Planning |
+| [onboarding-nudges.md](onboarding-nudges.md) | Planning |
+| [pro-tier-transcription.md](pro-tier-transcription.md) | Planning |
+| [stripe-subscriptions.md](stripe-subscriptions.md) | Superseded by discord-premium-apps |
 
 ## Completed
 
