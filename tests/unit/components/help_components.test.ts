@@ -19,7 +19,7 @@ describe('help components', () => {
   test('landing card asks for a role and exposes stable button IDs', () => {
     const card = buildLandingCard();
 
-    expect(card.ephemeral).toBe(true);
+    expect(card).not.toHaveProperty('ephemeral');
     expect(card.embeds[0].toJSON().title).toBe('🎮 Welcome to SPRITE');
     expect(JSON.stringify(card.components.map((row) => row.toJSON()))).toContain(
       'help:role:player',

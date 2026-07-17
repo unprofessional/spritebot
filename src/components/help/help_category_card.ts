@@ -27,6 +27,5 @@ export function build(role: HelpRole, categoryId: string, features: ReadonlySet<
   return {
     embeds: [embed],
     components: buildNavigation(role, features, category.id as HelpCategoryId),
-    ephemeral: true as const,
   };
 }
