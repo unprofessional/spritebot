@@ -19,11 +19,13 @@ export interface GameCascadeMutation {
   game: Game;
   characterCount: number;
   playerCount: number;
+  rpModeCount: number;
 }
 
 type GameCascadeRow = Game & {
   character_count: string | number;
   player_count: string | number;
+  rp_mode_count: string | number;
 };
 
 export class GameDAO {
@@ -208,11 +210,23 @@ export class GameDAO {
                WHERE c.id = psl.current_character_id
                  AND c.game_id = dg.id
              )
-          RETURNING psl.id
+          RETURNING psl.player_id, psl.guild_id
+        ),
+        cleared_rp_modes AS (
+          UPDATE rp_channel_mode rcm
+          SET is_ic = FALSE,
+              updated_at = CURRENT_TIMESTAMP
+          FROM cleared_players cp
+          JOIN player p ON p.id = cp.player_id
+          WHERE rcm.guild_id = cp.guild_id
+            AND rcm.user_id = p.discord_id
+            AND rcm.is_ic = TRUE
+          RETURNING rcm.channel_id
         )
         SELECT dg.*,
                (SELECT COUNT(*) FROM deleted_characters) AS character_count,
-               (SELECT COUNT(*) FROM cleared_players) AS player_count
+               (SELECT COUNT(*) FROM cleared_players) AS player_count,
+               (SELECT COUNT(*) FROM cleared_rp_modes) AS rp_mode_count
         FROM deleted_game dg
       `,
       [gameId, requesterId.trim()],
@@ -250,7 +264,8 @@ export class GameDAO {
         )
         SELECT rg.*,
                (SELECT COUNT(*) FROM restored_characters) AS character_count,
-               0 AS player_count
+               0 AS player_count,
+               0 AS rp_mode_count
         FROM restored_game rg
       `,
       [gameId, requesterId.trim()],
@@ -284,10 +299,11 @@ export class GameDAO {
 
 function mapCascadeMutation(row?: GameCascadeRow): GameCascadeMutation | null {
   if (!row) return null;
-  const { character_count, player_count, ...game } = row;
+  const { character_count, player_count, rp_mode_count, ...game } = row;
   return {
     game,
     characterCount: Number(character_count),
     playerCount: Number(player_count),
+    rpModeCount: Number(rp_mode_count),
   };
 }
