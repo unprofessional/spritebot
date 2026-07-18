@@ -4,6 +4,10 @@ import { PlayerDAO } from '../../../src/dao/player.dao';
 import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import { query } from '../../../src/db/client';
 import { deleteGame, getRestorableGames, restoreGame } from '../../../src/services/game.service';
+import {
+  isUserInCharacterForChannel,
+  setUserChannelInCharacterMode,
+} from '../../../src/services/rp_channel_mode.service';
 
 describe('game.service deletion lifecycle', () => {
   const gameDAO = new GameDAO();
@@ -42,11 +46,25 @@ describe('game.service deletion lifecycle', () => {
     });
     await characterDAO.softDelete(independentlyDeleted.id);
     await linkPlayer('player-1', game.id, active.id);
+    for (const channelId of ['channel-1', 'channel-2']) {
+      await setUserChannelInCharacterMode({
+        guildId: 'guild-1',
+        channelId,
+        userId: 'player-1',
+        isIc: true,
+      });
+    }
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'unaffected-player',
+      isIc: true,
+    });
 
     const result = await deleteGame(game.id, 'gm-1');
 
     expect(result).toEqual(
-      expect.objectContaining({ ok: true, characterCount: 1, playerCount: 1 }),
+      expect.objectContaining({ ok: true, characterCount: 1, playerCount: 1, rpModeCount: 2 }),
     );
     await expect(gameDAO.findById(game.id)).resolves.toBeNull();
     await expect(characterDAO.findById(active.id)).resolves.toMatchObject({
@@ -60,6 +78,15 @@ describe('game.service deletion lifecycle', () => {
       current_game_id: null,
       current_character_id: null,
     });
+    await expect(isUserInCharacterForChannel('guild-1', 'channel-1', 'player-1')).resolves.toBe(
+      false,
+    );
+    await expect(isUserInCharacterForChannel('guild-1', 'channel-2', 'player-1')).resolves.toBe(
+      false,
+    );
+    await expect(
+      isUserInCharacterForChannel('guild-1', 'channel-1', 'unaffected-player'),
+    ).resolves.toBe(true);
   });
 
   test('restores only characters deleted with the game and leaves players unassigned', async () => {

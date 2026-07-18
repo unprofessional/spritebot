@@ -66,6 +66,21 @@ export class CharacterDAO {
     return result.rows[0] || null;
   }
 
+  async findActiveById(characterId: string): Promise<Character | null> {
+    const result = await query<Character>(
+      `
+        SELECT c.*
+        FROM character c
+        JOIN game g ON g.id = c.game_id
+        WHERE c.id = $1
+          AND c.deleted_at IS NULL
+          AND g.deleted_at IS NULL
+      `,
+      [characterId],
+    );
+    return result.rows[0] || null;
+  }
+
   async findByUser(userId: string): Promise<Character[]> {
     const result = await query<Character>(
       `SELECT * FROM character WHERE user_id = $1 AND deleted_at IS NULL`,
@@ -152,6 +167,45 @@ export class CharacterDAO {
         WHERE id = $1
           AND deleted_at IS NULL
         RETURNING *
+      `,
+      [characterId],
+    );
+    return result.rows[0] || null;
+  }
+
+  async softDeleteWithDependencies(characterId: string): Promise<Character | null> {
+    const result = await query<Character>(
+      `
+        WITH deleted_character AS (
+          UPDATE character
+          SET deleted_at = CURRENT_TIMESTAMP,
+              deleted_by_game = FALSE,
+              visibility = 'private',
+              last_updated_at = CURRENT_TIMESTAMP
+          WHERE id = $1
+            AND deleted_at IS NULL
+          RETURNING *
+        ),
+        cleared_players AS (
+          UPDATE player_server_link psl
+          SET current_character_id = NULL,
+              updated_at = CURRENT_TIMESTAMP
+          FROM deleted_character dc
+          WHERE psl.current_character_id = dc.id
+          RETURNING psl.player_id, psl.guild_id
+        ),
+        cleared_rp_modes AS (
+          UPDATE rp_channel_mode rcm
+          SET is_ic = FALSE,
+              updated_at = CURRENT_TIMESTAMP
+          FROM cleared_players cp
+          JOIN player p ON p.id = cp.player_id
+          WHERE rcm.guild_id = cp.guild_id
+            AND rcm.user_id = p.discord_id
+            AND rcm.is_ic = TRUE
+          RETURNING rcm.channel_id
+        )
+        SELECT * FROM deleted_character
       `,
       [characterId],
     );
