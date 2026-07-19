@@ -16,6 +16,10 @@ import {
   setCurrentCharacter,
   setCurrentGame,
 } from '../../../src/services/player.service';
+import {
+  isUserInCharacterForChannel,
+  setUserChannelInCharacterMode,
+} from '../../../src/services/rp_channel_mode.service';
 
 describe('character.service', () => {
   const characterDAO = new CharacterDAO();
@@ -192,11 +196,20 @@ describe('character.service', () => {
       name: 'Restore Me',
     });
     await setCurrentCharacter('player-1', 'guild-1', character.id);
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'player-1',
+      isIc: true,
+    });
 
     await deleteCharacter(character.id);
 
     await expect(getCharacterWithStats(character.id)).resolves.toBeNull();
     await expect(characterDAO.findByUser('player-1')).resolves.toEqual([]);
+    await expect(isUserInCharacterForChannel('guild-1', 'channel-1', 'player-1')).resolves.toBe(
+      false,
+    );
     await expect(getRestorableCharacters('player-1', 'guild-1')).resolves.toEqual([
       expect.objectContaining({
         id: character.id,
@@ -224,6 +237,31 @@ describe('character.service', () => {
         id: character.id,
       }),
     );
+  });
+
+  test('clears stale IC modes when the player identity was deleted before the character', async () => {
+    const game = await createGame();
+    await getOrCreatePlayer('orphaned-player', 'guild-1');
+    await setCurrentGame('orphaned-player', 'guild-1', game.id);
+    const character = await characterDAO.create({
+      user_id: 'orphaned-player',
+      game_id: game.id,
+      name: 'Orphaned Hero',
+    });
+    await setCurrentCharacter('orphaned-player', 'guild-1', character.id);
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'orphaned-player',
+      isIc: true,
+    });
+    await query(`DELETE FROM player WHERE discord_id = $1`, ['orphaned-player']);
+
+    await deleteCharacter(character.id);
+
+    await expect(
+      isUserInCharacterForChannel('guild-1', 'channel-1', 'orphaned-player'),
+    ).resolves.toBe(false);
   });
 
   test('rejects user restore outside ownership or retention window', async () => {
