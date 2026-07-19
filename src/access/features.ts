@@ -10,7 +10,8 @@ export type FeatureKey =
   | 'rpg:inventory' // inventory management (view/edit)
   | 'rpg:game-admin' // game/stat template admin
   | 'automation:thread-bump' // auto-bump threads
-  | 'pro:transcription'; // voice transcription
+  | 'pro:transcription' // voice transcription
+  | 'integrations:talespire'; // TaleSpire bridge access
 
 /** Optional pretty labels for UI/receipts/logs */
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
@@ -20,6 +21,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
   'rpg:game-admin': 'Game Admin',
   'automation:thread-bump': 'Thread Bumping',
   'pro:transcription': 'Voice Transcription',
+  'integrations:talespire': 'TaleSpire Integration',
 };
 
 /**
