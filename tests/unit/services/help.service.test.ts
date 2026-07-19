@@ -26,7 +26,7 @@ describe('help feature resolution', () => {
     expect(getEntitlementsFor).toHaveBeenCalledWith({ guildId: 'guild-1' });
   });
 
-  test('gives gifted guilds the same full feature visibility as authorization', async () => {
+  test('gives gifted guilds every feature, including future Pro capabilities', async () => {
     giftedSpy.mockResolvedValue(true);
 
     const result = await getHelpFeatures('guild-1');
@@ -41,6 +41,7 @@ describe('help feature resolution', () => {
           'rpg:game-admin',
           'automation:thread-bump',
           'pro:transcription',
+          'integrations:talespire',
         ]),
       );
     }

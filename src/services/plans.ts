@@ -6,12 +6,15 @@ import type { FeatureKey } from '../access/features';
  * Fill these with your real SKU IDs from your Discord app.
  */
 export const PLAN_FEATURES: Record<string /* sku_id */, FeatureKey[]> = {
+  // Premium intentionally excludes pro:transcription. The future Pro SKU will
+  // include this bundle plus transcription as a separate paid tier.
   '1405308360818954322': [
     'core',
     'rpg:characters',
     'rpg:inventory',
     'rpg:game-admin',
     'automation:thread-bump',
+    'integrations:talespire',
   ],
 };
 
