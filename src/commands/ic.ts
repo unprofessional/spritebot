@@ -1,6 +1,15 @@
-import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import {
+  CacheType,
+  ChatInputCommandInteraction,
+  escapeMarkdown,
+  SlashCommandBuilder,
+} from 'discord.js';
 
-import { setUserChannelInCharacterMode } from '../services/rp_channel_mode.service';
+import { getCurrentCharacterForUser } from '../services/character.service';
+import {
+  clearUserGuildInCharacterModes,
+  setUserChannelInCharacterMode,
+} from '../services/rp_channel_mode.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type {
   InteractionCommandContext,
@@ -30,6 +39,15 @@ module.exports = {
       });
     }
 
+    const activeCharacter = await getCurrentCharacterForUser(user.id, guildId);
+    if (!activeCharacter) {
+      await clearUserGuildInCharacterModes(guildId, user.id);
+      return responder.respond({
+        content: '⚠️ You do not have an active character selected. Use `/switch-character` first.',
+        ephemeral: true,
+      });
+    }
+
     await setUserChannelInCharacterMode({
       guildId,
       channelId,
@@ -39,9 +57,10 @@ module.exports = {
 
     return responder.respond({
       content: appendNudge(
-        '✅ You are now in-character in this channel.',
+        `✅ You are now in-character as **${escapeMarkdown(activeCharacter.name)}** in this channel.`,
         buildNudge({ userId: user.id, guildId, isInIC: true }, 'ic'),
       ),
+      allowedMentions: { parse: [] },
       ephemeral: true,
     });
   },

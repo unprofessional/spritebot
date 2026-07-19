@@ -9,7 +9,10 @@ import {
   fetchProxyMessageContent,
   handleRoleplayProxyMessage,
 } from '../../../src/services/rp_message_proxy.service';
-import { setUserChannelInCharacterMode } from '../../../src/services/rp_channel_mode.service';
+import {
+  isUserInCharacterForChannel,
+  setUserChannelInCharacterMode,
+} from '../../../src/services/rp_channel_mode.service';
 import { getOrCreatePlayer, setCurrentCharacter } from '../../../src/services/player.service';
 
 function createWebhookMock() {
@@ -85,6 +88,34 @@ async function createActiveCharacter() {
 }
 
 describe('rp_message_proxy.service thread handling', () => {
+  test('self-heals stale IC mode when no active character exists', async () => {
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'parent-1',
+      userId: 'user-1',
+      isIc: true,
+    });
+    const parentChannel = createParentChannel();
+    const threadChannel = createThreadChannel();
+    const client = {
+      channels: {
+        fetch: jest.fn(async (channelId: string) =>
+          channelId === 'parent-1' ? parentChannel : threadChannel,
+        ),
+      },
+    };
+    const message = createThreadMessage({ client, channel: threadChannel });
+
+    await expect(handleRoleplayProxyMessage(message)).resolves.toEqual({
+      status: 'failed',
+      reason: 'no_active_character',
+    });
+    expect(message.reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('moved you out-of-character') }),
+    );
+    await expect(isUserInCharacterForChannel('guild-1', 'parent-1', 'user-1')).resolves.toBe(false);
+  });
+
   test('proxies thread messages through the parent channel webhook when IC mode is set on the parent', async () => {
     await createActiveCharacter();
     await setUserChannelInCharacterMode({

@@ -70,25 +70,48 @@ describe('non-modal inventory and RP command responder migration', () => {
   });
 
   test('/ic preserves its response and persists channel mode after deferral', async () => {
+    await seedActiveCharacter();
     const interaction = commandInteraction();
 
     await executePreDeferred(icCommand, interaction);
 
     expectEphemeralDeferral(interaction);
-    expect(interaction.editReply).toHaveBeenCalledWith({
-      content: expect.stringContaining('now in-character'),
-    });
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringMatching(/now in-character as \*\*Mira Vale\*\*/i),
+        allowedMentions: { parse: [] },
+      }),
+    );
     await expect(isUserInCharacterForChannel('guild-1', 'channel-1', 'user-1')).resolves.toBe(true);
   });
 
   test('/ooc preserves its response and persists channel mode after deferral', async () => {
+    await seedActiveCharacter();
     const interaction = commandInteraction();
 
     await executePreDeferred(oocCommand, interaction);
 
     expectEphemeralDeferral(interaction);
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringMatching(
+          /out-of-character[\s\S]*Active character: \*\*Mira Vale\*\*/i,
+        ),
+        allowedMentions: { parse: [] },
+      }),
+    );
+    await expect(isUserInCharacterForChannel('guild-1', 'channel-1', 'user-1')).resolves.toBe(
+      false,
+    );
+  });
+
+  test('/ic stays OOC when no active character is selected', async () => {
+    const interaction = commandInteraction();
+
+    await executePreDeferred(icCommand, interaction);
+
     expect(interaction.editReply).toHaveBeenCalledWith({
-      content: expect.stringContaining('now out-of-character'),
+      content: expect.stringContaining('do not have an active character selected'),
     });
     await expect(isUserInCharacterForChannel('guild-1', 'channel-1', 'user-1')).resolves.toBe(
       false,

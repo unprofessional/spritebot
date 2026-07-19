@@ -7,6 +7,7 @@ import type { StatFieldEntry } from '../dao/character_stat_field.dao';
 import { CharacterStatFieldDAO } from '../dao/character_stat_field.dao';
 import { PlayerDAO } from '../dao/player.dao';
 import type {
+  Character,
   CharacterWithStats,
   HydratedStatField,
   HydratedCustomField,
@@ -133,6 +134,17 @@ export async function getCharacterWithStats(
   return hydrated;
 }
 
+export async function getCurrentCharacterForUser(
+  userId: string,
+  guildId: string,
+): Promise<Character | null> {
+  const characterId = await playerDAO.getCurrentCharacter(userId, guildId);
+  if (!characterId) return null;
+
+  const character = await characterDAO.findActiveById(characterId);
+  return character?.user_id === userId ? character : null;
+}
+
 export async function getCharactersByUser(userId: string, guildId: string) {
   const currentGameId = await getCurrentGame(userId, guildId);
   if (!currentGameId) return [];
@@ -184,8 +196,7 @@ export async function updateCharacterMeta(
 }
 
 export async function deleteCharacter(characterId: string) {
-  await characterDAO.softDelete(characterId);
-  await playerDAO.clearCurrentCharacter(characterId);
+  await characterDAO.softDeleteWithDependencies(characterId);
 }
 
 export async function getRestorableCharacters(userId: string, guildId: string) {
