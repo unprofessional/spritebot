@@ -186,22 +186,38 @@ export class CharacterDAO {
             AND deleted_at IS NULL
           RETURNING *
         ),
+        affected_users AS (
+          SELECT p.discord_id AS user_id, psl.guild_id
+          FROM player_server_link psl
+          JOIN player p ON p.id = psl.player_id
+          JOIN deleted_character dc ON dc.id = psl.current_character_id
+          UNION
+          SELECT dc.user_id, g.guild_id
+          FROM deleted_character dc
+          JOIN game g ON g.id = dc.game_id
+          WHERE NOT EXISTS (
+            SELECT 1
+            FROM player p
+            JOIN player_server_link psl ON psl.player_id = p.id
+            WHERE p.discord_id = dc.user_id
+              AND psl.guild_id = g.guild_id
+          )
+        ),
         cleared_players AS (
           UPDATE player_server_link psl
           SET current_character_id = NULL,
               updated_at = CURRENT_TIMESTAMP
           FROM deleted_character dc
           WHERE psl.current_character_id = dc.id
-          RETURNING psl.player_id, psl.guild_id
+          RETURNING psl.id
         ),
         cleared_rp_modes AS (
           UPDATE rp_channel_mode rcm
           SET is_ic = FALSE,
               updated_at = CURRENT_TIMESTAMP
-          FROM cleared_players cp
-          JOIN player p ON p.id = cp.player_id
-          WHERE rcm.guild_id = cp.guild_id
-            AND rcm.user_id = p.discord_id
+          FROM affected_users au
+          WHERE rcm.guild_id = au.guild_id
+            AND rcm.user_id = au.user_id
             AND rcm.is_ic = TRUE
           RETURNING rcm.channel_id
         )

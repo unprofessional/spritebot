@@ -174,6 +174,31 @@ export class GameDAO {
             AND deleted_at IS NULL
           RETURNING *
         ),
+        affected_users AS (
+          SELECT p.discord_id AS user_id, psl.guild_id
+          FROM player_server_link psl
+          JOIN player p ON p.id = psl.player_id
+          CROSS JOIN deleted_game dg
+          WHERE psl.current_game_id = dg.id
+             OR EXISTS (
+               SELECT 1
+               FROM character c
+               WHERE c.id = psl.current_character_id
+                 AND c.game_id = dg.id
+             )
+          UNION
+          SELECT c.user_id, dg.guild_id
+          FROM character c
+          JOIN deleted_game dg ON dg.id = c.game_id
+          WHERE c.deleted_at IS NULL
+            AND NOT EXISTS (
+              SELECT 1
+              FROM player p
+              JOIN player_server_link psl ON psl.player_id = p.id
+              WHERE p.discord_id = c.user_id
+                AND psl.guild_id = dg.guild_id
+            )
+        ),
         deleted_characters AS (
           UPDATE character c
           SET deleted_at = dg.deleted_at,
@@ -210,16 +235,15 @@ export class GameDAO {
                WHERE c.id = psl.current_character_id
                  AND c.game_id = dg.id
              )
-          RETURNING psl.player_id, psl.guild_id
+          RETURNING psl.id
         ),
         cleared_rp_modes AS (
           UPDATE rp_channel_mode rcm
           SET is_ic = FALSE,
               updated_at = CURRENT_TIMESTAMP
-          FROM cleared_players cp
-          JOIN player p ON p.id = cp.player_id
-          WHERE rcm.guild_id = cp.guild_id
-            AND rcm.user_id = p.discord_id
+          FROM affected_users au
+          WHERE rcm.guild_id = au.guild_id
+            AND rcm.user_id = au.user_id
             AND rcm.is_ic = TRUE
           RETURNING rcm.channel_id
         )
