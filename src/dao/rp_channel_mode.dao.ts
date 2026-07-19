@@ -35,11 +35,31 @@ export class RpChannelModeDAO {
   }
 
   async isInCharacter(guildId: string, channelId: string, userId: string): Promise<boolean> {
+    return (await this.getMode(guildId, channelId, userId)) ?? false;
+  }
+
+  async getMode(guildId: string, channelId: string, userId: string): Promise<boolean | null> {
     const result = await query<{ is_ic: boolean }>(
       `SELECT is_ic FROM rp_channel_mode WHERE guild_id = $1 AND channel_id = $2 AND user_id = $3`,
       [guildId, channelId, userId],
     );
 
-    return result.rows[0]?.is_ic ?? false;
+    return result.rows[0]?.is_ic ?? null;
+  }
+
+  async clearUserGuildModes(guildId: string, userId: string): Promise<number> {
+    const result = await query(
+      `
+        UPDATE rp_channel_mode
+        SET is_ic = FALSE,
+            updated_at = CURRENT_TIMESTAMP
+        WHERE guild_id = $1
+          AND user_id = $2
+          AND is_ic = TRUE
+        RETURNING channel_id
+      `,
+      [guildId, userId],
+    );
+    return result.rowCount ?? result.rows.length;
   }
 }

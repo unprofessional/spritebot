@@ -35,13 +35,19 @@ export async function isUserInCharacterForChannelScope({
   parentChannelId?: string | null;
   userId: string;
 }): Promise<boolean> {
-  if (await rpChannelModeDAO.isInCharacter(guildId, channelId, userId)) {
-    return true;
-  }
+  const channelMode = await rpChannelModeDAO.getMode(guildId, channelId, userId);
+  if (channelMode !== null) return channelMode;
 
   if (parentChannelId && parentChannelId !== channelId) {
     return rpChannelModeDAO.isInCharacter(guildId, parentChannelId, userId);
   }
 
   return false;
+}
+
+export async function clearUserGuildInCharacterModes(
+  guildId: string,
+  userId: string,
+): Promise<number> {
+  return rpChannelModeDAO.clearUserGuildModes(guildId, userId);
 }
