@@ -26,12 +26,12 @@ describe('authorizeInteraction gifted access ordering', () => {
     warnSpy.mockRestore();
   });
 
-  test('authorizes a gifted guild without resolving Discord entitlements', async () => {
+  test('authorizes a gifted guild for Pro without resolving Discord entitlements', async () => {
     mockIsGifted.mockResolvedValue(true);
 
     await expect(
       authorizeInteraction({
-        feature: 'rpg:characters',
+        feature: 'pro:transcription',
         guildId: 'guild-1',
         userId: 'user-1',
       }),

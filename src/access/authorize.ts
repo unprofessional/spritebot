@@ -63,6 +63,7 @@ export async function authorizeInteraction(
   try {
     const gifted = await giftedDAO.isGifted(guildId);
     if (gifted) {
+      // Gifted guilds intentionally receive every capability, including Pro features.
       console.debug(`[authorizeInteraction] ✅ Gifted access granted for guild=${guildId}`);
       return { ok: true, planName: 'Gifted' };
     }
