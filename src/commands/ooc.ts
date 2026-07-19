@@ -1,5 +1,11 @@
-import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import {
+  CacheType,
+  ChatInputCommandInteraction,
+  escapeMarkdown,
+  SlashCommandBuilder,
+} from 'discord.js';
 
+import { getCurrentCharacterForUser } from '../services/character.service';
 import { setUserChannelInCharacterMode } from '../services/rp_channel_mode.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import type {
@@ -36,12 +42,17 @@ module.exports = {
       userId: user.id,
       isIc: false,
     });
+    const activeCharacter = await getCurrentCharacterForUser(user.id, guildId);
+    const activeCharacterSummary = activeCharacter
+      ? `**${escapeMarkdown(activeCharacter.name)}**`
+      : '_None selected_';
 
     return responder.respond({
       content: appendNudge(
-        '✅ You are now out-of-character in this channel. Your messages here will no longer be proxied.',
+        `✅ You are now out-of-character in this channel. Your messages here will no longer be proxied.\nActive character: ${activeCharacterSummary}`,
         buildNudge({ userId: user.id, guildId, isInIC: false }, 'ooc'),
       ),
+      allowedMentions: { parse: [] },
       ephemeral: true,
     });
   },

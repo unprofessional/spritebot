@@ -18,7 +18,10 @@ import {
   executeDiscordSdkMethodAs,
   fetchDiscordTextResource,
 } from '../discord/sdk_operations';
-import { isUserInCharacterForChannelScope } from './rp_channel_mode.service';
+import {
+  clearUserGuildInCharacterModes,
+  isUserInCharacterForChannelScope,
+} from './rp_channel_mode.service';
 
 const RP_PROXY_WEBHOOK_NAME = 'Spritebot RP Proxy';
 const MESSAGE_TEXT_ATTACHMENT_NAME = 'message.txt';
@@ -410,19 +413,21 @@ export async function handleRoleplayProxyMessage(message: Message): Promise<RpPr
 
   const activeCharacterId = await playerDAO.getCurrentCharacter(message.author.id, message.guildId);
   if (!activeCharacterId) {
+    await clearUserGuildInCharacterModes(message.guildId, message.author.id);
     await executeDiscordSdkMethod(rpReplyPolicy, message, 'reply', {
       content:
-        'You are in-character in this channel, but you do not have an active character selected. Use `/switch-character` first.',
+        'You were still marked in-character without an active character, so I moved you out-of-character. Use `/switch-character` before entering IC again.',
       allowedMentions: { parse: [] },
     });
     return { status: 'failed', reason: 'no_active_character' };
   }
 
   const character = await characterDAO.findById(activeCharacterId);
-  if (!character) {
+  if (!character || character.deleted_at) {
+    await clearUserGuildInCharacterModes(message.guildId, message.author.id);
     await executeDiscordSdkMethod(rpReplyPolicy, message, 'reply', {
       content:
-        'You are in-character in this channel, but I could not find your active character. Use `/switch-character` to select one again.',
+        'Your active character is no longer available, so I moved you out-of-character. Use `/switch-character` to select one again.',
       allowedMentions: { parse: [] },
     });
     return { status: 'failed', reason: 'character_not_found' };

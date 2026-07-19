@@ -14,6 +14,13 @@ const oocCommand = require('../../../src/commands/ooc') as {
   execute(interaction: unknown, context: unknown): Promise<void>;
 };
 
+import { CharacterDAO } from '../../../src/dao/character.dao';
+import { GameDAO } from '../../../src/dao/game.dao';
+import {
+  getOrCreatePlayer,
+  setCurrentCharacter,
+  setCurrentGame,
+} from '../../../src/services/player.service';
 import { isUserInCharacterForChannel } from '../../../src/services/rp_channel_mode.service';
 
 interface InteractionOptions {
@@ -95,6 +102,20 @@ describe('app command flows', () => {
   });
 
   test('/ic and /ooc persist the user channel roleplay mode', async () => {
+    const game = await new GameDAO().create({
+      name: 'RP Campaign',
+      description: '',
+      created_by: 'user-2',
+      guild_id: 'guild-2',
+    });
+    const character = await new CharacterDAO().create({
+      user_id: 'user-2',
+      game_id: game.id,
+      name: 'Current Hero',
+    });
+    await getOrCreatePlayer('user-2', 'guild-2');
+    await setCurrentGame('user-2', 'guild-2', game.id);
+    await setCurrentCharacter('user-2', 'guild-2', character.id);
     const ic = createInteraction({ userId: 'user-2', guildId: 'guild-2', channelId: 'channel-2' });
 
     await icCommand.execute(ic.interaction, ic.responderContext);
@@ -103,6 +124,7 @@ describe('app command flows', () => {
     expect(ic.reply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('in-character'),
+        allowedMentions: { parse: [] },
         ephemeral: true,
       }),
     );
@@ -117,6 +139,7 @@ describe('app command flows', () => {
     expect(ooc.reply).toHaveBeenCalledWith(
       expect.objectContaining({
         content: expect.stringContaining('out-of-character'),
+        allowedMentions: { parse: [] },
         ephemeral: true,
       }),
     );

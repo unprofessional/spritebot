@@ -6,6 +6,7 @@ import type {
 import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
 import { createCharacter } from '../../../src/services/character.service';
 import { getOrCreatePlayer, setCurrentGame } from '../../../src/services/player.service';
+import { setUserChannelInCharacterMode } from '../../../src/services/rp_channel_mode.service';
 
 type CoreCommand = {
   interactionPolicy:
@@ -89,8 +90,28 @@ describe('core command responder migration', () => {
     expectEphemeralDeferral(interaction);
     expect(interaction.editReply).toHaveBeenCalledWith(
       expect.objectContaining({
+        content: '💬 Roleplay mode: **OUT OF CHARACTER** in this channel.',
         embeds: expect.any(Array),
         components: expect.any(Array),
+      }),
+    );
+  });
+
+  test('shows the effective in-character mode on /view-character', async () => {
+    await seedCoreView();
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'user-1',
+      isIc: true,
+    });
+    const interaction = commandInteraction();
+
+    await executePreDeferred(viewCharacterCommand, interaction);
+
+    expect(interaction.editReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: '🎭 Roleplay mode: **IN CHARACTER** in this channel.',
       }),
     );
   });
@@ -198,6 +219,8 @@ function commandInteraction({ dice = '2d6' }: { dice?: string } = {}) {
     commandName: 'core-command',
     guildId: 'guild-1',
     guild: { id: 'guild-1' },
+    channelId: 'channel-1',
+    channel: { isThread: () => false },
     member: { displayName: 'Server Sage' },
     user: {
       id: 'user-1',
