@@ -5,6 +5,7 @@ import { SlashCommandBuilder, ChatInputCommandInteraction, CacheType } from 'dis
 import { getCharactersByUser, getCharacterWithStats } from '../services/character.service';
 
 import { getCurrentGame, getCurrentCharacter } from '../services/player.service';
+import { isUserInCharacterForChannelScope } from '../services/rp_channel_mode.service';
 
 import { validateGameAccess } from '../utils/validate_game_access';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
@@ -85,10 +86,19 @@ module.exports = {
 
       const isSelf = full.id === activeCharacterId;
       const view = buildCharacterCard(full as CharacterWithStats, isSelf);
+      const isInCharacter = await isUserInCharacterForChannelScope({
+        guildId,
+        channelId: interaction.channelId,
+        parentChannelId: interaction.channel?.isThread() ? interaction.channel.parentId : null,
+        userId,
+      });
+      const roleplayMode = isInCharacter
+        ? '🎭 Roleplay mode: **IN CHARACTER** in this channel.'
+        : '💬 Roleplay mode: **OUT OF CHARACTER** in this channel.';
 
       await responder.respond({
         ...view,
-        content: warning ?? undefined,
+        content: [roleplayMode, warning].filter(Boolean).join('\n'),
         ephemeral: true,
       });
     } catch (err) {
