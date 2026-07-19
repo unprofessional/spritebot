@@ -566,6 +566,7 @@ Feature gating is organized around stable feature keys:
 - `rpg:game-admin`
 - `automation:thread-bump`
 - `pro:transcription`
+- `integrations:talespire`
 
 Command-to-feature mapping is defined in [src/access/features.ts](src/access/features.ts), and entitlement resolution happens in [src/services/entitlements.service.ts](src/services/entitlements.service.ts).
 

@@ -3,6 +3,7 @@ import { GiftedGuildsDAO } from '../dao/gifted_guilds.dao';
 import { getEntitlementsFor } from './entitlements.service';
 
 const giftedGuildsDAO = new GiftedGuildsDAO();
+// Gifted access is an all-capabilities grant, not an emulation of the Premium SKU.
 const allFeatures = Object.freeze(Object.keys(FEATURE_LABELS) as FeatureKey[]);
 
 export type HelpFeaturesResult =
