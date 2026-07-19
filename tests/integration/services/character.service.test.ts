@@ -239,6 +239,31 @@ describe('character.service', () => {
     );
   });
 
+  test('clears stale IC modes when the player identity was deleted before the character', async () => {
+    const game = await createGame();
+    await getOrCreatePlayer('orphaned-player', 'guild-1');
+    await setCurrentGame('orphaned-player', 'guild-1', game.id);
+    const character = await characterDAO.create({
+      user_id: 'orphaned-player',
+      game_id: game.id,
+      name: 'Orphaned Hero',
+    });
+    await setCurrentCharacter('orphaned-player', 'guild-1', character.id);
+    await setUserChannelInCharacterMode({
+      guildId: 'guild-1',
+      channelId: 'channel-1',
+      userId: 'orphaned-player',
+      isIc: true,
+    });
+    await query(`DELETE FROM player WHERE discord_id = $1`, ['orphaned-player']);
+
+    await deleteCharacter(character.id);
+
+    await expect(
+      isUserInCharacterForChannel('guild-1', 'channel-1', 'orphaned-player'),
+    ).resolves.toBe(false);
+  });
+
   test('rejects user restore outside ownership or retention window', async () => {
     const game = await createGame();
     await getOrCreatePlayer('player-1', 'guild-1');
