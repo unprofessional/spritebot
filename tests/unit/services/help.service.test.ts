@@ -41,6 +41,7 @@ describe('help feature resolution', () => {
           'rpg:game-admin',
           'automation:thread-bump',
           'pro:transcription',
+          'integrations:talespire',
         ]),
       );
     }

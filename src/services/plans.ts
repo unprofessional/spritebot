@@ -12,6 +12,7 @@ export const PLAN_FEATURES: Record<string /* sku_id */, FeatureKey[]> = {
     'rpg:inventory',
     'rpg:game-admin',
     'automation:thread-bump',
+    'integrations:talespire',
   ],
 };
 
