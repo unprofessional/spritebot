@@ -13,6 +13,7 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | [game-delete.md](game-delete.md)                                 | Merged — production migration pending    |
 | [voice-transcription.md](voice-transcription.md)                 | Phase 3 implemented — live smoke pending |
 | [support-server-verification.md](support-server-verification.md) | Draft                                    |
+| [whisper-gpu-cpu-failover.md](whisper-gpu-cpu-failover.md)       | Ready for implementation                 |
 
 ## Future
 
