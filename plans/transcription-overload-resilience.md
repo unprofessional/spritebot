@@ -1061,6 +1061,17 @@ Tests:
 - Restart-mid-drain test produces a correct, deduplicated final transcript.
 - Benchmark results documented in `docs/` or `plans/`.
 
+**Phase 6 implementation checkpoint (2026-07-20): complete.** The end-to-end
+overload regression models a three-hour, 360-segment session at 1.5x processing
+capacity through the real file manifest, spool, scheduler, checkpoint,
+progress, and transcript code. A restart-mid-drain case reconstructs claimed
+work and verifies pre/post-restart results remain complete and deduplicated.
+The yharnam large-v3 CPU benchmark measured about 8.1 eleven-second segments
+per minute at every tested concurrency from 1-4, so the application default is
+now one globally shared Whisper request. Results, limitations, conservative
+speaker capacity, and light/medium/heavy tuning profiles are documented in
+`docs/transcription-capacity.md`.
+
 ---
 
 ## Configuration summary
@@ -1093,7 +1104,7 @@ Tests:
 
 | Variable                           | Default | Description                   |
 | ---------------------------------- | ------- | ----------------------------- |
-| `TRANSCRIPTION_CONCURRENCY`        | `3`     | Max parallel Whisper requests |
+| `TRANSCRIPTION_CONCURRENCY`        | `1`     | Max parallel Whisper requests |
 | `TRANSCRIPTION_REQUEST_TIMEOUT_MS` | `60000` | Per-request HTTP timeout      |
 
 ### Removed variables
