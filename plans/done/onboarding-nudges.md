@@ -1,5 +1,7 @@
 # SPRITEbot Onboarding Nudges — Implementation Plan
 
+> **Status:** Completed and archived (2026-07-20)
+
 > **Status:** Planning
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14)
 > **Pattern:** Guided "what's next" nudges on every command response, modeled after SPRITE-Integrations' admin setup flow
@@ -153,7 +155,7 @@ No integration test changes needed — the nudges are pure string appends to exi
 
 ## Follow-up: Zero-Game Server Awareness
 
-> **Status:** Open
+> **Status:** Completed
 > **Context:** When a server has no games at all, several commands nudge toward
 > `/join-game` or `/switch-game` which are also dead ends. The nudge utility
 > needs to distinguish "no games exist in this server" from "games exist but

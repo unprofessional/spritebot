@@ -1,5 +1,7 @@
 # Plan: `/help` Command
 
+> **Status:** Completed and archived (2026-07-20)
+
 > **Status:** Implemented — merge pending
 
 ## Goal

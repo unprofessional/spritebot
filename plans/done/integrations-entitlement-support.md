@@ -1,5 +1,7 @@
 # SPRITEbot — Integrations Entitlement Support
 
+> **Status:** Completed and archived (2026-07-20)
+
 ## Context
 
 SPRITE-Integrations (TaleSpire bridge) needs to gate its commands and webhook endpoints behind the same Premium subscription that @SPRITE uses. Because the two bots are separate Discord applications, SPRITE-Integrations reads entitlement state directly from SPRITEbot's database (`entitlements_cache` + `gifted_guilds` tables).
