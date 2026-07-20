@@ -125,6 +125,12 @@ module.exports = {
         startedBy: interaction.user.id,
       });
 
+      if (status.processingPreviousSession) {
+        return responder.respond({
+          content: `⏳ The previous transcription session in <#${status.voiceChannelId}> is still processing its remaining segments. A new session can start after its final transcript is posted.`,
+        });
+      }
+
       return responder.respond({
         content: `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
       });
@@ -156,7 +162,9 @@ module.exports = {
     }
 
     return responder.respond({
-      content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}. Captures dropped: ${status.droppedCaptureCount}.`,
+      content: status.processingPreviousSession
+        ? `⏳ Processing remaining segments from the previous transcription session in <#${status.voiceChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Captures dropped: ${status.droppedCaptureCount}.`
+        : `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}. Captures dropped: ${status.droppedCaptureCount}.`,
       ephemeral: true,
     });
   },

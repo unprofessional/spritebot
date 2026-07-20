@@ -64,6 +64,14 @@ export const transcriptionSpoolRetentionHours = toInt(
   process.env.TRANSCRIPTION_SPOOL_RETENTION_HOURS,
   72,
 );
+export const transcriptionCheckpointIntervalSegments = toInt(
+  process.env.TRANSCRIPTION_CHECKPOINT_INTERVAL_SEGMENTS,
+  50,
+);
+export const transcriptionCheckpointIntervalMs = toMs(
+  process.env.TRANSCRIPTION_CHECKPOINT_INTERVAL_MS,
+  60_000,
+);
 export const transcriptionLowDiskMb = toInt(process.env.TRANSCRIPTION_LOW_DISK_MB, 500);
 export const transcriptionCriticalDiskMb = toInt(process.env.TRANSCRIPTION_CRITICAL_DISK_MB, 100);
 export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/data/voice-spool';

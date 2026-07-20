@@ -19,10 +19,12 @@ describe('TranscriptionScheduler', () => {
 
   test('processes a committed WAV, records its result, and deletes only the WAV', async () => {
     const { queue, spool, spoolPath } = await fixture();
+    const onTerminalJob = jest.fn();
     const scheduler = new TranscriptionScheduler({
       queue,
       spool,
       concurrency: 1,
+      onTerminalJob,
       transcribe: async (_job, wav) => `heard ${wav.toString()}`,
     });
 
@@ -36,6 +38,7 @@ describe('TranscriptionScheduler', () => {
       code: 'ENOENT',
     });
     await expect(access(path.join(spool.sessionDir, 'manifest.jsonl'))).resolves.toBeUndefined();
+    expect(onTerminalJob).toHaveBeenCalledTimes(1);
   });
 
   test('retries a transient failure after its durable eligibility time', async () => {
@@ -96,6 +99,40 @@ describe('TranscriptionScheduler', () => {
     await new Promise((resolve) => setImmediate(resolve));
     expect(transcribe).not.toHaveBeenCalled();
     expect(queue.stats()).toMatchObject({ committed: 1, processing: 0 });
+  });
+
+  test('reports quiescence after an in-flight job finishes', async () => {
+    const { queue, spool } = await fixture();
+    let release: (() => void) | undefined;
+    let markStarted: (() => void) | undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve;
+    });
+    const scheduler = new TranscriptionScheduler({
+      queue,
+      spool,
+      concurrency: 1,
+      transcribe: async () => {
+        markStarted?.();
+        await blocked;
+        return 'done';
+      },
+    });
+    scheduler.signal();
+    await started;
+    expect(queue.stats().processing).toBe(1);
+    let quiescent = false;
+    const waiting = scheduler.onQuiescent().then(() => {
+      quiescent = true;
+    });
+    await Promise.resolve();
+    expect(quiescent).toBe(false);
+    release?.();
+    await waiting;
+    expect(quiescent).toBe(true);
   });
 
   test('does not exceed its worker concurrency', async () => {
