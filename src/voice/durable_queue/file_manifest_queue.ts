@@ -96,6 +96,14 @@ export class FileManifestQueue implements TranscriptionJobQueue {
     });
   }
 
+  nextEligibleAt(): string | null {
+    const retryTimes = this.snapshot.jobs
+      .filter((job) => job.status === 'failed' && job.nextEligibleAt)
+      .map((job) => job.nextEligibleAt as string)
+      .sort();
+    return retryTimes[0] ?? null;
+  }
+
   async ack(jobId: string, result: string): Promise<void> {
     await this.mutate(async () => {
       requireProcessing(this.snapshot, jobId);

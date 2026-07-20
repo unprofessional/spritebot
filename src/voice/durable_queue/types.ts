@@ -80,6 +80,7 @@ export interface TranscriptionJobQueue {
   readonly header: Readonly<ManifestHeader>;
   commit(segment: SegmentJob): Promise<void>;
   claim(): Promise<ClaimedJob | null>;
+  nextEligibleAt(): string | null;
   ack(jobId: string, result: string): Promise<void>;
   nack(jobId: string, error: string): Promise<void>;
   deadLetter(jobId: string, error: string): Promise<void>;
