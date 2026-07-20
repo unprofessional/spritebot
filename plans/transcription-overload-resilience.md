@@ -899,9 +899,9 @@ manifest replay and interrupted-capture sealing, processing-job reset and
 deduplicated resume, recovery/final notifications, shutdown tracking, and
 retention cleanup anchored to durable `resolvedAt`. Corrupt manifests and old
 unresolved sessions are retained and logged. Verification passed 88 suites /
-484 tests plus lint, Prettier, TypeScript build, and diff checks. Recovery also
-blocks a new guild transcription until every recovered session for that guild
-has posted its final result.
+484 tests plus lint, Prettier, TypeScript build, and diff checks. Recovered
+sessions remain isolated by session directory and do not block a new live
+session for the guild; shared global concurrency control remains Phase 5 scope.
 
 ### Phase 5: Backpressure warnings + progress semantics
 
