@@ -45,7 +45,7 @@ export const transcriptionSilenceMs = toMs(process.env.TRANSCRIPTION_SILENCE_MS,
 export const transcriptionMaxSegmentMs = toMs(process.env.TRANSCRIPTION_MAX_SEGMENT_MS, 30_000);
 export const transcriptionMinSegmentMs = toMs(process.env.TRANSCRIPTION_MIN_SEGMENT_MS, 600);
 export const transcriptionVadThreshold = Number(process.env.TRANSCRIPTION_VAD_THRESHOLD ?? '0.012');
-export const transcriptionConcurrency = toInt(process.env.TRANSCRIPTION_CONCURRENCY, 3);
+export const transcriptionConcurrency = toInt(process.env.TRANSCRIPTION_CONCURRENCY, 1);
 export const transcriptionRequestTimeoutMs = toMs(
   process.env.TRANSCRIPTION_REQUEST_TIMEOUT_MS,
   60_000,
