@@ -79,6 +79,7 @@ describe('FileManifestQueue', () => {
     await queue.claim();
     await queue.nack(job.id, 'service unavailable');
 
+    expect(queue.nextEligibleAt()).toBe('2026-07-20T12:00:30.000Z');
     await expect(queue.claim()).resolves.toBeNull();
     nowMs += 29_999;
     await expect(queue.claim()).resolves.toBeNull();
@@ -87,6 +88,7 @@ describe('FileManifestQueue', () => {
     await queue.nack(job.id, 'still unavailable');
 
     expect(queue.stats()).toMatchObject({ dead_letter: 1, failed: 0 });
+    expect(queue.nextEligibleAt()).toBeNull();
     await expect(queue.claim()).resolves.toBeNull();
   });
 

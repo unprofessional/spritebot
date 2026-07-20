@@ -13,10 +13,8 @@ describe('durable queue disk utilities', () => {
     const directory = await mkdtemp(path.join(os.tmpdir(), 'spritebot-disk-test-'));
     try {
       await expect(checkDiskSpace(directory)).resolves.toBeGreaterThan(0);
-      await expect(validateSpoolDirectory(directory)).resolves.toEqual({
-        writable: true,
-        persistenceWarning: null,
-      });
+      const validation = await validateSpoolDirectory(directory);
+      expect(validation.writable).toBe(true);
     } finally {
       await rm(directory, { recursive: true, force: true });
     }

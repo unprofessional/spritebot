@@ -138,9 +138,10 @@ defines no persistent volume for it.
 
 This plan requires:
 
-- A **host-mounted volume** for the spool directory, shared between blue and
-  green containers. Example: `./data/voice-spool:/data/voice-spool` in the
-  compose `x-spritebot-service` anchor.
+- A **Docker named volume** for the spool directory, shared between blue and
+  green containers: `spritebot-voice-spool:/data/voice-spool` in the Compose
+  `x-spritebot-service` anchor. Docker manages the host storage location while
+  preserving it across container replacement.
 - Default `TRANSCRIPTION_SPOOL_DIR` changes to `/data/voice-spool`.
 - **Startup validation:** on boot, verify the spool path is writable and on
   a persistent filesystem. Log a clear warning if it resolves to a tmpfs.
@@ -432,6 +433,10 @@ interface TranscriptionJobQueue {
   // same job.
   claim(): Promise<ClaimedJob | null>;
 
+  // Earliest durable retry time among failed jobs, for scheduler wake-up.
+  // Returns null when no delayed retry exists.
+  nextEligibleAt(): string | null;
+
   // Mark a job as successfully transcribed. Result text is persisted
   // in the manifest. The WAV file may be deleted by the caller after ack.
   ack(jobId: string, result: string): Promise<void>;
@@ -516,6 +521,8 @@ Deliverables:
   - `claim()` finds the oldest eligible job (`committed` or `failed` with
     `attempts < maxAttempts` and `nextEligibleAt <= now`), appends a `claim`
     event, and returns it.
+  - `nextEligibleAt()` returns the earliest durable retry timestamp among
+    failed jobs so the Phase 2 scheduler can sleep without polling.
   - `ack(id, result)` appends an `ack` event with the transcription text.
   - `nack(id, error)` appends a `nack` event with a durable exponential-backoff
     `nextEligibleAt`. If `attempts >= maxAttempts`, auto-promotes to
@@ -556,10 +563,10 @@ Deliverables:
   base directory is writable and not a tmpfs. Logs a warning if persistence
   is questionable.
 
-- **Docker volume** — add a named/host-mounted volume for the spool
-  directory to `docker-compose.yml`, shared between blue and green
-  containers. Update `TRANSCRIPTION_SPOOL_DIR` default to `/data/voice-spool`.
-  Include a deployment migration note for moving existing spool data.
+- **Docker volume** — add the `spritebot-voice-spool` named volume to
+  `docker-compose.yml`, mounted at `/data/voice-spool` and shared between blue
+  and green containers. Update `TRANSCRIPTION_SPOOL_DIR` accordingly. Include
+  a deployment migration note for moving existing spool data.
 
 - **Configuration:**
   - `TRANSCRIPTION_SPOOL_DIR` — default changes to `/data/voice-spool`.
@@ -582,6 +589,8 @@ Tests:
 - Nack marks a job failed; failed jobs are re-claimed up to maxAttempts.
 - Failed jobs are not claimable before `nextEligibleAt`; exponential backoff
   and the maximum delay are deterministic under a fake clock.
+- `nextEligibleAt()` returns the earliest delayed retry and returns null once
+  no failed retry remains.
 - Nack beyond maxAttempts auto-promotes to dead_letter.
 - Dead-lettered jobs are never re-claimed.
 - Seal prevents further commits; isFullyResolved is accurate.
@@ -633,7 +642,7 @@ Phase 1 exit review:
   review toward BullMQ unless there is a documented reason to continue.
 
 **Phase 1 implementation checkpoint (2026-07-20): continue with
-FileManifestQueue.** The queue and WAL implementation total 676 physical lines
+FileManifestQueue.** The queue and WAL implementation total 684 physical lines
 including imports, whitespace, types used internally, and comments (below the
 approximate 800-line production-logic warning signal even before exclusions).
 The persistence invariants are covered by focused tests for concurrent claims
@@ -688,6 +697,15 @@ TranscriptionQueue` with `jobQueue: TranscriptionJobQueue`. The session
   8. Checks a `draining` flag before each `claim()` (for shutdown).
   9. Arms a wake-up for the earliest failed job's `nextEligibleAt` rather than
      busy-looping or requiring a new commit to restart the pump.
+
+  Phase 2 performance notes:
+  - Phase 1 `claim()` deliberately uses a linear scan for clarity. Benchmark
+    against incident-scale manifests (2,500+ jobs); add an in-memory eligible
+    index only if profiling shows meaningful scheduler overhead.
+  - Phase 1 deliberately opens, appends, syncs, and closes the WAL for every
+    mutation. Benchmark syscall overhead before considering a persistent file
+    handle, and preserve poison-on-uncertain-write and shutdown flush semantics
+    if that optimization is adopted.
 
 - **Refactor `SegmentSpool`** — cleanup logic changes:
   - `cleanup()` is removed as a blanket operation.
@@ -1062,8 +1080,8 @@ This plan is complete when:
   state at crash time.
 - Transcript checkpoints survive crashes and provide near-instant partial
   results on stop.
-- The spool directory survives container replacement and blue/green
-  deployment via a persistent host-mounted volume.
+- The spool directory survives container replacement and blue/green deployment
+  via the shared `spritebot-voice-spool` Docker named volume.
 - Mid-session warnings alert users when the queue is falling behind.
 - Backpressure flow control reduces segment rate under sustained overload.
 - Progress UI accurately distinguishes successfully transcribed segments
