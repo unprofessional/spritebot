@@ -54,8 +54,6 @@ export const transcriptionRequestRetries = toNonNegativeInt(
   process.env.TRANSCRIPTION_REQUEST_RETRIES ?? process.env.TRANSCRIPTION_MAX_RETRIES,
   2,
 );
-// Compatibility alias until the Phase 2 client integration adopts the renamed setting.
-export const transcriptionMaxRetries = transcriptionRequestRetries;
 export const transcriptionJobMaxAttempts = toInt(process.env.TRANSCRIPTION_JOB_MAX_ATTEMPTS, 3);
 export const transcriptionJobRetryBaseMs = toMs(
   process.env.TRANSCRIPTION_JOB_RETRY_BASE_MS,
@@ -69,10 +67,6 @@ export const transcriptionSpoolRetentionHours = toInt(
 export const transcriptionLowDiskMb = toInt(process.env.TRANSCRIPTION_LOW_DISK_MB, 500);
 export const transcriptionCriticalDiskMb = toInt(process.env.TRANSCRIPTION_CRITICAL_DISK_MB, 100);
 export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/data/voice-spool';
-export const transcriptionDrainTimeoutMs = toMs(
-  process.env.TRANSCRIPTION_DRAIN_TIMEOUT_MS,
-  120_000,
-);
 
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)
 export const bumpDefaultMinutes = toInt(process.env.BUMP_DEFAULT_MINUTES, 10050);

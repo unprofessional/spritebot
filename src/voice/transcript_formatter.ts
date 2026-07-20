@@ -1,4 +1,4 @@
-import type { TranscriptionSegmentRecord } from './transcription_queue';
+import type { QueueStats, TranscriptionResult } from './durable_queue/types';
 
 export type TranscriptEntry = {
   userId: string;
@@ -13,24 +13,18 @@ export type TranscriptSessionSummary = {
   textChannelId: string;
   startedAt: Date;
   participants: number;
-  transcript: TranscriptEntry[];
-  segmentRecords: TranscriptionSegmentRecord[];
+  results: TranscriptionResult[];
+  stats: QueueStats;
 };
 
 export type TranscriptDumpKind = 'partial' | 'final';
 
 export function formatTranscript(
   session: TranscriptSessionSummary,
-  { endedAt, kind, timedOut }: { endedAt: Date; kind: TranscriptDumpKind; timedOut: boolean },
+  { endedAt, kind }: { endedAt: Date; kind: TranscriptDumpKind },
 ): string {
-  const sorted = [...session.transcript].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-  );
-  const failed = session.segmentRecords.filter((record) => record.status === 'failed');
-  const timeout = session.segmentRecords.filter((record) => record.status === 'timeout');
-  const pending = session.segmentRecords.filter(
-    (record) => record.status === 'queued' || record.status === 'transcribing',
-  );
+  const sorted = session.results.filter((result) => result.status === 'done' && result.text);
+  const omitted = session.results.filter((result) => result.status !== 'done');
 
   const lines = [
     kind === 'partial' ? 'SPRITEbot Voice Transcript (Partial)' : 'SPRITEbot Voice Transcript',
@@ -41,14 +35,10 @@ export function formatTranscript(
     `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,
     `Participants: ${session.participants}`,
     `Segments included: ${sorted.length}`,
-    `Segments failed: ${failed.length}`,
-    `Segments timed out: ${timeout.length}`,
-    `Segments still processing: ${pending.length}`,
+    `Segments dead-lettered: ${session.stats.dead_letter}`,
+    `Captures dropped: ${session.stats.dropped}`,
+    `Segments still processing: ${session.stats.pending}`,
   ];
-
-  if (timedOut) {
-    lines.push('Drain timed out before every segment finished.');
-  }
 
   lines.push('');
 
@@ -57,19 +47,16 @@ export function formatTranscript(
   } else {
     for (const entry of sorted) {
       lines.push(
-        `[${formatOffset(entry.timestamp.getTime() - session.startedAt.getTime())}] ${entry.displayName}: ${entry.text}`,
+        `[${formatOffset(Date.parse(entry.timestamp) - session.startedAt.getTime())}] ${entry.displayName}: ${entry.text}`,
       );
     }
   }
 
-  const omitted = [...failed, ...timeout, ...pending].sort(
-    (a, b) => a.timestamp.getTime() - b.timestamp.getTime(),
-  );
   if (omitted.length > 0) {
     lines.push('', 'Omitted segments:');
-    for (const record of omitted) {
+    for (const result of omitted) {
       lines.push(
-        `- #${record.id} ${record.status} ${formatOffset(record.timestamp.getTime() - session.startedAt.getTime())} user=${record.userId}${record.lastError ? ` (${record.lastError})` : ''}`,
+        `- #${result.jobId} ${result.status} ${formatOffset(Date.parse(result.timestamp) - session.startedAt.getTime())} user=${result.userId}${result.error ? ` (${result.error})` : ''}`,
       );
     }
   }
