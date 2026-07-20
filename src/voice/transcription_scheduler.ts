@@ -119,8 +119,8 @@ export class TranscriptionScheduler {
     } catch (err) {
       const terminalBefore = this.queue.stats().dead_letter;
       await this.queue.nack(job.id, errorMessage(err));
-      if (this.queue.stats().dead_letter > terminalBefore) this.onTerminalJob();
       if (this.queue.stats().dead_letter > terminalBefore) {
+        this.onTerminalJob();
         this.healthMonitor.recordCompletion(job.durationMs);
       }
       this.reportHealth();
