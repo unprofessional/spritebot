@@ -744,6 +744,15 @@ Tests:
 - Write ordering: WAV exists on disk before manifest commit.
 - Critical-disk drops are visible in session status and transcript output.
 
+**Phase 2 implementation checkpoint (2026-07-20): complete.** Commit
+`64045c9` replaced the in-memory queue with the manifest-backed scheduler,
+durable UUID WAV spooling, retry wakeups, per-file cleanup, disk-pressure gap
+events, and durable queue progress/transcript semantics. The obsolete queue,
+drain timeout, and their tests were removed. Verification passed 86 suites / 475
+tests plus lint, Prettier, TypeScript build, and diff checks. Moldy reviewed the
+phase with no blocking issues; sealed-session UX and checkpoint cadence were
+explicitly deferred to Phase 3.
+
 ### Phase 3: Decoupled stop + checkpointing
 
 **Stop becomes a commit point.** `/transcribe stop` returns immediately with
@@ -802,6 +811,15 @@ Tests:
 - Shutdown during background drain checkpoints and exits cleanly.
 - Jobs in `processing` at shutdown remain in manifest for recovery.
 
+**Phase 3 implementation checkpoint (2026-07-20): complete.** Commit
+`8534787` made stop a seal/checkpoint boundary that returns after posting the
+partial transcript while background processing continues without a drain
+deadline. It added segment-count and time-based checkpointing, accurate final
+completion/dead-letter notifications, sealed-session status copy, and shutdown
+quiescence with a final checkpoint. Verification passed 87 suites / 479 tests
+plus lint, Prettier, TypeScript build, and diff checks. Phase 4 owns discovery
+and restart of the durable work left by shutdown or process failure.
+
 ### Phase 4: Restart recovery
 
 **Startup scanner discovers incomplete sessions and resumes them.** Recovery
@@ -825,6 +843,9 @@ Deliverables:
     resolved. Retention cleanup may still apply to them.
   - For unresolved manifests: starts a background `TranscriptionScheduler`
     to process remaining jobs.
+  - Starts at most two recovered sessions per guild during one startup scan.
+    Additional unresolved manifests are retained and logged for a later scan
+    or operator review instead of creating unbounded recovery workers.
 
 - **Recovery notification** — for each recovered session, post a message to
   the original text channel (ID from `ManifestHeader.textChannelId`):
@@ -874,6 +895,18 @@ Tests:
 - Corrupt/partial manifests are logged and skipped gracefully.
 - Orphan WAVs are logged during recovery.
 - Standby instance does not perform recovery.
+
+**Phase 4 implementation checkpoint (2026-07-20): complete.** Commit
+`58460b8` added active-lease startup scanning after Discord readiness,
+manifest replay and interrupted-capture sealing, processing-job reset and
+deduplicated resume, recovery/final notifications, shutdown tracking, and
+retention cleanup anchored to durable `resolvedAt`. Corrupt manifests and old
+unresolved sessions are retained and logged. Verification passed 88 suites /
+484 tests plus lint, Prettier, TypeScript build, and diff checks. Recovered
+sessions remain isolated by session directory and do not block a new live
+session for the guild. Startup recovery caps active recovered sessions at two
+per guild and leaves any excess manifests on disk; shared global concurrency
+control remains Phase 5 scope.
 
 ### Phase 5: Backpressure warnings + progress semantics
 
