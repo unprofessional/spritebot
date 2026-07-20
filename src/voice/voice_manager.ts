@@ -170,7 +170,6 @@ type SpeakerIdentity = {
 export class VoiceManager {
   private readonly sessions = new Map<string, VoiceSession>();
   private readonly recoveredSessions = new Set<RecoveredTranscriptionSession>();
-  private readonly recoveringGuildIds = new Set<string>();
   private readonly transcriptionClient = new TranscriptionClient();
   private installedClient: Client | null = null;
   private recoveryStarted = false;
@@ -195,11 +194,6 @@ export class VoiceManager {
 
     const existing = this.sessions.get(params.guild.id);
     if (existing) return toStatus(existing);
-    if (this.recoveringGuildIds.has(params.guild.id)) {
-      throw new Error(
-        'A previous transcription session is still being recovered. Wait for its final transcript before starting another session.',
-      );
-    }
 
     const missingPermissions = await getMissingTranscriptionPermissions(
       params.guild,
@@ -416,7 +410,7 @@ export class VoiceManager {
       }
       for (const session of this.recoveredSessions) {
         await session.checkpointController.stop();
-        this.removeRecoveredSession(session);
+        this.recoveredSessions.delete(session);
       }
     }
 
@@ -449,7 +443,7 @@ export class VoiceManager {
   ): Promise<void> {
     await session.scheduler.onQuiescent();
     await session.checkpointController.stop();
-    this.removeRecoveredSession(session);
+    this.recoveredSessions.delete(session);
   }
 
   private queueTranscription(session: VoiceSession, userId: string, segment: SpeechSegment): void {
@@ -590,18 +584,7 @@ export class VoiceManager {
     });
     for (const session of recovered) {
       this.recoveredSessions.add(session);
-      this.recoveringGuildIds.add(session.queue.header.guildId);
-      void session.completion.finally(() => this.removeRecoveredSession(session));
-    }
-  }
-
-  private removeRecoveredSession(session: RecoveredTranscriptionSession): void {
-    this.recoveredSessions.delete(session);
-    const guildId = session.queue.header.guildId;
-    if (
-      ![...this.recoveredSessions].some((candidate) => candidate.queue.header.guildId === guildId)
-    ) {
-      this.recoveringGuildIds.delete(guildId);
+      void session.completion.finally(() => this.recoveredSessions.delete(session));
     }
   }
 
