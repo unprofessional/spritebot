@@ -21,6 +21,7 @@ type SchedulerOptions = {
   transcribe: TranscribeJob;
   isDraining?: () => boolean;
   now?: () => number;
+  onTerminalJob?: () => void;
 };
 
 export class TranscriptionScheduler {
@@ -30,10 +31,12 @@ export class TranscriptionScheduler {
   private readonly transcribe: TranscribeJob;
   private readonly isDraining: () => boolean;
   private readonly now: () => number;
+  private readonly onTerminalJob: () => void;
   private active = 0;
   private pumping = false;
   private wakeTimer: NodeJS.Timeout | null = null;
   private idleWaiters: Array<() => void> = [];
+  private quiescentWaiters: Array<() => void> = [];
 
   constructor(options: SchedulerOptions) {
     this.queue = options.queue;
@@ -42,6 +45,7 @@ export class TranscriptionScheduler {
     this.transcribe = options.transcribe;
     this.isDraining = options.isDraining ?? (() => false);
     this.now = options.now ?? Date.now;
+    this.onTerminalJob = options.onTerminalJob ?? (() => undefined);
   }
 
   signal(): void {
@@ -57,6 +61,11 @@ export class TranscriptionScheduler {
     return new Promise((resolve) => this.idleWaiters.push(resolve));
   }
 
+  onQuiescent(): Promise<void> {
+    if (this.active === 0) return Promise.resolve();
+    return new Promise((resolve) => this.quiescentWaiters.push(resolve));
+  }
+
   private async pump(): Promise<void> {
     if (this.pumping || this.isDraining()) return;
     this.pumping = true;
@@ -69,6 +78,7 @@ export class TranscriptionScheduler {
           this.active -= 1;
           this.signal();
           this.resolveIdleWaiters();
+          this.resolveQuiescentWaiters();
         });
       }
       this.armRetryWake();
@@ -84,10 +94,13 @@ export class TranscriptionScheduler {
       const wav = await this.spool.readSegment(job.spoolPath);
       result = await this.transcribe(job, wav);
     } catch (err) {
+      const terminalBefore = this.queue.stats().dead_letter;
       await this.queue.nack(job.id, errorMessage(err));
+      if (this.queue.stats().dead_letter > terminalBefore) this.onTerminalJob();
       return;
     }
     await this.queue.ack(job.id, result);
+    this.onTerminalJob();
     await this.spool.deleteSegment(job.spoolPath).catch((err) => {
       console.warn(`[voice] unable to delete completed segment ${job.id}`, err);
     });
@@ -108,6 +121,13 @@ export class TranscriptionScheduler {
     if (this.active !== 0 || this.queue.stats().pending !== 0) return;
     const waiters = this.idleWaiters;
     this.idleWaiters = [];
+    for (const resolve of waiters) resolve();
+  }
+
+  private resolveQuiescentWaiters(): void {
+    if (this.active !== 0) return;
+    const waiters = this.quiescentWaiters;
+    this.quiescentWaiters = [];
     for (const resolve of waiters) resolve();
   }
 }

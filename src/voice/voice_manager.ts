@@ -22,6 +22,8 @@ import {
   trackOperation,
 } from '../runtime/lifecycle';
 import {
+  transcriptionCheckpointIntervalMs,
+  transcriptionCheckpointIntervalSegments,
   transcriptionConcurrency,
   transcriptionCriticalDiskMb,
   transcriptionJobMaxAttempts,
@@ -39,7 +41,7 @@ import {
 import { AudioReceiver } from './audio_receiver';
 import { checkDiskSpace, evaluateDiskPressure } from './durable_queue/disk_util';
 import { FileManifestQueue } from './durable_queue/file_manifest_queue';
-import type { TranscriptionJobQueue } from './durable_queue/types';
+import type { QueueStats, TranscriptionJobQueue } from './durable_queue/types';
 import {
   createNoopTranscriptionProgressMessage,
   createTranscriptionProgressMessage,
@@ -50,6 +52,7 @@ import { SegmentSpool } from './segment_spool';
 import type { SpeechSegment } from './segment_buffer';
 import { formatDuration, formatTranscript, type TranscriptDumpKind } from './transcript_formatter';
 import { TranscriptionClient } from './transcription_client';
+import { TranscriptionCheckpointController } from './transcription_checkpoint_controller';
 import { TranscriptionScheduler } from './transcription_scheduler';
 import {
   formatMissingTranscriptionPermissions,
@@ -115,6 +118,7 @@ export type VoiceSessionStatus = {
   segmentsTranscribed: number;
   participantCount: number;
   droppedCaptureCount: number;
+  processingPreviousSession: boolean;
 };
 
 export type StopTranscriptionResult = {
@@ -141,6 +145,7 @@ type VoiceSession = VoiceSessionStatus & {
   speakerIdentities: Map<string, SpeakerIdentity>;
   jobQueue: TranscriptionJobQueue;
   scheduler: TranscriptionScheduler;
+  checkpointController: TranscriptionCheckpointController;
   segmentSpool: SegmentSpool;
   pendingSpools: Set<Promise<void>>;
   isStopping: boolean;
@@ -220,6 +225,13 @@ export class VoiceManager {
         retryMaxMs: transcriptionJobRetryMaxMs,
       },
     );
+    const checkpointController = new TranscriptionCheckpointController({
+      queue: jobQueue,
+      intervalSegments: transcriptionCheckpointIntervalSegments,
+      intervalMs: transcriptionCheckpointIntervalMs,
+      onError: (err) =>
+        console.error(`[voice] failed to checkpoint transcription guild=${params.guild.id}`, err),
+    });
 
     let session: VoiceSession;
     session = {
@@ -231,6 +243,7 @@ export class VoiceManager {
       segmentsTranscribed: 0,
       participantCount: 0,
       droppedCaptureCount: 0,
+      processingPreviousSession: false,
       connection,
       receiver: new AudioReceiver(connection, (userId, segment) =>
         this.queueTranscription(session, userId, segment),
@@ -243,8 +256,10 @@ export class VoiceManager {
         spool: segmentSpool,
         concurrency: transcriptionConcurrency,
         isDraining,
+        onTerminalJob: () => checkpointController.recordTerminalJob(),
         transcribe: (job, wav) => this.transcribeSegment(session, job, wav),
       }),
+      checkpointController,
       segmentSpool,
       pendingSpools: new Set(),
       isStopping: false,
@@ -253,7 +268,9 @@ export class VoiceManager {
     session.receiver.start();
     connection.on(VoiceConnectionStatus.Disconnected, () => {
       if (session.isStopping) return;
-      this.sessions.delete(params.guild.id);
+      void session.checkpointController.stop().finally(() => {
+        this.sessions.delete(params.guild.id);
+      });
     });
 
     this.sessions.set(params.guild.id, session);
@@ -290,7 +307,7 @@ export class VoiceManager {
 
   private async stopAndDump(
     guildId: string,
-    { autoStopped, waitForFinal = false }: { autoStopped: boolean; waitForFinal?: boolean },
+    { autoStopped }: { autoStopped: boolean },
   ): Promise<StopTranscriptionResult> {
     const session = this.sessions.get(guildId);
     if (!session) {
@@ -310,10 +327,12 @@ export class VoiceManager {
     await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy');
     await Promise.allSettled([...session.pendingSpools]);
     await session.jobQueue.seal();
+    await session.checkpointController.flush();
     const stats = session.jobQueue.stats();
 
     if (stats.pending === 0) {
       try {
+        await session.checkpointController.stop();
         await this.sendTranscriptDump(session, autoStopped, { kind: 'final' });
       } finally {
         this.sessions.delete(guildId);
@@ -330,21 +349,8 @@ export class VoiceManager {
       };
     }
 
+    session.processingPreviousSession = true;
     await this.sendTranscriptDump(session, autoStopped, { kind: 'partial' });
-    if (waitForFinal) {
-      await this.finishStoppedSession(session, autoStopped);
-      const finalStats = session.jobQueue.stats();
-      return {
-        stopped: true,
-        segmentCount: finalStats.done,
-        participantCount: session.participants.size,
-        autoStopped,
-        pendingCount: finalStats.pending,
-        failedCount: finalStats.dead_letter,
-        final: true,
-      };
-    }
-
     void this.finishStoppedSession(session, autoStopped);
 
     return {
@@ -374,15 +380,16 @@ export class VoiceManager {
     }
 
     const stopAll = Promise.allSettled(
-      guildIds.map((guildId) =>
-        this.stopAndDump(guildId, { autoStopped: true, waitForFinal: true }),
-      ),
+      guildIds.map((guildId) => this.stopSessionForShutdown(this.sessions.get(guildId))),
     );
     const timedOut = await promiseTimedOut(stopAll, timeoutMs);
 
     if (timedOut) {
       for (const [guildId, session] of this.sessions) {
-        await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy');
+        await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy').catch(
+          () => undefined,
+        );
+        await session.checkpointController.stop();
         this.sessions.delete(guildId);
       }
     }
@@ -392,6 +399,19 @@ export class VoiceManager {
       timedOut,
       remainingSessions: this.sessions.size,
     };
+  }
+
+  private async stopSessionForShutdown(session: VoiceSession | undefined): Promise<void> {
+    if (!session) return;
+    session.isStopping = true;
+    await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy').catch(
+      () => undefined,
+    );
+    await Promise.allSettled([...session.pendingSpools]);
+    await session.jobQueue.seal();
+    await session.scheduler.onQuiescent();
+    await session.checkpointController.stop();
+    this.sessions.delete(session.guildId);
   }
 
   private queueTranscription(session: VoiceSession, userId: string, segment: SpeechSegment): void {
@@ -417,6 +437,7 @@ export class VoiceManager {
 
     clearInterval(progress);
     try {
+      await session.checkpointController.stop();
       await this.sendTranscriptDump(session, autoStopped, { kind: 'final' });
       await progressMessage.complete(session.jobQueue.stats());
     } catch (err) {
@@ -609,7 +630,7 @@ export class VoiceManager {
 
     await executeDiscordSdkMethod(voiceSendPolicy, channel, 'send', {
       content: [
-        transcriptMessage(kind, autoStopped),
+        transcriptMessage(kind, autoStopped, stats),
         `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,
         `Participants: ${session.participants.size}`,
         `Segments included: ${stats.done}`,
@@ -652,6 +673,7 @@ function toStatus(session: VoiceSession): VoiceSessionStatus {
     segmentsTranscribed: session.segmentsTranscribed,
     participantCount: session.participants.size,
     droppedCaptureCount: session.jobQueue.stats().dropped,
+    processingPreviousSession: session.processingPreviousSession,
   };
 }
 
@@ -661,16 +683,21 @@ export function initializeVoiceTranscription(client: Client): void {
   voiceManager.install(client);
 }
 
-function transcriptMessage(kind: TranscriptDumpKind, autoStopped: boolean): string {
+function transcriptMessage(
+  kind: TranscriptDumpKind,
+  autoStopped: boolean,
+  stats: QueueStats,
+): string {
   if (kind === 'partial') {
     return autoStopped
       ? 'Transcription stopped because the voice channel emptied. Partial transcript attached; remaining audio is still processing.'
       : 'Transcription stopped. Partial transcript attached; remaining audio is still processing.';
   }
 
-  return autoStopped
-    ? 'Transcription stopped because the voice channel emptied. Final transcript attached.'
-    : 'Transcription stopped. Final transcript attached.';
+  if (stats.dead_letter > 0) {
+    return `⚠️ Transcription finished — ${stats.done}/${stats.total} segments transcribed, ${stats.dead_letter} permanently failed. Final transcript attached.`;
+  }
+  return `✅ Transcription complete — ${stats.done}/${stats.total} segments. Final transcript attached.`;
 }
 
 async function promiseTimedOut(promise: Promise<unknown>, timeoutMs: number): Promise<boolean> {
