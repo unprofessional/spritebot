@@ -62,7 +62,7 @@ export class TranscriptionScheduler {
   }
 
   onQuiescent(): Promise<void> {
-    if (this.active === 0) return Promise.resolve();
+    if (this.active === 0 && !this.pumping) return Promise.resolve();
     return new Promise((resolve) => this.quiescentWaiters.push(resolve));
   }
 
@@ -73,6 +73,7 @@ export class TranscriptionScheduler {
       while (this.active < this.concurrency && !this.isDraining()) {
         const job = await this.queue.claim();
         if (!job) break;
+        if (this.isDraining()) break;
         this.active += 1;
         void this.run(job).finally(() => {
           this.active -= 1;
@@ -85,6 +86,7 @@ export class TranscriptionScheduler {
       this.resolveIdleWaiters();
     } finally {
       this.pumping = false;
+      this.resolveQuiescentWaiters();
     }
   }
 
@@ -125,7 +127,7 @@ export class TranscriptionScheduler {
   }
 
   private resolveQuiescentWaiters(): void {
-    if (this.active !== 0) return;
+    if (this.active !== 0 || this.pumping) return;
     const waiters = this.quiescentWaiters;
     this.quiescentWaiters = [];
     for (const resolve of waiters) resolve();
