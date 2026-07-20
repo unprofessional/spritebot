@@ -35,6 +35,7 @@ export type ClaimedJob = SegmentJob & {
 export type QueueStats = Record<JobStatus, number> & {
   total: number;
   pending: number;
+  pendingDurationMs: number;
   dropped: number;
   sealed: boolean;
   resolvedAt: string | null;
