@@ -57,7 +57,8 @@ manifest is the queue.
 ### Decision: roll our own vs external broker
 
 Evaluated ElasticMQ (already deployed for ComfyOps), BullMQ + Redis/Valkey,
-and a custom file-based manifest. Decision: **roll our own.**
+and a custom file-based manifest. Decision: **provisionally roll our own, with
+a mandatory complexity checkpoint at the end of Phase 1.**
 
 Rationale:
 
@@ -69,10 +70,37 @@ Rationale:
   Docker network, and scoped to ComfyOps.
 - BullMQ adds Redis as a real infrastructure dependency for a single-process
   local queue. Over-engineered for current scale.
-- The queue semantics needed are simple: FIFO, at-least-once, dead letter,
-  checkpoint. A well-implemented WAL handles this.
+- The deployment topology is simple even though the durability implementation
+  is not: FIFO, at-least-once delivery, dead letter, retry scheduling, and
+  checkpointing for one active process. A well-implemented WAL can handle this
+  without adding a network service.
 - Interface is abstracted so a `BullMQQueue` backend can be swapped in later
   if multi-instance or dashboard needs arise.
+
+This is a build-vs-operate trade, not a claim that the WAL is trivial. BullMQ
+would replace claim serialization, retry scheduling, and most WAL/compaction
+machinery, but it would require Redis/Valkey with AOF persistence, deployment
+and monitoring changes, network operations, and Redis-backed tests. It would
+not replace spool management, transcript assembly, session metadata, disk
+capacity controls, privacy controls, or recovery notifications.
+
+**Phase 1 complexity checkpoint:** before pipeline integration begins, review
+the durable queue implementation in isolation. Reconsider BullMQ + persisted
+Redis/Valkey if any of these are true:
+
+- The queue/WAL implementation is trending beyond roughly 800 lines excluding
+  types, tests, comments, and generic filesystem helpers.
+- Crash-recovery or compaction correctness cannot be explained and tested as a
+  small set of explicit invariants.
+- Queue behavior starts requiring cross-process coordination, more than one
+  active consumer process, priorities, delayed-job management beyond the
+  specified backoff, or an operational dashboard.
+- Maintaining the custom persistence layer is demonstrably more costly than
+  operating persisted Redis/Valkey in this deployment.
+
+If the checkpoint triggers, keep the `TranscriptionJobQueue` contract and
+replace only the backend. Do not carry Phase 1 forward merely because code has
+already been written.
 
 ### Core guarantees
 
@@ -230,6 +258,25 @@ policy as the rest of the session directory — they're deleted with the
 session when the retention period expires. If the operator wants to preserve
 dead letters longer, they can increase `TRANSCRIPTION_SPOOL_RETENTION_HOURS`
 or manually copy the files.
+
+### Resolution transition
+
+A session becomes resolved at the first instant when it is sealed and every
+committed job is `done` or `dead_letter`. The queue appends exactly one
+`resolved` event containing `resolvedAt`, terminal counts, and the event
+sequence that caused the transition.
+
+Resolution is checked inside the serialized mutation path after `seal`, `ack`,
+and `dead_letter` transitions. Sealing a session with zero jobs resolves it
+immediately. `isFullyResolved()` reports the derived state but does not itself
+write, so a read cannot unexpectedly mutate the WAL.
+
+If a crash occurs after the terminal transition but before the `resolved`
+event is durable, recovery detects the sealed/all-terminal state and appends
+the missing event. If duplicate `resolved` events are encountered because of
+an uncertain crash boundary, replay uses the earliest valid `resolvedAt` and
+compaction emits one canonical resolved state. The durable `resolvedAt` value
+anchors retention cleanup.
 
 ### Disk capacity
 
@@ -477,16 +524,20 @@ Deliverables:
   - `seal()` appends a `seal` event; the immutable header is not rewritten.
   - `addParticipant()` appends an `add_participant` event.
   - `isFullyResolved()` returns true when sealed and all jobs are `done` or
-    `dead_letter`.
+    `dead_letter`; it is a read-only derived-state check.
+  - After `seal`, `ack`, and `dead_letter`, the serialized mutation path checks
+    for the first transition to fully resolved and appends one `resolved` event
+    with `resolvedAt`, terminal counts, and the triggering `eventSeq`.
   - `stats()` returns counts by status.
   - `completedResults()` returns transcript entries for all `done` jobs
     (userId, displayName, timestamp, text) plus gap markers for
     `dead_letter` jobs, sorted by timestamp.
   - `compact()` rewrites the manifest via atomic replacement.
-  - `recoverFileManifestQueue()` factory: loads an existing manifest, replays events,
-    resets any `processing` jobs to retryable via a `recovery_reset` event,
-    seals unsealed sessions via `recovery_seal`, cleans up compaction temp
-    files, logs orphan WAVs, and deletes leftover WAVs for already-done jobs.
+  - `recoverFileManifestQueue()` factory: loads an existing manifest, replays
+    events, resets any `processing` jobs to retryable via a `recovery_reset`
+    event, seals unsealed sessions via `recovery_seal`, cleans up compaction
+    temp files, logs orphan WAVs, deletes leftover WAVs for already-done jobs,
+    and repairs a missing `resolved` event for a sealed/all-terminal session.
 
 - **`src/voice/durable_queue/checkpoint.ts`** — incremental transcript
   persistence.
@@ -534,8 +585,15 @@ Tests:
 - Nack beyond maxAttempts auto-promotes to dead_letter.
 - Dead-lettered jobs are never re-claimed.
 - Seal prevents further commits; isFullyResolved is accurate.
+- The first sealed/all-terminal transition appends exactly one `resolved`
+  event. Zero-job seal resolves immediately; ordinary `isFullyResolved()`
+  reads never append.
+- Recovery repairs a missing `resolved` event after a crash at the terminal
+  transition. Duplicate resolved events replay to the earliest valid
+  `resolvedAt`, and compaction canonicalizes them.
 - Manifest survives simulated crash: write events, reconstruct a new
-  `FileManifestQueue` from the same directory via `recover()`, verify state.
+  `FileManifestQueue` from the same directory via
+  `recoverFileManifestQueue()`, verify state.
 - Recovery resets `processing` jobs to retryable via `recovery_reset` event.
   A crash-after-claim test: commit → claim → simulate crash → recover →
   job is claimable again.
@@ -562,6 +620,17 @@ Tests:
 - Stats accurately reflect all statuses including mixed states.
 - completedResults returns done jobs plus dead_letter gap markers, sorted.
 - Spool validation detects tmpfs and logs a warning.
+
+Phase 1 exit review:
+
+- Record the production-code line count for the queue/WAL backend separately
+  from tests, types, comments, and generic helpers.
+- Review the crash-safety invariants and failure-injection tests with Moldy and
+  mads before starting Phase 2.
+- Explicitly record either **continue with FileManifestQueue** or **switch to
+  BullMQ + persisted Redis/Valkey**. Crossing the approximate 800-line
+  complexity signal or introducing multi-process requirements defaults the
+  review toward BullMQ unless there is a documented reason to continue.
 
 ### Phase 2: Pipeline integration
 
@@ -770,6 +839,8 @@ Tests:
 - Final transcript after recovery merges checkpoint results with newly
   completed results correctly.
 - Fully resolved sessions are cleaned up after retention period.
+- Retention age is measured from the earliest valid durable `resolvedAt`, not
+  session start or process restart time.
 - Unresolved sessions older than retention are logged but NOT deleted.
 - Corrupt/partial manifests are logged and skipped gracefully.
 - Orphan WAVs are logged during recovery.
