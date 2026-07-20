@@ -1,5 +1,9 @@
 import type { ClaimedJob, TranscriptionJobQueue } from './durable_queue/types';
 import { SegmentSpool } from './segment_spool';
+import {
+  TranscriptionQueueHealthMonitor,
+  type TranscriptionQueueHealth,
+} from './transcription_queue_health';
 
 type TranscribeJob = (
   job: {
@@ -22,6 +26,9 @@ type SchedulerOptions = {
   isDraining?: () => boolean;
   now?: () => number;
   onTerminalJob?: () => void;
+  highWater?: number;
+  lowWater?: number;
+  onHealth?: (health: TranscriptionQueueHealth) => void;
 };
 
 export class TranscriptionScheduler {
@@ -32,6 +39,8 @@ export class TranscriptionScheduler {
   private readonly isDraining: () => boolean;
   private readonly now: () => number;
   private readonly onTerminalJob: () => void;
+  private readonly healthMonitor: TranscriptionQueueHealthMonitor;
+  private readonly onHealth: (health: TranscriptionQueueHealth) => void;
   private active = 0;
   private pumping = false;
   private wakeTimer: NodeJS.Timeout | null = null;
@@ -46,6 +55,17 @@ export class TranscriptionScheduler {
     this.isDraining = options.isDraining ?? (() => false);
     this.now = options.now ?? Date.now;
     this.onTerminalJob = options.onTerminalJob ?? (() => undefined);
+    this.healthMonitor = new TranscriptionQueueHealthMonitor(
+      options.highWater ?? 100,
+      options.lowWater ?? 25,
+      this.now,
+    );
+    this.onHealth = options.onHealth ?? (() => undefined);
+  }
+
+  recordCommit(durationMs: number): void {
+    this.healthMonitor.recordCommit(durationMs);
+    this.reportHealth();
   }
 
   signal(): void {
@@ -54,6 +74,7 @@ export class TranscriptionScheduler {
       this.wakeTimer = null;
     }
     void this.pump();
+    this.reportHealth();
   }
 
   onIdle(): Promise<void> {
@@ -99,13 +120,23 @@ export class TranscriptionScheduler {
       const terminalBefore = this.queue.stats().dead_letter;
       await this.queue.nack(job.id, errorMessage(err));
       if (this.queue.stats().dead_letter > terminalBefore) this.onTerminalJob();
+      if (this.queue.stats().dead_letter > terminalBefore) {
+        this.healthMonitor.recordCompletion(job.durationMs);
+      }
+      this.reportHealth();
       return;
     }
     await this.queue.ack(job.id, result);
     this.onTerminalJob();
+    this.healthMonitor.recordCompletion(job.durationMs);
+    this.reportHealth();
     await this.spool.deleteSegment(job.spoolPath).catch((err) => {
       console.warn(`[voice] unable to delete completed segment ${job.id}`, err);
     });
+  }
+
+  private reportHealth(): void {
+    this.onHealth(this.healthMonitor.measure(this.queue.stats()));
   }
 
   private armRetryWake(): void {

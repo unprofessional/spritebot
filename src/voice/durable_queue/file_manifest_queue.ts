@@ -178,12 +178,19 @@ export class FileManifestQueue implements TranscriptionJobQueue {
       dead_letter: 0,
       total: this.snapshot.jobs.length,
       pending: 0,
+      pendingDurationMs: 0,
       dropped: this.snapshot.droppedCaptures.length,
       sealed: this.snapshot.sealed,
       resolvedAt: this.snapshot.resolvedAt,
     };
     for (const job of this.snapshot.jobs) stats[job.status] += 1;
     stats.pending = stats.committed + stats.processing + stats.failed;
+    stats.pendingDurationMs = this.snapshot.jobs
+      .filter(
+        (job) =>
+          job.status === 'committed' || job.status === 'processing' || job.status === 'failed',
+      )
+      .reduce((total, job) => total + job.durationMs, 0);
     return stats;
   }
 
