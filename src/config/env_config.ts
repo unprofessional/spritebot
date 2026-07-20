@@ -11,6 +11,10 @@ const toMs = (v: string | undefined, dfltMs: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
 };
+const toNonNegativeInt = (v: string | undefined, dflt: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : dflt;
+};
 
 export const token = process.env.DISCORD_BOT_TOKEN ?? '';
 export const runMode = process.env.RUN_MODE ?? 'development';
@@ -41,16 +45,51 @@ export const transcriptionSilenceMs = toMs(process.env.TRANSCRIPTION_SILENCE_MS,
 export const transcriptionMaxSegmentMs = toMs(process.env.TRANSCRIPTION_MAX_SEGMENT_MS, 30_000);
 export const transcriptionMinSegmentMs = toMs(process.env.TRANSCRIPTION_MIN_SEGMENT_MS, 600);
 export const transcriptionVadThreshold = Number(process.env.TRANSCRIPTION_VAD_THRESHOLD ?? '0.012');
-export const transcriptionConcurrency = toInt(process.env.TRANSCRIPTION_CONCURRENCY, 3);
+export const transcriptionConcurrency = toInt(process.env.TRANSCRIPTION_CONCURRENCY, 1);
 export const transcriptionRequestTimeoutMs = toMs(
   process.env.TRANSCRIPTION_REQUEST_TIMEOUT_MS,
   60_000,
 );
-export const transcriptionMaxRetries = Math.max(0, toInt(process.env.TRANSCRIPTION_MAX_RETRIES, 2));
-export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/tmp/spritebot-voice';
-export const transcriptionDrainTimeoutMs = toMs(
-  process.env.TRANSCRIPTION_DRAIN_TIMEOUT_MS,
-  120_000,
+export const transcriptionRequestRetries = toNonNegativeInt(
+  process.env.TRANSCRIPTION_REQUEST_RETRIES ?? process.env.TRANSCRIPTION_MAX_RETRIES,
+  2,
+);
+export const transcriptionJobMaxAttempts = toInt(process.env.TRANSCRIPTION_JOB_MAX_ATTEMPTS, 3);
+export const transcriptionJobRetryBaseMs = toMs(
+  process.env.TRANSCRIPTION_JOB_RETRY_BASE_MS,
+  30_000,
+);
+export const transcriptionJobRetryMaxMs = toMs(process.env.TRANSCRIPTION_JOB_RETRY_MAX_MS, 600_000);
+export const transcriptionSpoolRetentionHours = toInt(
+  process.env.TRANSCRIPTION_SPOOL_RETENTION_HOURS,
+  72,
+);
+export const transcriptionCheckpointIntervalSegments = toInt(
+  process.env.TRANSCRIPTION_CHECKPOINT_INTERVAL_SEGMENTS,
+  50,
+);
+export const transcriptionCheckpointIntervalMs = toMs(
+  process.env.TRANSCRIPTION_CHECKPOINT_INTERVAL_MS,
+  60_000,
+);
+export const transcriptionLowDiskMb = toInt(process.env.TRANSCRIPTION_LOW_DISK_MB, 500);
+export const transcriptionCriticalDiskMb = toInt(process.env.TRANSCRIPTION_CRITICAL_DISK_MB, 100);
+export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/data/voice-spool';
+export const transcriptionBacklogWarnMinutes = toInt(
+  process.env.TRANSCRIPTION_BACKLOG_WARN_MINUTES,
+  10,
+);
+export const transcriptionBackpressureHighWater = toInt(
+  process.env.TRANSCRIPTION_BACKPRESSURE_HIGH_WATER,
+  100,
+);
+export const transcriptionBackpressureLowWater = toInt(
+  process.env.TRANSCRIPTION_BACKPRESSURE_LOW_WATER,
+  25,
+);
+export const transcriptionBackpressureSilenceMs = toMs(
+  process.env.TRANSCRIPTION_BACKPRESSURE_SILENCE_MS,
+  1_500,
 );
 
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)

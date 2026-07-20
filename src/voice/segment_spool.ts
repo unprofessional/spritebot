@@ -1,48 +1,59 @@
-import { mkdir, readdir, readFile, rm, writeFile } from 'node:fs/promises';
+import { chmod, mkdir, open, readdir, readFile, rm } from 'node:fs/promises';
 import path from 'node:path';
 
 import { transcriptionSpoolDir } from '../config/env_config';
 
-type SegmentSpoolParams = {
-  guildId: string;
-  sessionId: string;
-  baseDir?: string;
-};
+type SegmentSpoolParams =
+  | {
+      guildId: string;
+      sessionId: string;
+      baseDir?: string;
+    }
+  | { sessionDir: string };
 
 type WriteSegmentParams = {
-  segmentId: number;
-  userId: string;
-  timestamp: Date;
+  segmentId: string;
   wav: Buffer;
 };
 
 export class SegmentSpool {
   readonly sessionDir: string;
 
-  constructor({ guildId, sessionId, baseDir = transcriptionSpoolDir }: SegmentSpoolParams) {
-    this.sessionDir = path.join(baseDir, `${safePathPart(guildId)}-${safePathPart(sessionId)}`);
+  constructor(params: SegmentSpoolParams) {
+    this.sessionDir =
+      'sessionDir' in params
+        ? path.resolve(params.sessionDir)
+        : path.join(
+            params.baseDir ?? transcriptionSpoolDir,
+            `${safePathPart(params.guildId)}-${safePathPart(params.sessionId)}`,
+          );
   }
 
   async initialize(): Promise<void> {
-    await mkdir(this.sessionDir, { recursive: true });
+    await mkdir(this.sessionDir, { recursive: true, mode: 0o700 });
+    await chmod(this.sessionDir, 0o700);
   }
 
-  async writeSegment({ segmentId, userId, timestamp, wav }: WriteSegmentParams): Promise<string> {
+  async writeSegment({ segmentId, wav }: WriteSegmentParams): Promise<string> {
     await this.initialize();
-    const filePath = path.join(
-      this.sessionDir,
-      `segment-${String(segmentId).padStart(6, '0')}-${safePathPart(userId)}-${timestamp.getTime()}.wav`,
-    );
-    await writeFile(filePath, wav);
-    return filePath;
+    const relativePath = `segment-${safePathPart(segmentId)}.wav`;
+    const filePath = this.resolvePath(relativePath);
+    const handle = await open(filePath, 'wx', 0o600);
+    try {
+      await handle.writeFile(wav);
+      await handle.sync();
+    } finally {
+      await handle.close();
+    }
+    return relativePath;
   }
 
-  async readSegment(filePath: string): Promise<Buffer> {
-    return readFile(filePath);
+  async readSegment(relativePath: string): Promise<Buffer> {
+    return readFile(this.resolvePath(relativePath));
   }
 
-  async cleanup(): Promise<void> {
-    await rm(this.sessionDir, { recursive: true, force: true });
+  async deleteSegment(relativePath: string): Promise<void> {
+    await rm(this.resolvePath(relativePath), { force: true });
   }
 
   static async findRecoverableSessions(baseDir = transcriptionSpoolDir): Promise<string[]> {
@@ -55,6 +66,14 @@ export class SegmentSpool {
       .filter((entry) => entry.isDirectory())
       .map((entry) => path.join(baseDir, entry.name))
       .sort();
+  }
+
+  private resolvePath(relativePath: string): string {
+    if (path.isAbsolute(relativePath)) throw new Error('Segment path must be relative.');
+    const resolved = path.resolve(this.sessionDir, relativePath);
+    const root = `${path.resolve(this.sessionDir)}${path.sep}`;
+    if (!resolved.startsWith(root)) throw new Error('Segment path escapes the session spool.');
+    return resolved;
   }
 }
 

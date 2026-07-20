@@ -23,9 +23,7 @@ describe('SegmentSpool', () => {
     });
 
     const filePath = await spool.writeSegment({
-      segmentId: 1,
-      userId: 'user/one',
-      timestamp: new Date('2026-07-15T05:00:00.000Z'),
+      segmentId: '33d63d14-42aa-4e19-9669-38ee300df0ca',
       wav: Buffer.from('wav data'),
     });
 
@@ -33,24 +31,30 @@ describe('SegmentSpool', () => {
     await expect(SegmentSpool.findRecoverableSessions(baseDir)).resolves.toEqual([
       spool.sessionDir,
     ]);
-    expect(filePath).toContain('segment-000001-user_one-');
+    expect(filePath).toBe('segment-33d63d14-42aa-4e19-9669-38ee300df0ca.wav');
   });
 
-  test('cleanup removes the session directory', async () => {
+  test('deletes an individual completed segment without removing the session', async () => {
     const spool = new SegmentSpool({
       guildId: 'guild-1',
       sessionId: 'session-1',
       baseDir,
     });
-    await spool.writeSegment({
-      segmentId: 1,
-      userId: 'user-1',
-      timestamp: new Date('2026-07-15T05:00:00.000Z'),
+    const filePath = await spool.writeSegment({
+      segmentId: 'job-1',
       wav: Buffer.from('wav data'),
     });
 
-    await spool.cleanup();
+    await spool.deleteSegment(filePath);
 
-    await expect(SegmentSpool.findRecoverableSessions(baseDir)).resolves.toEqual([]);
+    await expect(spool.readSegment(filePath)).rejects.toMatchObject({ code: 'ENOENT' });
+    await expect(SegmentSpool.findRecoverableSessions(baseDir)).resolves.toEqual([
+      spool.sessionDir,
+    ]);
+  });
+
+  test('rejects paths outside the session directory', async () => {
+    const spool = new SegmentSpool({ guildId: 'guild-1', sessionId: 'session-1', baseDir });
+    await expect(spool.readSegment('../escape.wav')).rejects.toThrow('escapes');
   });
 });

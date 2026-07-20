@@ -29,7 +29,7 @@ export class SegmentBuffer {
   private silenceMs = 0;
   private totalMs = 0;
 
-  private readonly silenceLimitMs: number;
+  private silenceLimitMs: number;
   private readonly maxSegmentMs: number;
   private readonly minSegmentMs: number;
   private readonly speechThreshold: number;
@@ -39,6 +39,10 @@ export class SegmentBuffer {
     this.maxSegmentMs = options.maxSegmentMs ?? transcriptionMaxSegmentMs;
     this.minSegmentMs = options.minSegmentMs ?? transcriptionMinSegmentMs;
     this.speechThreshold = options.speechThreshold ?? transcriptionVadThreshold;
+  }
+
+  setSilenceLimit(ms: number): void {
+    this.silenceLimitMs = Math.max(0, Math.min(this.maxSegmentMs, Math.floor(ms)));
   }
 
   push(pcm: Buffer): SpeechSegment | null {

@@ -25,12 +25,14 @@ import {
   waitForRuntimeInstanceLease,
 } from './runtime/instance_lease';
 import { initializeVoiceTranscription, voiceManager } from './voice/voice_manager';
+import { validateSpoolDirectory } from './voice/durable_queue/disk_util';
 import {
   runtimeInstanceId,
   runtimeInstanceMode,
   runtimeLeaseHeartbeatMs,
   runtimeLeaseStandbyPollMs,
   runtimeLeaseTtlMs,
+  transcriptionSpoolDir,
 } from './config/env_config';
 import { defineDiscordOperationPolicy } from './discord/operation_policy';
 import { executeDiscordSdkMethod } from './discord/sdk_operations';
@@ -118,6 +120,14 @@ async function main(): Promise<void> {
         void runGracefulShutdown('manual', shutdownOptions);
       },
     });
+
+    const spoolValidation = await validateSpoolDirectory(transcriptionSpoolDir);
+    if (!spoolValidation.writable) {
+      throw new Error(`Transcription spool is not writable: ${transcriptionSpoolDir}`);
+    }
+    if (spoolValidation.persistenceWarning) {
+      console.warn(`[voice] ${spoolValidation.persistenceWarning}`);
+    }
 
     await initializeCommands(client);
     initializeEntitlementEvents(client);

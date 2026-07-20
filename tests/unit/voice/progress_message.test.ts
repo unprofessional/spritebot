@@ -1,129 +1,81 @@
 import {
   buildTranscriptionProgressMessage,
-  createTranscriptionProgressMessage,
   formatQueueSummary,
   formatTranscriptionProgress,
 } from '../../../src/voice/progress_message';
-import type { TranscriptionQueueStats } from '../../../src/voice/transcription_queue';
+import type { QueueStats } from '../../../src/voice/durable_queue/types';
 
 describe('progress_message', () => {
-  afterEach(() => {
-    jest.useRealTimers();
-  });
+  afterEach(() => jest.useRealTimers());
 
-  test('formats readable progress with failed and timed-out segments resolved', () => {
+  test('formats durable queue progress and failures', () => {
     const stats = queueStats({
-      queued: 12,
-      transcribing: 2,
+      committed: 12,
+      processing: 2,
       done: 16,
-      failed: 1,
-      timeout: 1,
+      dead_letter: 1,
+      dropped: 1,
     });
-
     expect(formatTranscriptionProgress(stats, { phase: 'processing' })).toBe(
       [
-        'Transcription still processing...',
-        '███████░░░░░ 56% (18/32 segments)',
-        '12 queued, 2 in progress, 16 complete, 1 failed, 1 timed out',
+        'Transcription processing...',
+        '██████░░░░░░ 50% (16/32 transcribed)',
+        '12 queued · 2 in progress · 16 transcribed · 0 awaiting retry · 1 dead letter · 1 capture dropped',
       ].join('\n'),
     );
   });
 
-  test('formats zero-segment progress as complete', () => {
-    expect(formatTranscriptionProgress(queueStats({}), { phase: 'complete' })).toBe(
-      [
-        'Transcription complete. Final transcript posted below.',
-        '████████████ 100% (0/0 segments)',
-        '0 queued, 0 in progress, 0 complete, 0 failed, 0 timed out',
-      ].join('\n'),
-    );
-  });
-
-  test('formats transcript queue summary without raw key value counters', () => {
+  test('formats a concise queue summary', () => {
     expect(
-      formatQueueSummary(
-        queueStats({
-          queued: 3,
-          transcribing: 1,
-          done: 8,
-          failed: 0,
-          timeout: 2,
-        }),
-      ),
-    ).toBe('3 queued, 1 in progress, 8 complete, 0 failed, 2 timed out');
+      formatQueueSummary(queueStats({ committed: 3, processing: 1, done: 8, failed: 2 })),
+    ).toBe(
+      '3 queued · 1 in progress · 8 transcribed · 2 awaiting retry · 0 dead letter · 0 capture dropped',
+    );
   });
 
-  test('progress handle throttles rapid edits and forces final updates', async () => {
+  test('throttles rapid edits and forces completion', async () => {
     jest.useFakeTimers().setSystemTime(new Date('2026-07-15T00:00:00.000Z'));
     const message = { edit: jest.fn().mockResolvedValue(undefined) };
-    const initialContent = formatTranscriptionProgress(queueStats({ queued: 4 }), {
-      phase: 'processing',
-    });
-    const progress = buildTranscriptionProgressMessage(message, initialContent, {
-      minEditIntervalMs: 5_000,
-    });
-
-    await progress.update(queueStats({ queued: 3, transcribing: 1 }));
-    expect(message.edit).not.toHaveBeenCalled();
-
-    jest.advanceTimersByTime(5_000);
-    await progress.update(queueStats({ queued: 2, transcribing: 1, done: 1 }));
-    expect(message.edit).toHaveBeenCalledTimes(1);
-    expect(message.edit).toHaveBeenLastCalledWith({
-      content: [
-        'Transcription still processing...',
-        '███░░░░░░░░░ 25% (1/4 segments)',
-        '2 queued, 1 in progress, 1 complete, 0 failed, 0 timed out',
-      ].join('\n'),
-    });
-
-    await progress.complete(queueStats({ done: 2, failed: 1, timeout: 1 }), { timedOut: true });
-    expect(message.edit).toHaveBeenCalledTimes(2);
-    expect(message.edit).toHaveBeenLastCalledWith({
-      content: [
-        'Transcription drain timed out. Latest transcript posted below.',
-        '████████████ 100% (4/4 segments)',
-        '0 queued, 0 in progress, 2 complete, 1 failed, 1 timed out',
-      ].join('\n'),
-    });
-  });
-
-  test('does not retry an indeterminate progress-message send', async () => {
-    const send = jest
-      .fn()
-      .mockRejectedValue(Object.assign(new Error('reset'), { code: 'ECONNRESET' }));
-
-    await expect(
-      createTranscriptionProgressMessage({ send }, queueStats({ queued: 1 })),
-    ).rejects.toThrow();
-    expect(send).toHaveBeenCalledTimes(1);
-  });
-
-  test('retries an idempotent progress edit after a transient failure', async () => {
-    const edit = jest
-      .fn()
-      .mockRejectedValueOnce(Object.assign(new Error('reset'), { code: 'ECONNRESET' }))
-      .mockResolvedValueOnce(undefined);
     const progress = buildTranscriptionProgressMessage(
-      { edit },
-      formatTranscriptionProgress(queueStats({ queued: 1 }), { phase: 'processing' }),
-      { minEditIntervalMs: 0 },
+      message,
+      formatTranscriptionProgress(queueStats({ committed: 2 }), { phase: 'processing' }),
+      { minEditIntervalMs: 5_000 },
     );
+    await progress.update(queueStats({ committed: 1, processing: 1 }));
+    expect(message.edit).not.toHaveBeenCalled();
+    await progress.complete(queueStats({ done: 2 }));
+    expect(message.edit).toHaveBeenCalledTimes(1);
+    expect(message.edit.mock.calls[0][0].content).toContain('Transcription complete.');
+  });
 
-    await progress.complete(queueStats({ done: 1 }), { timedOut: false });
-    expect(edit).toHaveBeenCalledTimes(2);
+  test('renders zero-work and all-failed outcomes without treating failures as success', () => {
+    expect(formatTranscriptionProgress(queueStats({}), { phase: 'processing' })).toContain(
+      '100% (0/0 transcribed)',
+    );
+    expect(
+      formatTranscriptionProgress(queueStats({ dead_letter: 3 }), { phase: 'complete' }),
+    ).toContain('0% (0/3 transcribed)');
   });
 });
 
-function queueStats(overrides: Partial<TranscriptionQueueStats>): TranscriptionQueueStats {
-  return {
-    queued: 0,
-    transcribing: 0,
+function queueStats(overrides: Partial<QueueStats>): QueueStats {
+  const base = {
+    committed: 0,
+    processing: 0,
     done: 0,
     failed: 0,
-    timeout: 0,
-    active: 0,
-    pending: (overrides.queued ?? 0) + (overrides.transcribing ?? 0),
-    ...overrides,
+    dead_letter: 0,
+    dropped: 0,
+  };
+  const counts = { ...base, ...overrides };
+  return {
+    ...counts,
+    total:
+      overrides.total ??
+      counts.committed + counts.processing + counts.done + counts.failed + counts.dead_letter,
+    pending: overrides.pending ?? counts.committed + counts.processing + counts.failed,
+    pendingDurationMs: overrides.pendingDurationMs ?? 0,
+    sealed: overrides.sealed ?? false,
+    resolvedAt: overrides.resolvedAt ?? null,
   };
 }
