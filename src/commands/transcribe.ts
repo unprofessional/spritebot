@@ -122,6 +122,7 @@ module.exports = {
         guild: interaction.guild,
         voiceChannel: voiceChannel as VoiceBasedChannel,
         textChannel: textChannel as GuildTextBasedChannel,
+        startedBy: interaction.user.id,
       });
 
       return responder.respond({
@@ -142,7 +143,7 @@ module.exports = {
       }
 
       return responder.respond({
-        content: `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
+        content: `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when processing finishes.`,
       });
     }
 
@@ -155,7 +156,7 @@ module.exports = {
     }
 
     return responder.respond({
-      content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}.`,
+      content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}. Captures dropped: ${status.droppedCaptureCount}.`,
       ephemeral: true,
     });
   },
