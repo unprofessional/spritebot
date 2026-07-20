@@ -744,6 +744,15 @@ Tests:
 - Write ordering: WAV exists on disk before manifest commit.
 - Critical-disk drops are visible in session status and transcript output.
 
+**Phase 2 implementation checkpoint (2026-07-20): complete.** Commit
+`64045c9` replaced the in-memory queue with the manifest-backed scheduler,
+durable UUID WAV spooling, retry wakeups, per-file cleanup, disk-pressure gap
+events, and durable queue progress/transcript semantics. The obsolete queue,
+drain timeout, and their tests were removed. Verification passed 86 suites / 475
+tests plus lint, Prettier, TypeScript build, and diff checks. Moldy reviewed the
+phase with no blocking issues; sealed-session UX and checkpoint cadence were
+explicitly deferred to Phase 3.
+
 ### Phase 3: Decoupled stop + checkpointing
 
 **Stop becomes a commit point.** `/transcribe stop` returns immediately with
@@ -801,6 +810,15 @@ Tests:
 - Checkpoint file is updated periodically during active session.
 - Shutdown during background drain checkpoints and exits cleanly.
 - Jobs in `processing` at shutdown remain in manifest for recovery.
+
+**Phase 3 implementation checkpoint (2026-07-20): complete.** Commit
+`8534787` made stop a seal/checkpoint boundary that returns after posting the
+partial transcript while background processing continues without a drain
+deadline. It added segment-count and time-based checkpointing, accurate final
+completion/dead-letter notifications, sealed-session status copy, and shutdown
+quiescence with a final checkpoint. Verification passed 87 suites / 479 tests
+plus lint, Prettier, TypeScript build, and diff checks. Phase 4 owns discovery
+and restart of the durable work left by shutdown or process failure.
 
 ### Phase 4: Restart recovery
 

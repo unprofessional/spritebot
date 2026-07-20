@@ -41,6 +41,8 @@ export class FileManifestQueue implements TranscriptionJobQueue {
     header: ManifestHeader,
     snapshot: QueueSnapshot,
     options: FileManifestQueueOptions,
+    readonly recoveredCaptureInterrupted = false,
+    readonly wasFullyResolvedOnRecovery = false,
   ) {
     this.header = Object.freeze({ ...header });
     this.snapshot = snapshot;
@@ -269,8 +271,17 @@ export class FileManifestQueue implements TranscriptionJobQueue {
     header: ManifestHeader,
     snapshot: QueueSnapshot,
     options: FileManifestQueueOptions,
+    recoveredCaptureInterrupted: boolean,
+    wasFullyResolvedOnRecovery: boolean,
   ): FileManifestQueue {
-    return new FileManifestQueue(sessionDir, header, snapshot, options);
+    return new FileManifestQueue(
+      sessionDir,
+      header,
+      snapshot,
+      options,
+      recoveredCaptureInterrupted,
+      wasFullyResolvedOnRecovery,
+    );
   }
 
   async repairRecoveredState(): Promise<void> {
@@ -300,7 +311,16 @@ export async function recoverFileManifestQueue(
   const replayed = await ManifestWal.recover(sessionDir);
   const snapshot = cloneSnapshot(replayed.snapshot);
   for (const event of replayed.events) applyManifestEvent(snapshot, event);
-  const queue = FileManifestQueue.fromRecovered(sessionDir, replayed.header, snapshot, options);
+  const recoveredCaptureInterrupted = !snapshot.sealed;
+  const wasFullyResolvedOnRecovery = isResolvedState(snapshot);
+  const queue = FileManifestQueue.fromRecovered(
+    sessionDir,
+    replayed.header,
+    snapshot,
+    options,
+    recoveredCaptureInterrupted,
+    wasFullyResolvedOnRecovery,
+  );
 
   await queue.repairRecoveredState();
   await validateRecoveredSpoolPaths(sessionDir, snapshot.jobs);

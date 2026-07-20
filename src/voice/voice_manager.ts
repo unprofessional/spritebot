@@ -30,6 +30,8 @@ import {
   transcriptionJobRetryBaseMs,
   transcriptionJobRetryMaxMs,
   transcriptionLowDiskMb,
+  transcriptionSpoolDir,
+  transcriptionSpoolRetentionHours,
 } from '../config/env_config';
 import { defineDiscordOperationPolicy } from '../discord/operation_policy';
 import { executeDiscordSdkMethod, executeDiscordSdkMethodAs } from '../discord/sdk_operations';
@@ -41,7 +43,16 @@ import {
 import { AudioReceiver } from './audio_receiver';
 import { checkDiskSpace, evaluateDiskPressure } from './durable_queue/disk_util';
 import { FileManifestQueue } from './durable_queue/file_manifest_queue';
-import type { QueueStats, TranscriptionJobQueue } from './durable_queue/types';
+import {
+  recoverTranscriptionSessions,
+  type RecoveredTranscriptionSession,
+} from './durable_queue/recovery';
+import type {
+  ClaimedJob,
+  ManifestHeader,
+  QueueStats,
+  TranscriptionJobQueue,
+} from './durable_queue/types';
 import {
   createNoopTranscriptionProgressMessage,
   createTranscriptionProgressMessage,
@@ -158,14 +169,18 @@ type SpeakerIdentity = {
 
 export class VoiceManager {
   private readonly sessions = new Map<string, VoiceSession>();
+  private readonly recoveredSessions = new Set<RecoveredTranscriptionSession>();
+  private readonly recoveringGuildIds = new Set<string>();
   private readonly transcriptionClient = new TranscriptionClient();
   private installedClient: Client | null = null;
-  private checkedRecoverableSpools = false;
+  private recoveryStarted = false;
 
   install(client: Client): void {
     if (this.installedClient) return;
     this.installedClient = client;
-    this.reportRecoverableSpools();
+    client.once(Events.ClientReady, () => {
+      void this.recoverPreviousSessions(client);
+    });
     client.on(Events.VoiceStateUpdate, (oldState, newState) => {
       void this.handleVoiceStateUpdate(oldState, newState);
     });
@@ -180,6 +195,11 @@ export class VoiceManager {
 
     const existing = this.sessions.get(params.guild.id);
     if (existing) return toStatus(existing);
+    if (this.recoveringGuildIds.has(params.guild.id)) {
+      throw new Error(
+        'A previous transcription session is still being recovered. Wait for its final transcript before starting another session.',
+      );
+    }
 
     const missingPermissions = await getMissingTranscriptionPermissions(
       params.guild,
@@ -375,13 +395,15 @@ export class VoiceManager {
     timeoutMs?: number;
   } = {}): Promise<VoiceShutdownSummary> {
     const guildIds = [...this.sessions.keys()];
-    if (!guildIds.length) {
+    const recoveredSessions = [...this.recoveredSessions];
+    if (!guildIds.length && !recoveredSessions.length) {
       return { stopped: 0, timedOut: false, remainingSessions: 0 };
     }
 
-    const stopAll = Promise.allSettled(
-      guildIds.map((guildId) => this.stopSessionForShutdown(this.sessions.get(guildId))),
-    );
+    const stopAll = Promise.allSettled([
+      ...guildIds.map((guildId) => this.stopSessionForShutdown(this.sessions.get(guildId))),
+      ...recoveredSessions.map((session) => this.stopRecoveredSessionForShutdown(session)),
+    ]);
     const timedOut = await promiseTimedOut(stopAll, timeoutMs);
 
     if (timedOut) {
@@ -392,12 +414,20 @@ export class VoiceManager {
         await session.checkpointController.stop();
         this.sessions.delete(guildId);
       }
+      for (const session of this.recoveredSessions) {
+        await session.checkpointController.stop();
+        this.removeRecoveredSession(session);
+      }
     }
 
     return {
-      stopped: guildIds.length - this.sessions.size,
+      stopped:
+        guildIds.length +
+        recoveredSessions.length -
+        this.sessions.size -
+        this.recoveredSessions.size,
       timedOut,
-      remainingSessions: this.sessions.size,
+      remainingSessions: this.sessions.size + this.recoveredSessions.size,
     };
   }
 
@@ -412,6 +442,14 @@ export class VoiceManager {
     await session.scheduler.onQuiescent();
     await session.checkpointController.stop();
     this.sessions.delete(session.guildId);
+  }
+
+  private async stopRecoveredSessionForShutdown(
+    session: RecoveredTranscriptionSession,
+  ): Promise<void> {
+    await session.scheduler.onQuiescent();
+    await session.checkpointController.stop();
+    this.removeRecoveredSession(session);
   }
 
   private queueTranscription(session: VoiceSession, userId: string, segment: SpeechSegment): void {
@@ -530,20 +568,114 @@ export class VoiceManager {
     session.scheduler.signal();
   }
 
-  private reportRecoverableSpools(): void {
-    if (this.checkedRecoverableSpools) return;
-    this.checkedRecoverableSpools = true;
+  private async recoverPreviousSessions(client: Client): Promise<void> {
+    if (this.recoveryStarted) return;
+    this.recoveryStarted = true;
+    const recovered = await recoverTranscriptionSessions({
+      activeLeaseHolder: true,
+      baseDir: transcriptionSpoolDir,
+      queueOptions: {
+        maxAttempts: transcriptionJobMaxAttempts,
+        retryBaseMs: transcriptionJobRetryBaseMs,
+        retryMaxMs: transcriptionJobRetryMaxMs,
+      },
+      concurrency: transcriptionConcurrency,
+      retentionHours: transcriptionSpoolRetentionHours,
+      checkpointIntervalSegments: transcriptionCheckpointIntervalSegments,
+      checkpointIntervalMs: transcriptionCheckpointIntervalMs,
+      isDraining,
+      transcribe: (header, job, wav) => this.transcribeRecoveredSegment(header, job, wav),
+      onRecovered: (queue, interrupted) => this.sendRecoveryNotice(client, queue, interrupted),
+      onCompleted: (queue, interrupted) => this.sendRecoveredTranscript(client, queue, interrupted),
+    });
+    for (const session of recovered) {
+      this.recoveredSessions.add(session);
+      this.recoveringGuildIds.add(session.queue.header.guildId);
+      void session.completion.finally(() => this.removeRecoveredSession(session));
+    }
+  }
 
-    void SegmentSpool.findRecoverableSessions()
-      .then((sessions) => {
-        if (!sessions.length) return;
-        console.warn(
-          `[voice] found ${sessions.length} recoverable transcription spool session(s); leaving files in place for manual re-processing or cleanup: ${sessions.join(', ')}`,
-        );
-      })
-      .catch((err) => {
-        console.warn('[voice] unable to inspect transcription spool directory', err);
-      });
+  private removeRecoveredSession(session: RecoveredTranscriptionSession): void {
+    this.recoveredSessions.delete(session);
+    const guildId = session.queue.header.guildId;
+    if (
+      ![...this.recoveredSessions].some((candidate) => candidate.queue.header.guildId === guildId)
+    ) {
+      this.recoveringGuildIds.delete(guildId);
+    }
+  }
+
+  private async transcribeRecoveredSegment(
+    header: Readonly<ManifestHeader>,
+    job: ClaimedJob,
+    wav: Buffer,
+  ): Promise<string> {
+    const result = await this.transcriptionClient.transcribeWav(
+      wav,
+      `${header.guildId}-${job.userId}-${Date.parse(job.timestamp)}.wav`,
+    );
+    return result.text;
+  }
+
+  private async sendRecoveryNotice(
+    client: Client,
+    queue: FileManifestQueue,
+    interrupted: boolean,
+  ): Promise<void> {
+    const channel = await this.fetchOutputChannel(client, queue.header.textChannelId);
+    if (!channel) return;
+    const suffix = interrupted
+      ? ' Capture ended unexpectedly; only audio committed before SPRITEbot stopped can be recovered.'
+      : '';
+    await executeDiscordSdkMethod(voiceSendPolicy, channel, 'send', {
+      content: `🔄 Recovered ${queue.stats().pending} unfinished segments from a previous session. Processing now — an updated transcript will be posted when complete.${suffix}`,
+    });
+  }
+
+  private async sendRecoveredTranscript(
+    client: Client,
+    queue: FileManifestQueue,
+    interrupted: boolean,
+  ): Promise<void> {
+    const channel = await this.fetchOutputChannel(client, queue.header.textChannelId);
+    if (!channel) return;
+    const stats = queue.stats();
+    const endedAt = new Date();
+    const startedAt = new Date(queue.header.startedAt);
+    const results = queue.completedResults();
+    const participants = new Set(results.map((result) => result.userId)).size;
+    const transcript = formatTranscript(
+      {
+        guildId: queue.header.guildId,
+        voiceChannelId: queue.header.voiceChannelId,
+        textChannelId: queue.header.textChannelId,
+        startedAt,
+        participants,
+        results,
+        stats,
+      },
+      { endedAt, kind: 'final' },
+    );
+    const attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), {
+      name: `recovered-transcript-${queue.header.guildId}-${queue.header.startedAt.replace(/[:.]/g, '-')}.txt`,
+    });
+    await executeDiscordSdkMethod(voiceSendPolicy, channel, 'send', {
+      content: `${transcriptMessage('final', false, stats)}${interrupted ? ' This session ended unexpectedly before recovery.' : ''}`,
+      files: [attachment],
+    });
+  }
+
+  private async fetchOutputChannel(
+    client: Client,
+    channelId: string,
+  ): Promise<GuildTextBasedChannel | null> {
+    const channel = await executeDiscordSdkMethodAs<Channel | null>(
+      voiceChannelReadPolicy,
+      client.channels,
+      'fetch',
+      channelId,
+    ).catch(() => null);
+    return isTextOutputChannel(channel) ? channel : null;
   }
 
   private async transcribeSegment(
