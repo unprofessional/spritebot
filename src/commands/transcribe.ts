@@ -122,7 +122,14 @@ module.exports = {
         guild: interaction.guild,
         voiceChannel: voiceChannel as VoiceBasedChannel,
         textChannel: textChannel as GuildTextBasedChannel,
+        startedBy: interaction.user.id,
       });
+
+      if (status.processingPreviousSession) {
+        return responder.respond({
+          content: `⏳ The previous transcription session in <#${status.voiceChannelId}> is still processing its remaining segments. A new session can start after its final transcript is posted.`,
+        });
+      }
 
       return responder.respond({
         content: `✅ Transcription started in <#${status.voiceChannelId}>. A raw .txt transcript will be posted in <#${status.textChannelId}> when the session stops.`,
@@ -142,7 +149,7 @@ module.exports = {
       }
 
       return responder.respond({
-        content: `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when the drain finishes or times out.`,
+        content: `✅ Transcription stopped. Posted a partial transcript with ${result.segmentCount} completed segment(s); ${result.pendingCount} segment(s) are still processing and a final transcript will be posted when processing finishes.`,
       });
     }
 
@@ -155,7 +162,9 @@ module.exports = {
     }
 
     return responder.respond({
-      content: `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}.`,
+      content: status.processingPreviousSession
+        ? `⏳ Processing remaining segments from the previous transcription session in <#${status.voiceChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Captures dropped: ${status.droppedCaptureCount}.`
+        : `✅ Active in <#${status.voiceChannelId}> → <#${status.textChannelId}>. Segments transcribed: ${status.segmentsTranscribed}. Participants: ${status.participantCount}. Captures dropped: ${status.droppedCaptureCount}.`,
       ephemeral: true,
     });
   },

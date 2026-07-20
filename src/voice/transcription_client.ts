@@ -1,5 +1,5 @@
 import {
-  transcriptionMaxRetries,
+  transcriptionRequestRetries,
   transcriptionRequestTimeoutMs,
   transcriptionServiceUrl,
 } from '../config/env_config';
@@ -54,7 +54,7 @@ export class TranscriptionClient {
   constructor(options: TranscriptionClientOptions = {}) {
     this.endpoint = options.endpoint ?? transcriptionServiceUrl;
     this.timeoutMs = options.timeoutMs ?? transcriptionRequestTimeoutMs;
-    this.maxRetries = Math.max(0, Math.floor(options.maxRetries ?? transcriptionMaxRetries));
+    this.maxRetries = Math.max(0, Math.floor(options.maxRetries ?? transcriptionRequestRetries));
     this.retryBaseDelayMs = options.retryBaseDelayMs ?? 500;
     this.fetchFn = options.fetchFn ?? fetch;
     this.sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
