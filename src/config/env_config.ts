@@ -11,6 +11,10 @@ const toMs = (v: string | undefined, dfltMs: number) => {
   const n = Number(v);
   return Number.isFinite(n) && n > 0 ? Math.floor(n) : dfltMs;
 };
+const toNonNegativeInt = (v: string | undefined, dflt: number) => {
+  const n = Number(v);
+  return Number.isFinite(n) && n >= 0 ? Math.floor(n) : dflt;
+};
 
 export const token = process.env.DISCORD_BOT_TOKEN ?? '';
 export const runMode = process.env.RUN_MODE ?? 'development';
@@ -46,8 +50,25 @@ export const transcriptionRequestTimeoutMs = toMs(
   process.env.TRANSCRIPTION_REQUEST_TIMEOUT_MS,
   60_000,
 );
-export const transcriptionMaxRetries = Math.max(0, toInt(process.env.TRANSCRIPTION_MAX_RETRIES, 2));
-export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/tmp/spritebot-voice';
+export const transcriptionRequestRetries = toNonNegativeInt(
+  process.env.TRANSCRIPTION_REQUEST_RETRIES ?? process.env.TRANSCRIPTION_MAX_RETRIES,
+  2,
+);
+// Compatibility alias until the Phase 2 client integration adopts the renamed setting.
+export const transcriptionMaxRetries = transcriptionRequestRetries;
+export const transcriptionJobMaxAttempts = toInt(process.env.TRANSCRIPTION_JOB_MAX_ATTEMPTS, 3);
+export const transcriptionJobRetryBaseMs = toMs(
+  process.env.TRANSCRIPTION_JOB_RETRY_BASE_MS,
+  30_000,
+);
+export const transcriptionJobRetryMaxMs = toMs(process.env.TRANSCRIPTION_JOB_RETRY_MAX_MS, 600_000);
+export const transcriptionSpoolRetentionHours = toInt(
+  process.env.TRANSCRIPTION_SPOOL_RETENTION_HOURS,
+  72,
+);
+export const transcriptionLowDiskMb = toInt(process.env.TRANSCRIPTION_LOW_DISK_MB, 500);
+export const transcriptionCriticalDiskMb = toInt(process.env.TRANSCRIPTION_CRITICAL_DISK_MB, 100);
+export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/data/voice-spool';
 export const transcriptionDrainTimeoutMs = toMs(
   process.env.TRANSCRIPTION_DRAIN_TIMEOUT_MS,
   120_000,
