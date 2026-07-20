@@ -3,11 +3,13 @@ import path from 'node:path';
 
 import { transcriptionSpoolDir } from '../config/env_config';
 
-type SegmentSpoolParams = {
-  guildId: string;
-  sessionId: string;
-  baseDir?: string;
-};
+type SegmentSpoolParams =
+  | {
+      guildId: string;
+      sessionId: string;
+      baseDir?: string;
+    }
+  | { sessionDir: string };
 
 type WriteSegmentParams = {
   segmentId: string;
@@ -17,8 +19,14 @@ type WriteSegmentParams = {
 export class SegmentSpool {
   readonly sessionDir: string;
 
-  constructor({ guildId, sessionId, baseDir = transcriptionSpoolDir }: SegmentSpoolParams) {
-    this.sessionDir = path.join(baseDir, `${safePathPart(guildId)}-${safePathPart(sessionId)}`);
+  constructor(params: SegmentSpoolParams) {
+    this.sessionDir =
+      'sessionDir' in params
+        ? path.resolve(params.sessionDir)
+        : path.join(
+            params.baseDir ?? transcriptionSpoolDir,
+            `${safePathPart(params.guildId)}-${safePathPart(params.sessionId)}`,
+          );
   }
 
   async initialize(): Promise<void> {
