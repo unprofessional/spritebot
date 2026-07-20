@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { VoiceConnection, VoiceConnectionStatus } from '@discordjs/voice';
 import {
   AttachmentBuilder,
@@ -19,7 +21,14 @@ import {
   isDraining,
   trackOperation,
 } from '../runtime/lifecycle';
-import { transcriptionConcurrency, transcriptionDrainTimeoutMs } from '../config/env_config';
+import {
+  transcriptionConcurrency,
+  transcriptionCriticalDiskMb,
+  transcriptionJobMaxAttempts,
+  transcriptionJobRetryBaseMs,
+  transcriptionJobRetryMaxMs,
+  transcriptionLowDiskMb,
+} from '../config/env_config';
 import { defineDiscordOperationPolicy } from '../discord/operation_policy';
 import { executeDiscordSdkMethod, executeDiscordSdkMethodAs } from '../discord/sdk_operations';
 import {
@@ -28,6 +37,9 @@ import {
   waitForDiscordVoiceState,
 } from '../discord/voice_operations';
 import { AudioReceiver } from './audio_receiver';
+import { checkDiskSpace, evaluateDiskPressure } from './durable_queue/disk_util';
+import { FileManifestQueue } from './durable_queue/file_manifest_queue';
+import type { TranscriptionJobQueue } from './durable_queue/types';
 import {
   createNoopTranscriptionProgressMessage,
   createTranscriptionProgressMessage,
@@ -36,18 +48,13 @@ import {
 } from './progress_message';
 import { SegmentSpool } from './segment_spool';
 import type { SpeechSegment } from './segment_buffer';
-import {
-  formatDuration,
-  formatTranscript,
-  type TranscriptDumpKind,
-  type TranscriptEntry,
-} from './transcript_formatter';
+import { formatDuration, formatTranscript, type TranscriptDumpKind } from './transcript_formatter';
 import { TranscriptionClient } from './transcription_client';
+import { TranscriptionScheduler } from './transcription_scheduler';
 import {
   formatMissingTranscriptionPermissions,
   getMissingTranscriptionPermissions,
 } from './transcription_permissions';
-import { TranscriptionQueue, type TranscriptionSegmentRecord } from './transcription_queue';
 import { encodePcm16MonoWav } from './wav';
 
 const voiceJoinPolicy = defineDiscordOperationPolicy({
@@ -97,6 +104,7 @@ export type StartTranscriptionParams = {
   guild: Guild;
   voiceChannel: VoiceBasedChannel;
   textChannel: GuildTextBasedChannel;
+  startedBy: string;
 };
 
 export type VoiceSessionStatus = {
@@ -106,6 +114,7 @@ export type VoiceSessionStatus = {
   startedAt: Date;
   segmentsTranscribed: number;
   participantCount: number;
+  droppedCaptureCount: number;
 };
 
 export type StopTranscriptionResult = {
@@ -115,7 +124,6 @@ export type StopTranscriptionResult = {
   autoStopped: boolean;
   pendingCount: number;
   failedCount: number;
-  timeoutCount: number;
   final: boolean;
 };
 
@@ -129,11 +137,10 @@ type VoiceSession = VoiceSessionStatus & {
   client: Client;
   connection: VoiceConnection;
   receiver: AudioReceiver;
-  transcript: TranscriptEntry[];
   participants: Set<string>;
   speakerIdentities: Map<string, SpeakerIdentity>;
-  segmentRecords: TranscriptionSegmentRecord[];
-  transcriptionQueue: TranscriptionQueue;
+  jobQueue: TranscriptionJobQueue;
+  scheduler: TranscriptionScheduler;
   segmentSpool: SegmentSpool;
   pendingSpools: Set<Promise<void>>;
   isStopping: boolean;
@@ -196,24 +203,48 @@ export class VoiceManager {
     const sessionId = `${Date.now()}-${process.pid}`;
     const segmentSpool = new SegmentSpool({ guildId: params.guild.id, sessionId });
     await segmentSpool.initialize();
+    const startedAt = new Date();
+    const jobQueue = await FileManifestQueue.create(
+      segmentSpool.sessionDir,
+      {
+        sessionId,
+        guildId: params.guild.id,
+        voiceChannelId: params.voiceChannel.id,
+        textChannelId: params.textChannel.id,
+        startedAt: startedAt.toISOString(),
+        startedBy: params.startedBy,
+      },
+      {
+        maxAttempts: transcriptionJobMaxAttempts,
+        retryBaseMs: transcriptionJobRetryBaseMs,
+        retryMaxMs: transcriptionJobRetryMaxMs,
+      },
+    );
 
-    const session: VoiceSession = {
+    let session: VoiceSession;
+    session = {
       client: params.client,
       guildId: params.guild.id,
       voiceChannelId: params.voiceChannel.id,
       textChannelId: params.textChannel.id,
-      startedAt: new Date(),
+      startedAt,
       segmentsTranscribed: 0,
       participantCount: 0,
+      droppedCaptureCount: 0,
       connection,
       receiver: new AudioReceiver(connection, (userId, segment) =>
         this.queueTranscription(session, userId, segment),
       ),
-      transcript: [],
       participants: new Set(),
       speakerIdentities: new Map(),
-      segmentRecords: [],
-      transcriptionQueue: new TranscriptionQueue({ concurrency: transcriptionConcurrency }),
+      jobQueue,
+      scheduler: new TranscriptionScheduler({
+        queue: jobQueue,
+        spool: segmentSpool,
+        concurrency: transcriptionConcurrency,
+        isDraining,
+        transcribe: (job, wav) => this.transcribeSegment(session, job, wav),
+      }),
       segmentSpool,
       pendingSpools: new Set(),
       isStopping: false,
@@ -222,9 +253,7 @@ export class VoiceManager {
     session.receiver.start();
     connection.on(VoiceConnectionStatus.Disconnected, () => {
       if (session.isStopping) return;
-      void session.segmentSpool.cleanup().finally(() => {
-        this.sessions.delete(params.guild.id);
-      });
+      this.sessions.delete(params.guild.id);
     });
 
     this.sessions.set(params.guild.id, session);
@@ -273,7 +302,6 @@ export class VoiceManager {
         autoStopped,
         pendingCount: 0,
         failedCount: 0,
-        timeoutCount: 0,
         final: true,
       };
     }
@@ -281,40 +309,38 @@ export class VoiceManager {
     session.isStopping = true;
     await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy');
     await Promise.allSettled([...session.pendingSpools]);
-    const stats = session.transcriptionQueue.stats();
+    await session.jobQueue.seal();
+    const stats = session.jobQueue.stats();
 
     if (stats.pending === 0) {
       try {
-        await this.sendTranscriptDump(session, autoStopped, { kind: 'final', timedOut: false });
+        await this.sendTranscriptDump(session, autoStopped, { kind: 'final' });
       } finally {
-        await session.segmentSpool.cleanup();
         this.sessions.delete(guildId);
       }
 
       return {
         stopped: true,
-        segmentCount: session.transcript.length,
+        segmentCount: stats.done,
         participantCount: session.participants.size,
         autoStopped,
         pendingCount: 0,
-        failedCount: stats.failed,
-        timeoutCount: stats.timeout,
+        failedCount: stats.dead_letter,
         final: true,
       };
     }
 
-    await this.sendTranscriptDump(session, autoStopped, { kind: 'partial', timedOut: false });
+    await this.sendTranscriptDump(session, autoStopped, { kind: 'partial' });
     if (waitForFinal) {
       await this.finishStoppedSession(session, autoStopped);
-      const finalStats = session.transcriptionQueue.stats();
+      const finalStats = session.jobQueue.stats();
       return {
         stopped: true,
-        segmentCount: session.transcript.length,
+        segmentCount: finalStats.done,
         participantCount: session.participants.size,
         autoStopped,
         pendingCount: finalStats.pending,
-        failedCount: finalStats.failed,
-        timeoutCount: finalStats.timeout,
+        failedCount: finalStats.dead_letter,
         final: true,
       };
     }
@@ -323,12 +349,11 @@ export class VoiceManager {
 
     return {
       stopped: true,
-      segmentCount: session.transcript.length,
+      segmentCount: stats.done,
       participantCount: session.participants.size,
       autoStopped,
       pendingCount: stats.pending,
-      failedCount: stats.failed,
-      timeoutCount: stats.timeout,
+      failedCount: stats.dead_letter,
       final: false,
     };
   }
@@ -358,7 +383,6 @@ export class VoiceManager {
     if (timedOut) {
       for (const [guildId, session] of this.sessions) {
         await executeDiscordSdkMethod(voiceDestroyPolicy, session.connection, 'destroy');
-        await session.segmentSpool.cleanup();
         this.sessions.delete(guildId);
       }
     }
@@ -389,24 +413,15 @@ export class VoiceManager {
   private async finishStoppedSession(session: VoiceSession, autoStopped: boolean): Promise<void> {
     const progressMessage = await this.createProgressMessage(session);
     const progress = this.startProgressReporter(session, progressMessage);
-    const timedOut = await promiseTimedOut(
-      session.transcriptionQueue.onIdle(),
-      transcriptionDrainTimeoutMs,
-    );
-    if (timedOut) {
-      session.transcriptionQueue.markUnfinishedTimedOut(
-        `Drain timed out after ${transcriptionDrainTimeoutMs}ms`,
-      );
-    }
+    await session.scheduler.onIdle();
 
     clearInterval(progress);
     try {
-      await this.sendTranscriptDump(session, autoStopped, { kind: 'final', timedOut });
-      await progressMessage.complete(session.transcriptionQueue.stats(), { timedOut });
+      await this.sendTranscriptDump(session, autoStopped, { kind: 'final' });
+      await progressMessage.complete(session.jobQueue.stats());
     } catch (err) {
       console.error(`[voice] failed to send final transcript guild=${session.guildId}`, err);
     } finally {
-      await session.segmentSpool.cleanup();
       this.sessions.delete(session.guildId);
     }
   }
@@ -422,12 +437,10 @@ export class VoiceManager {
     ).catch(() => null);
     if (!isTextOutputChannel(channel)) return createNoopTranscriptionProgressMessage();
 
-    return createTranscriptionProgressMessage(channel, session.transcriptionQueue.stats()).catch(
-      (err) => {
-        console.error(`[voice] failed to create progress message guild=${session.guildId}`, err);
-        return createNoopTranscriptionProgressMessage();
-      },
-    );
+    return createTranscriptionProgressMessage(channel, session.jobQueue.stats()).catch((err) => {
+      console.error(`[voice] failed to create progress message guild=${session.guildId}`, err);
+      return createNoopTranscriptionProgressMessage();
+    });
   }
 
   private startProgressReporter(
@@ -435,7 +448,7 @@ export class VoiceManager {
     progressMessage: TranscriptionProgressMessage,
   ): NodeJS.Timeout {
     return setInterval(() => {
-      void progressMessage.update(session.transcriptionQueue.stats()).catch((err) => {
+      void progressMessage.update(session.jobQueue.stats()).catch((err) => {
         console.error(`[voice] failed to update progress message guild=${session.guildId}`, err);
       });
     }, 30_000);
@@ -449,31 +462,51 @@ export class VoiceManager {
     const speaker = await this.getSpeakerIdentity(session, userId);
     if (speaker.isBot) return;
 
-    const segmentId = session.transcriptionQueue.reserveId();
-    const diskPath = await session.segmentSpool.writeSegment({
+    const segmentId = randomUUID();
+    const timestamp = segment.startedAt.toISOString();
+    const pressure = evaluateDiskPressure(
+      await checkDiskSpace(session.segmentSpool.sessionDir),
+      transcriptionLowDiskMb,
+      transcriptionCriticalDiskMb,
+    );
+    if (pressure === 'low') {
+      console.warn(`[voice] transcription spool disk space is low guild=${session.guildId}`);
+    }
+    if (pressure === 'critical') {
+      await session.jobQueue.recordDroppedCapture({
+        id: segmentId,
+        userId,
+        displayName: speaker.displayName,
+        timestamp,
+        durationMs: segment.durationMs,
+        reason: 'Capture refused because transcription spool disk space is critical.',
+      });
+      return;
+    }
+
+    const spoolPath = await session.segmentSpool.writeSegment({
       segmentId,
-      userId,
-      timestamp: segment.startedAt,
       wav: encodePcm16MonoWav(segment.pcm),
     });
-
-    const queued = session.transcriptionQueue.enqueue({
+    const pressureAfterWrite = evaluateDiskPressure(
+      await checkDiskSpace(session.segmentSpool.sessionDir),
+      transcriptionLowDiskMb,
+      transcriptionCriticalDiskMb,
+    );
+    if (pressureAfterWrite !== 'normal') {
+      console.warn(
+        `[voice] transcription spool disk pressure=${pressureAfterWrite} after segment write guild=${session.guildId}`,
+      );
+    }
+    await session.jobQueue.commit({
       id: segmentId,
       userId,
-      timestamp: segment.startedAt,
+      displayName: speaker.displayName,
+      timestamp,
       durationMs: segment.durationMs,
-      diskPath,
-      transcribe: () =>
-        this.transcribeSegment(session, userId, speaker.displayName, segment.startedAt, diskPath),
+      spoolPath,
     });
-    session.segmentRecords.push(queued.record);
-
-    void queued.completion.then((record) => {
-      if (record.status !== 'failed') return;
-      console.error(
-        `[voice] transcription failed guild=${session.guildId} user=${userId} segment=${record.id}: ${record.lastError}`,
-      );
-    });
+    session.scheduler.signal();
   }
 
   private reportRecoverableSpools(): void {
@@ -494,27 +527,19 @@ export class VoiceManager {
 
   private async transcribeSegment(
     session: VoiceSession,
-    userId: string,
-    displayName: string,
-    startedAt: Date,
-    diskPath: string,
-  ): Promise<string | null> {
-    const wav = await session.segmentSpool.readSegment(diskPath);
+    job: { userId: string; displayName: string; timestamp: string },
+    wav: Buffer,
+  ): Promise<string> {
     const result = await this.transcriptionClient.transcribeWav(
       wav,
-      `${session.guildId}-${userId}-${startedAt.getTime()}.wav`,
+      `${session.guildId}-${job.userId}-${Date.parse(job.timestamp)}.wav`,
     );
-    if (!result.text) return null;
+    if (!result.text) return '';
 
-    session.participants.add(userId);
+    session.participants.add(job.userId);
     session.participantCount = session.participants.size;
     session.segmentsTranscribed += 1;
-    session.transcript.push({
-      userId,
-      displayName,
-      timestamp: startedAt,
-      text: result.text,
-    });
+    await session.jobQueue.addParticipant(job.userId, job.displayName);
     return result.text;
   }
 
@@ -554,7 +579,7 @@ export class VoiceManager {
   private async sendTranscriptDump(
     session: VoiceSession,
     autoStopped: boolean,
-    { kind, timedOut }: { kind: TranscriptDumpKind; timedOut: boolean },
+    { kind }: { kind: TranscriptDumpKind },
   ): Promise<void> {
     const channel = await executeDiscordSdkMethodAs<Channel | null>(
       voiceChannelReadPolicy,
@@ -565,7 +590,7 @@ export class VoiceManager {
     if (!isTextOutputChannel(channel)) return;
 
     const endedAt = new Date();
-    const stats = session.transcriptionQueue.stats();
+    const stats = session.jobQueue.stats();
     const transcript = formatTranscript(
       {
         guildId: session.guildId,
@@ -573,10 +598,10 @@ export class VoiceManager {
         textChannelId: session.textChannelId,
         startedAt: session.startedAt,
         participants: session.participants.size,
-        transcript: session.transcript,
-        segmentRecords: session.segmentRecords,
+        results: session.jobQueue.completedResults(),
+        stats,
       },
-      { endedAt, kind, timedOut },
+      { endedAt, kind },
     );
     const attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), {
       name: `${kind}-transcript-${session.guildId}-${session.startedAt.toISOString().replace(/[:.]/g, '-')}.txt`,
@@ -584,10 +609,10 @@ export class VoiceManager {
 
     await executeDiscordSdkMethod(voiceSendPolicy, channel, 'send', {
       content: [
-        transcriptMessage(kind, autoStopped, timedOut),
+        transcriptMessage(kind, autoStopped),
         `Duration: ${formatDuration(endedAt.getTime() - session.startedAt.getTime())}`,
         `Participants: ${session.participants.size}`,
-        `Segments included: ${session.transcript.length}`,
+        `Segments included: ${stats.done}`,
         `Queue: ${formatQueueSummary(stats)}`,
       ].join('\n'),
       files: [attachment],
@@ -626,6 +651,7 @@ function toStatus(session: VoiceSession): VoiceSessionStatus {
     startedAt: session.startedAt,
     segmentsTranscribed: session.segmentsTranscribed,
     participantCount: session.participants.size,
+    droppedCaptureCount: session.jobQueue.stats().dropped,
   };
 }
 
@@ -635,19 +661,11 @@ export function initializeVoiceTranscription(client: Client): void {
   voiceManager.install(client);
 }
 
-function transcriptMessage(
-  kind: TranscriptDumpKind,
-  autoStopped: boolean,
-  timedOut: boolean,
-): string {
+function transcriptMessage(kind: TranscriptDumpKind, autoStopped: boolean): string {
   if (kind === 'partial') {
     return autoStopped
       ? 'Transcription stopped because the voice channel emptied. Partial transcript attached; remaining audio is still processing.'
       : 'Transcription stopped. Partial transcript attached; remaining audio is still processing.';
-  }
-
-  if (timedOut) {
-    return 'Final transcription drain timed out. Latest partial transcript attached.';
   }
 
   return autoStopped
