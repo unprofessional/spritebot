@@ -75,6 +75,22 @@ export const transcriptionCheckpointIntervalMs = toMs(
 export const transcriptionLowDiskMb = toInt(process.env.TRANSCRIPTION_LOW_DISK_MB, 500);
 export const transcriptionCriticalDiskMb = toInt(process.env.TRANSCRIPTION_CRITICAL_DISK_MB, 100);
 export const transcriptionSpoolDir = process.env.TRANSCRIPTION_SPOOL_DIR ?? '/data/voice-spool';
+export const transcriptionBacklogWarnMinutes = toInt(
+  process.env.TRANSCRIPTION_BACKLOG_WARN_MINUTES,
+  10,
+);
+export const transcriptionBackpressureHighWater = toInt(
+  process.env.TRANSCRIPTION_BACKPRESSURE_HIGH_WATER,
+  100,
+);
+export const transcriptionBackpressureLowWater = toInt(
+  process.env.TRANSCRIPTION_BACKPRESSURE_LOW_WATER,
+  25,
+);
+export const transcriptionBackpressureSilenceMs = toMs(
+  process.env.TRANSCRIPTION_BACKPRESSURE_SILENCE_MS,
+  1_500,
+);
 
 // Default weekly: 7d * 24h * 60m = 10080; safer default is 10050 (7d - 30m)
 export const bumpDefaultMinutes = toInt(process.env.BUMP_DEFAULT_MINUTES, 10050);
