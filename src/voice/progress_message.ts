@@ -1,12 +1,12 @@
 import { defineDiscordOperationPolicy } from '../discord/operation_policy';
 import { executeDiscordSdkMethod } from '../discord/sdk_operations';
-import type { TranscriptionQueueStats } from './transcription_queue';
+import type { QueueStats } from './durable_queue/types';
 
-export type TranscriptionProgressPhase = 'processing' | 'complete' | 'timed-out';
+export type TranscriptionProgressPhase = 'processing' | 'complete';
 
 export type TranscriptionProgressMessage = {
-  update(stats: TranscriptionQueueStats, options?: { force?: boolean }): Promise<void>;
-  complete(stats: TranscriptionQueueStats, options: { timedOut: boolean }): Promise<void>;
+  update(stats: QueueStats, options?: { force?: boolean }): Promise<void>;
+  complete(stats: QueueStats): Promise<void>;
 };
 
 type EditableMessage = {
@@ -34,7 +34,7 @@ const progressEditPolicy = defineDiscordOperationPolicy({
 
 export async function createTranscriptionProgressMessage(
   channel: ProgressChannel,
-  stats: TranscriptionQueueStats,
+  stats: QueueStats,
   { minEditIntervalMs = defaultMinEditIntervalMs }: { minEditIntervalMs?: number } = {},
 ): Promise<TranscriptionProgressMessage> {
   const initialContent = formatTranscriptionProgress(stats, { phase: 'processing' });
@@ -72,19 +72,14 @@ export function buildTranscriptionProgressMessage(
     update: async (stats, options) => {
       await edit(formatTranscriptionProgress(stats, { phase: 'processing' }), options);
     },
-    complete: async (stats, { timedOut }) => {
-      await edit(
-        formatTranscriptionProgress(stats, {
-          phase: timedOut ? 'timed-out' : 'complete',
-        }),
-        { force: true },
-      );
+    complete: async (stats) => {
+      await edit(formatTranscriptionProgress(stats, { phase: 'complete' }), { force: true });
     },
   };
 }
 
 export function formatTranscriptionProgress(
-  stats: TranscriptionQueueStats,
+  stats: QueueStats,
   { phase }: { phase: TranscriptionProgressPhase },
 ): string {
   const total = totalSegmentCount(stats);
@@ -98,20 +93,19 @@ export function formatTranscriptionProgress(
   ].join('\n');
 }
 
-export function formatQueueSummary(stats: TranscriptionQueueStats): string {
+export function formatQueueSummary(stats: QueueStats): string {
   return [
-    pluralize(stats.queued, 'queued'),
-    `${stats.transcribing} in progress`,
+    pluralize(stats.committed, 'queued'),
+    `${stats.processing} in progress`,
     pluralize(stats.done, 'complete'),
-    pluralize(stats.failed, 'failed'),
-    `${stats.timeout} timed out`,
+    pluralize(stats.failed, 'awaiting retry'),
+    pluralize(stats.dead_letter, 'dead letter'),
+    pluralize(stats.dropped, 'capture dropped'),
   ].join(', ');
 }
 
 function progressTitle(phase: TranscriptionProgressPhase): string {
   if (phase === 'complete') return 'Transcription complete. Final transcript posted below.';
-  if (phase === 'timed-out')
-    return 'Transcription drain timed out. Latest transcript posted below.';
   return 'Transcription still processing...';
 }
 
@@ -120,18 +114,18 @@ function progressBar(percent: number): string {
   return `${'█'.repeat(filled)}${'░'.repeat(defaultBarWidth - filled)}`;
 }
 
-function progressPercent(stats: TranscriptionQueueStats): number {
+function progressPercent(stats: QueueStats): number {
   const total = totalSegmentCount(stats);
   if (total === 0) return 100;
   return Math.round((resolvedSegmentCount(stats) / total) * 100);
 }
 
-function totalSegmentCount(stats: TranscriptionQueueStats): number {
-  return stats.queued + stats.transcribing + stats.done + stats.failed + stats.timeout;
+function totalSegmentCount(stats: QueueStats): number {
+  return stats.total + stats.dropped;
 }
 
-function resolvedSegmentCount(stats: TranscriptionQueueStats): number {
-  return stats.done + stats.failed + stats.timeout;
+function resolvedSegmentCount(stats: QueueStats): number {
+  return stats.done + stats.dead_letter + stats.dropped;
 }
 
 function pluralize(count: number, word: string): string {

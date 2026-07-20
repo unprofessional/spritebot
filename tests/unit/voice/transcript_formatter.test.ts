@@ -1,8 +1,8 @@
 import { formatTranscript } from '../../../src/voice/transcript_formatter';
-import type { TranscriptionSegmentRecord } from '../../../src/voice/transcription_queue';
+import type { QueueStats } from '../../../src/voice/durable_queue/types';
 
 describe('transcript_formatter', () => {
-  test('formats partial transcripts with omitted segment details', () => {
+  test('formats completed, dead-lettered, and dropped durable results', () => {
     const transcript = formatTranscript(
       {
         guildId: 'guild-1',
@@ -10,51 +10,42 @@ describe('transcript_formatter', () => {
         textChannelId: 'text-1',
         startedAt: new Date('2026-07-15T00:00:00.000Z'),
         participants: 1,
-        transcript: [
-          {
-            userId: 'user-1',
-            displayName: 'Mads',
-            timestamp: new Date('2026-07-15T00:00:02.000Z'),
-            text: 'hello table',
-          },
+        results: [
+          result('one', 'done', '2026-07-15T00:00:02.000Z', 'hello table'),
+          result('two', 'dead_letter', '2026-07-15T00:00:04.000Z', null, 'failed'),
+          result('three', 'capture_dropped', '2026-07-15T00:00:06.000Z', null, 'disk'),
         ],
-        segmentRecords: [
-          segmentRecord(1, 'done', new Date('2026-07-15T00:00:02.000Z')),
-          segmentRecord(2, 'failed', new Date('2026-07-15T00:00:04.000Z'), 'whisper failed'),
-          segmentRecord(3, 'timeout', new Date('2026-07-15T00:00:06.000Z'), 'drain timed out'),
-          segmentRecord(4, 'queued', new Date('2026-07-15T00:00:08.000Z')),
-        ],
+        stats: stats({ done: 1, dead_letter: 1, dropped: 1 }),
       },
-      { endedAt: new Date('2026-07-15T00:01:00.000Z'), kind: 'partial', timedOut: true },
+      { endedAt: new Date('2026-07-15T00:01:00.000Z'), kind: 'partial' },
     );
-
-    expect(transcript).toContain('SPRITEbot Voice Transcript (Partial)');
     expect(transcript).toContain('Segments included: 1');
-    expect(transcript).toContain('Segments failed: 1');
-    expect(transcript).toContain('Segments timed out: 1');
-    expect(transcript).toContain('Segments still processing: 1');
+    expect(transcript).toContain('Segments dead-lettered: 1');
+    expect(transcript).toContain('Captures dropped: 1');
     expect(transcript).toContain('[00:00:02] Mads: hello table');
-    expect(transcript).toContain('- #2 failed 00:00:04 user=user-1 (whisper failed)');
-    expect(transcript).toContain('- #3 timeout 00:00:06 user=user-1 (drain timed out)');
-    expect(transcript).toContain('- #4 queued 00:00:08 user=user-1');
+    expect(transcript).toContain('#two dead_letter 00:00:04 user=user-1 (failed)');
+    expect(transcript).toContain('#three capture_dropped 00:00:06 user=user-1 (disk)');
   });
 });
 
-function segmentRecord(
-  id: number,
-  status: TranscriptionSegmentRecord['status'],
-  timestamp: Date,
-  lastError: string | null = null,
-): TranscriptionSegmentRecord {
+function result(
+  jobId: string,
+  status: 'done' | 'dead_letter' | 'capture_dropped',
+  timestamp: string,
+  text: string | null,
+  error: string | null = null,
+) {
+  return { jobId, userId: 'user-1', displayName: 'Mads', timestamp, text, status, error };
+}
+
+function stats(overrides: Partial<QueueStats>): QueueStats {
+  const counts = { committed: 0, processing: 0, done: 0, failed: 0, dead_letter: 0, ...overrides };
   return {
-    id,
-    userId: 'user-1',
-    timestamp,
-    durationMs: 1_000,
-    diskPath: `/tmp/${id}.wav`,
-    status,
-    result: status === 'done' ? 'hello table' : null,
-    attempts: status === 'queued' ? 0 : 1,
-    lastError,
+    ...counts,
+    total: counts.committed + counts.processing + counts.done + counts.failed + counts.dead_letter,
+    pending: counts.committed + counts.processing + counts.failed,
+    dropped: overrides.dropped ?? 0,
+    sealed: false,
+    resolvedAt: null,
   };
 }
