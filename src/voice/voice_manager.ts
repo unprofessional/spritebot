@@ -22,6 +22,10 @@ import {
   trackOperation,
 } from '../runtime/lifecycle';
 import {
+  transcriptionBacklogWarnMinutes,
+  transcriptionBackpressureHighWater,
+  transcriptionBackpressureLowWater,
+  transcriptionBackpressureSilenceMs,
   transcriptionCheckpointIntervalMs,
   transcriptionCheckpointIntervalSegments,
   transcriptionConcurrency,
@@ -32,6 +36,7 @@ import {
   transcriptionLowDiskMb,
   transcriptionSpoolDir,
   transcriptionSpoolRetentionHours,
+  transcriptionSilenceMs,
 } from '../config/env_config';
 import { defineDiscordOperationPolicy } from '../discord/operation_policy';
 import { executeDiscordSdkMethod, executeDiscordSdkMethodAs } from '../discord/sdk_operations';
@@ -65,6 +70,9 @@ import { formatDuration, formatTranscript, type TranscriptDumpKind } from './tra
 import { TranscriptionClient } from './transcription_client';
 import { TranscriptionCheckpointController } from './transcription_checkpoint_controller';
 import { TranscriptionScheduler } from './transcription_scheduler';
+import { TranscriptionWorkerPool } from './transcription_worker_pool';
+import type { TranscriptionPressure, TranscriptionQueueHealth } from './transcription_queue_health';
+import { BacklogWarningPolicy } from './transcription_queue_health';
 import {
   formatMissingTranscriptionPermissions,
   getMissingTranscriptionPermissions,
@@ -160,6 +168,8 @@ type VoiceSession = VoiceSessionStatus & {
   segmentSpool: SegmentSpool;
   pendingSpools: Set<Promise<void>>;
   isStopping: boolean;
+  pressure: TranscriptionPressure;
+  backlogWarningPolicy: BacklogWarningPolicy;
 };
 
 type SpeakerIdentity = {
@@ -171,6 +181,7 @@ export class VoiceManager {
   private readonly sessions = new Map<string, VoiceSession>();
   private readonly recoveredSessions = new Set<RecoveredTranscriptionSession>();
   private readonly transcriptionClient = new TranscriptionClient();
+  private readonly transcriptionWorkerPool = new TranscriptionWorkerPool(transcriptionConcurrency);
   private installedClient: Client | null = null;
   private recoveryStarted = false;
 
@@ -270,6 +281,9 @@ export class VoiceManager {
         spool: segmentSpool,
         concurrency: transcriptionConcurrency,
         isDraining,
+        highWater: transcriptionBackpressureHighWater,
+        lowWater: transcriptionBackpressureLowWater,
+        onHealth: (health) => this.handleQueueHealth(session, health),
         onTerminalJob: () => checkpointController.recordTerminalJob(),
         transcribe: (job, wav) => this.transcribeSegment(session, job, wav),
       }),
@@ -277,6 +291,8 @@ export class VoiceManager {
       segmentSpool,
       pendingSpools: new Set(),
       isStopping: false,
+      pressure: 'normal',
+      backlogWarningPolicy: new BacklogWarningPolicy(transcriptionBacklogWarnMinutes),
     };
 
     session.receiver.start();
@@ -559,7 +575,34 @@ export class VoiceManager {
       durationMs: segment.durationMs,
       spoolPath,
     });
+    session.scheduler.recordCommit(segment.durationMs);
     session.scheduler.signal();
+  }
+
+  private handleQueueHealth(session: VoiceSession, health: TranscriptionQueueHealth): void {
+    if (health.pressure !== session.pressure) {
+      session.pressure = health.pressure;
+      session.receiver.setSilenceLimit(
+        health.pressure === 'normal' ? transcriptionSilenceMs : transcriptionBackpressureSilenceMs,
+      );
+    }
+
+    const estimate = health.estimatedDrainMinutes;
+    if (!session.backlogWarningPolicy.shouldWarn(estimate)) return;
+    void this.sendBacklogWarning(session, health).catch((err) => {
+      console.error(`[voice] failed to send backlog warning guild=${session.guildId}`, err);
+    });
+  }
+
+  private async sendBacklogWarning(
+    session: VoiceSession,
+    health: TranscriptionQueueHealth,
+  ): Promise<void> {
+    const channel = await this.fetchOutputChannel(session.client, session.textChannelId);
+    if (!channel || health.estimatedDrainMinutes === null) return;
+    await executeDiscordSdkMethod(voiceSendPolicy, channel, 'send', {
+      content: `⚠️ Transcription is falling behind. ~${health.queueDepth} segments queued, estimated ${Math.ceil(health.estimatedDrainMinutes)} minutes to catch up. Your transcript will still be fully captured, but there may be a delay after you stop.`,
+    });
   }
 
   private async recoverPreviousSessions(client: Client): Promise<void> {
@@ -594,9 +637,11 @@ export class VoiceManager {
     job: ClaimedJob,
     wav: Buffer,
   ): Promise<string> {
-    const result = await this.transcriptionClient.transcribeWav(
-      wav,
-      `${header.guildId}-${job.userId}-${Date.parse(job.timestamp)}.wav`,
+    const result = await this.transcriptionWorkerPool.run(() =>
+      this.transcriptionClient.transcribeWav(
+        wav,
+        `${header.guildId}-${job.userId}-${Date.parse(job.timestamp)}.wav`,
+      ),
     );
     return result.text;
   }
@@ -667,9 +712,11 @@ export class VoiceManager {
     job: { userId: string; displayName: string; timestamp: string },
     wav: Buffer,
   ): Promise<string> {
-    const result = await this.transcriptionClient.transcribeWav(
-      wav,
-      `${session.guildId}-${job.userId}-${Date.parse(job.timestamp)}.wav`,
+    const result = await this.transcriptionWorkerPool.run(() =>
+      this.transcriptionClient.transcribeWav(
+        wav,
+        `${session.guildId}-${job.userId}-${Date.parse(job.timestamp)}.wav`,
+      ),
     );
     if (!result.text) return '';
 
@@ -799,19 +846,20 @@ export function initializeVoiceTranscription(client: Client): void {
   voiceManager.install(client);
 }
 
-function transcriptMessage(
+export function transcriptMessage(
   kind: TranscriptDumpKind,
   autoStopped: boolean,
   stats: QueueStats,
 ): string {
   if (kind === 'partial') {
-    return autoStopped
-      ? 'Transcription stopped because the voice channel emptied. Partial transcript attached; remaining audio is still processing.'
-      : 'Transcription stopped. Partial transcript attached; remaining audio is still processing.';
+    const prefix = autoStopped
+      ? 'Transcription stopped because the voice channel emptied.'
+      : 'Transcription stopped.';
+    return `${prefix} ⏳ ${stats.done}/${stats.total} transcribed. Background processing continues — final transcript will be posted when done.`;
   }
 
   if (stats.dead_letter > 0) {
-    return `⚠️ Transcription finished — ${stats.done}/${stats.total} segments transcribed, ${stats.dead_letter} permanently failed. Final transcript attached.`;
+    return `⚠️ ${stats.done}/${stats.total} segments transcribed. ${stats.dead_letter} permanently failed. Final transcript attached.`;
   }
   return `✅ Transcription complete — ${stats.done}/${stats.total} segments. Final transcript attached.`;
 }

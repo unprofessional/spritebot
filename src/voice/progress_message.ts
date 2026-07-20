@@ -83,12 +83,12 @@ export function formatTranscriptionProgress(
   { phase }: { phase: TranscriptionProgressPhase },
 ): string {
   const total = totalSegmentCount(stats);
-  const resolved = resolvedSegmentCount(stats);
+  const transcribed = stats.done;
   const percent = progressPercent(stats);
 
   return [
     progressTitle(phase),
-    `${progressBar(percent)} ${percent}% (${resolved}/${total} segments)`,
+    `${progressBar(percent)} ${percent}% (${transcribed}/${total} transcribed)`,
     formatQueueSummary(stats),
   ].join('\n');
 }
@@ -97,16 +97,16 @@ export function formatQueueSummary(stats: QueueStats): string {
   return [
     pluralize(stats.committed, 'queued'),
     `${stats.processing} in progress`,
-    pluralize(stats.done, 'complete'),
+    pluralize(stats.done, 'transcribed'),
     pluralize(stats.failed, 'awaiting retry'),
     pluralize(stats.dead_letter, 'dead letter'),
     pluralize(stats.dropped, 'capture dropped'),
-  ].join(', ');
+  ].join(' · ');
 }
 
 function progressTitle(phase: TranscriptionProgressPhase): string {
   if (phase === 'complete') return 'Transcription complete. Final transcript posted below.';
-  return 'Transcription still processing...';
+  return 'Transcription processing...';
 }
 
 function progressBar(percent: number): string {
@@ -117,15 +117,11 @@ function progressBar(percent: number): string {
 function progressPercent(stats: QueueStats): number {
   const total = totalSegmentCount(stats);
   if (total === 0) return 100;
-  return Math.round((resolvedSegmentCount(stats) / total) * 100);
+  return Math.round((stats.done / total) * 100);
 }
 
 function totalSegmentCount(stats: QueueStats): number {
   return stats.total + stats.dropped;
-}
-
-function resolvedSegmentCount(stats: QueueStats): number {
-  return stats.done + stats.dead_letter + stats.dropped;
 }
 
 function pluralize(count: number, word: string): string {

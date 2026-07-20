@@ -1005,6 +1005,18 @@ Tests:
 - Final status message distinguishes all three outcome types.
 - Zero-queued and all-failed edge cases render correctly.
 
+**Phase 5 implementation checkpoint (2026-07-20): complete.** Queue health now
+tracks sliding enqueue/completion rates, weighted pending audio, estimated drain
+time, and hysteretic normal/elevated/critical pressure. Live sessions warn on a
+15-minute cooldown only after the estimate doubles, widen every active speaker
+buffer to the configured silence threshold under pressure, and restore the
+normal threshold below low water. Discord receive streams remain open beyond
+the largest configured gap, while the 30-second segment cap remains enforced.
+Progress percentage counts only successful transcriptions; dead letters and
+dropped captures stay separate, and partial/final messages distinguish all
+outcomes. A shared FIFO worker pool enforces `TRANSCRIPTION_CONCURRENCY` across
+live and recovered sessions instead of multiplying it per scheduler.
+
 ### Phase 6: Overload regression test + capacity planning
 
 **Validation that the full system works under sustained overload.**

@@ -18,9 +18,9 @@ describe('progress_message', () => {
     });
     expect(formatTranscriptionProgress(stats, { phase: 'processing' })).toBe(
       [
-        'Transcription still processing...',
-        '███████░░░░░ 56% (18/32 segments)',
-        '12 queued, 2 in progress, 16 complete, 0 awaiting retry, 1 dead letter, 1 capture dropped',
+        'Transcription processing...',
+        '██████░░░░░░ 50% (16/32 transcribed)',
+        '12 queued · 2 in progress · 16 transcribed · 0 awaiting retry · 1 dead letter · 1 capture dropped',
       ].join('\n'),
     );
   });
@@ -29,7 +29,7 @@ describe('progress_message', () => {
     expect(
       formatQueueSummary(queueStats({ committed: 3, processing: 1, done: 8, failed: 2 })),
     ).toBe(
-      '3 queued, 1 in progress, 8 complete, 2 awaiting retry, 0 dead letter, 0 capture dropped',
+      '3 queued · 1 in progress · 8 transcribed · 2 awaiting retry · 0 dead letter · 0 capture dropped',
     );
   });
 
@@ -46,6 +46,15 @@ describe('progress_message', () => {
     await progress.complete(queueStats({ done: 2 }));
     expect(message.edit).toHaveBeenCalledTimes(1);
     expect(message.edit.mock.calls[0][0].content).toContain('Transcription complete.');
+  });
+
+  test('renders zero-work and all-failed outcomes without treating failures as success', () => {
+    expect(formatTranscriptionProgress(queueStats({}), { phase: 'processing' })).toContain(
+      '100% (0/0 transcribed)',
+    );
+    expect(
+      formatTranscriptionProgress(queueStats({ dead_letter: 3 }), { phase: 'complete' }),
+    ).toContain('0% (0/3 transcribed)');
   });
 });
 
@@ -65,6 +74,7 @@ function queueStats(overrides: Partial<QueueStats>): QueueStats {
       overrides.total ??
       counts.committed + counts.processing + counts.done + counts.failed + counts.dead_letter,
     pending: overrides.pending ?? counts.committed + counts.processing + counts.failed,
+    pendingDurationMs: overrides.pendingDurationMs ?? 0,
     sealed: overrides.sealed ?? false,
     resolvedAt: overrides.resolvedAt ?? null,
   };
