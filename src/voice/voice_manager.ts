@@ -575,6 +575,7 @@ export class VoiceManager {
       },
       concurrency: transcriptionConcurrency,
       retentionHours: transcriptionSpoolRetentionHours,
+      maxConcurrentSessionsPerGuild: 2,
       checkpointIntervalSegments: transcriptionCheckpointIntervalSegments,
       checkpointIntervalMs: transcriptionCheckpointIntervalMs,
       isDraining,
