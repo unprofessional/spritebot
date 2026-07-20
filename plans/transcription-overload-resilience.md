@@ -82,13 +82,15 @@ Rationale:
 
 2. **At-least-once delivery.** A segment is only marked `done` in the
    manifest AFTER its transcription result is persisted. Segments in
-   `processing` state that weren't marked `done` before a crash are assumed
-   incomplete and re-queued on restart.
+   `processing` state at crash time are reset to retryable on recovery. The
+   guarantee is one logical transcript entry per job, not necessarily one
+   inference call — a crash after claim may cause a repeat inference, but the
+   transcript deduplicates by job ID.
 
 3. **Poison pill handling.** Segments that fail transcription after max
    retries move to `dead_letter` status. They keep their spool files, are
-   skipped by the processor, and appear as marked gaps in the transcript.
-   The queue moves on.
+   skipped by the processor, and appear as marked gaps in the transcript
+   (`[segment N — transcription failed at HH:MM:SS]`). The queue moves on.
 
 4. **Checkpoint + resume.** The transcript is incrementally persisted to a
    checkpoint file alongside the manifest. On restart, the checkpoint
@@ -100,13 +102,177 @@ Rationale:
    returns immediately. The scheduler continues processing from the manifest
    until every segment is `done` or `dead_letter`. No drain timeout.
 
+### Persistent storage
+
+The current default spool path (`/tmp/spritebot-voice`) is not durable
+across container replacement or blue/green deployment. The `docker-compose`
+defines no persistent volume for it.
+
+This plan requires:
+
+- A **host-mounted volume** for the spool directory, shared between blue and
+  green containers. Example: `./data/voice-spool:/data/voice-spool` in the
+  compose `x-spritebot-service` anchor.
+- Default `TRANSCRIPTION_SPOOL_DIR` changes to `/data/voice-spool`.
+- **Startup validation:** on boot, verify the spool path is writable and on
+  a persistent filesystem. Log a clear warning if it resolves to a tmpfs.
+- **Instance lease awareness:** only the active lease holder performs
+  recovery scans (SPRITEbot already has `instance_lease.ts`). The standby
+  instance does not touch the shared spool.
+
+### WAL persistence strategy
+
+The manifest uses **append + `fsync`** for normal operations, with
+**atomic replacement** reserved for compaction only.
+
+Normal mutations (`commit`, `claim`, `ack`, `nack`, `dead_letter`, `seal`):
+
+- Open the manifest file in append mode.
+- Write a single JSONL event line.
+- Call `fsync` on the file descriptor.
+- On recovery, replay all events. If the last line is incomplete (truncated
+  by crash mid-write), discard it — the segment remains in its prior state
+  which is safe under at-least-once semantics.
+
+Compaction (rewrite manifest as a clean state snapshot):
+
+- Write the full state to a temp file in the session directory.
+- `fsync` the temp file.
+- `rename` the temp file over the manifest.
+- `fsync` the directory.
+- On recovery, if a temp file exists alongside the manifest, delete the temp
+  file (the rename didn't complete, so the old manifest is still valid).
+
+### Mutation serialization
+
+All manifest mutations are serialized through an **internal async mutex**
+(single-chain promise queue). Even though this is a single Node.js process,
+the scheduler runs multiple concurrent workers that produce interleaved
+async `claim()` and `ack()` calls.
+
+The mutex ensures:
+
+- Concurrent `claim()` calls never return the same job.
+- `ack()` and `checkpoint()` cannot interleave with each other or with
+  `commit()`.
+- Compaction cannot race with any other mutation.
+- Multiple simultaneous `commit()` calls (from rapid segment capture) each
+  get their own serialized append.
+
+### Write durability ordering
+
+The ordering for each captured segment is:
+
+1. Write WAV to spool directory via `writeFile` + `fsync`.
+2. `commit()` the segment to the manifest (append + `fsync`).
+3. Only then is the segment visible to the scheduler.
+
+A crash between step 1 and step 2 produces an **orphan WAV** — a file on
+disk with no manifest entry. Recovery handles this by scanning for WAV files
+that don't match any manifest job and either deleting them or logging them
+for inspection.
+
+### Retry budget
+
+`TranscriptionClient` already performs per-request retries with exponential
+backoff (`TRANSCRIPTION_MAX_RETRIES`, default 2). This is the **request
+retry** layer: it handles transient HTTP failures within a single processing
+attempt.
+
+The durable queue adds a **job retry** layer: if an entire processing
+attempt fails (all request retries exhausted), the job is nack'd and can be
+re-claimed later.
+
+To avoid multiplication, separate the two settings:
+
+- `TRANSCRIPTION_REQUEST_RETRIES` (renamed from `TRANSCRIPTION_MAX_RETRIES`,
+  default: 2) — retries within a single HTTP request attempt.
+- `TRANSCRIPTION_JOB_MAX_ATTEMPTS` (new, default: 3) — total processing
+  attempts before dead letter. Each attempt may internally retry per the
+  request setting.
+
+Combined worst case: 3 attempts × 3 requests each = 9 HTTP calls per
+segment. This is acceptable given the 60-second per-request timeout and the
+fact that reaching dead letter means the segment truly cannot be processed.
+
+### Retention semantics
+
+The 72-hour retention window applies to **fully resolved sessions only** —
+sessions where every segment is `done` or `dead_letter`. Resolved sessions
+are automatically cleaned up after the retention period.
+
+**Unresolved sessions are never automatically deleted**, regardless of age.
+This upholds the "never destroy recoverable audio" principle. An unresolved
+session older than the retention window is logged as a warning on startup so
+the operator can investigate and decide.
+
+Dead-lettered WAV files within a resolved session follow the same retention
+policy as the rest of the session directory — they're deleted with the
+session when the retention period expires. If the operator wants to preserve
+dead letters longer, they can increase `TRANSCRIPTION_SPOOL_RETENTION_HOURS`
+or manually copy the files.
+
+### Disk capacity
+
+Sustained overload shifts the failure mode from transcript loss to disk
+exhaustion. Estimated spool usage: ~1.5MB per minute of captured speech
+(16kHz mono WAV). A 3.5-hour session with 6 speakers produces roughly
+500MB–1GB of spool data.
+
+Safeguards:
+
+- **Low-disk warning:** on each `commit()`, check available space. If below
+  `TRANSCRIPTION_LOW_DISK_MB` (default: 500), log a warning and post a
+  notice to the text channel.
+- **Critical-disk behavior:** if available space is below
+  `TRANSCRIPTION_CRITICAL_DISK_MB` (default: 100), refuse new commits and
+  log an error. The session continues with whatever segments are already
+  committed; the user is notified that new audio is being dropped due to
+  disk pressure.
+- **Cleanup of done WAVs during active sessions:** when a segment is ack'd,
+  its WAV file can be deleted immediately (the transcription result is in
+  the manifest). This reclaims disk space during long sessions without
+  waiting for session cleanup.
+
+### Spool path handling
+
+Manifest entries store WAV paths **relative to the session directory**, not
+as absolute container paths. On recovery, paths are resolved against the
+session directory. The recovery loader rejects paths containing `..`
+traversal or symlink escapes.
+
+### ID allocation
+
+Job IDs are allocated by a **monotonic counter persisted in the manifest
+header**. The header stores the next available ID. On `commit()`, the ID is
+assigned from the counter, the counter is incremented, and both the header
+update and the commit event are written in a single serialized mutation.
+
+WAV filenames use the same ID (zero-padded) so the manifest-to-file mapping
+is deterministic. This replaces the old `reserveId()` approach from
+`TranscriptionQueue`.
+
+### Shutdown ownership
+
+When the bot is shutting down:
+
+1. The scheduler stops claiming new work (checks a `draining` flag before
+   each `claim()`).
+2. In-flight processing attempts are allowed to complete up to the existing
+   15-second shutdown timeout.
+3. Any in-flight manifest writes (`ack`, `nack`) are allowed to flush.
+4. Jobs that were `processing` at shutdown time remain `processing` in the
+   manifest — restart recovery resets them to retryable.
+5. A final `checkpoint()` is called to persist the latest transcript state.
+
 ---
 
 ## Design Principles
 
 1. **Never destroy recoverable audio.** If a segment has a WAV on disk and
-   hasn't been transcribed, it stays on disk until it's either transcribed or
-   explicitly purged by retention policy.
+   hasn't been transcribed, it stays on disk until the session is fully
+   resolved and the retention period expires, or an operator explicitly
+   removes it.
 
 2. **Stop means stop capture, not stop processing.** `/transcribe stop`
    returns a partial transcript within seconds. Background processing
@@ -116,7 +282,7 @@ Rationale:
    mid-session, tell the user before they hit stop and discover gaps.
 
 4. **Progress means success, not terminal state.** The progress bar
-   distinguishes transcribed segments from failed/dead-lettered ones.
+   distinguishes transcribed segments from dead-lettered ones.
 
 ---
 
@@ -127,23 +293,37 @@ All phases build against this interface. Phase 1 implements
 touching any consumer code.
 
 ```ts
+// Session metadata persisted in the manifest header.
+type ManifestHeader = {
+  version: number; // schema version (starts at 1)
+  sessionId: string;
+  guildId: string;
+  voiceChannelId: string;
+  textChannelId: string;
+  startedAt: string; // ISO-8601
+  startedBy: string; // Discord user ID
+  participants: Array<{ userId: string; displayName: string }>;
+  sealed: boolean;
+  nextJobId: number;
+};
+
 // Segment reference committed to the manifest.
 type SegmentJob = {
   id: number;
   userId: string;
   displayName: string;
-  timestamp: Date;
+  timestamp: string; // ISO-8601
   durationMs: number;
-  spoolPath: string; // absolute path to WAV on disk
+  spoolPath: string; // relative to session directory
 };
 
 // Job lifecycle statuses in the manifest.
 type JobStatus =
-  | 'committed'   // written to manifest, not yet picked up
-  | 'processing'  // claimed by scheduler, inference in progress
-  | 'done'        // transcription result persisted
-  | 'failed'      // transient failure, will be retried
-  | 'dead_letter'; // permanently failed after max retries
+  | 'committed' // written to manifest, not yet picked up
+  | 'processing' // claimed by scheduler, inference in progress
+  | 'done' // transcription result persisted
+  | 'failed' // transient failure, will be retried
+  | 'dead_letter'; // permanently failed after max attempts
 
 // Returned when a job is claimed for processing.
 type ClaimedJob = SegmentJob & {
@@ -152,16 +332,25 @@ type ClaimedJob = SegmentJob & {
 
 // The durable queue contract.
 interface TranscriptionJobQueue {
+  // Session metadata from the manifest header.
+  readonly header: Readonly<ManifestHeader>;
+
   // Write-ahead: commit a segment to the manifest before processing.
-  commit(segment: SegmentJob): Promise<void>;
+  // Assigns a durable ID from the manifest counter.
+  commit(segment: Omit<SegmentJob, 'id'>): Promise<SegmentJob>;
 
   // Claim the next available job for processing. Returns null if empty.
+  // Retryable jobs (committed, failed, processing-reset-on-recovery) are
+  // eligible. Claims are serialized — concurrent calls never return the
+  // same job.
   claim(): Promise<ClaimedJob | null>;
 
-  // Mark a job as successfully transcribed. Result text is persisted.
+  // Mark a job as successfully transcribed. Result text is persisted
+  // in the manifest. The WAV file may be deleted by the caller after ack.
   ack(jobId: number, result: string): Promise<void>;
 
-  // Mark a job as transiently failed. Will be retried up to maxRetries.
+  // Mark a job as transiently failed. Will be retried if attempts remain.
+  // If attempts >= maxAttempts, auto-promotes to dead_letter.
   nack(jobId: number, error: string): Promise<void>;
 
   // Mark a job as permanently failed. Spool file is retained.
@@ -171,6 +360,9 @@ interface TranscriptionJobQueue {
   // Called on /transcribe stop.
   seal(): Promise<void>;
 
+  // Update participant list (called when new speakers join mid-session).
+  addParticipant(userId: string, displayName: string): Promise<void>;
+
   // True when the manifest is sealed and all jobs are done or dead_letter.
   isFullyResolved(): boolean;
 
@@ -178,13 +370,22 @@ interface TranscriptionJobQueue {
   stats(): QueueStats;
 
   // All completed transcription results, ordered by timestamp.
+  // Includes dead_letter entries as gap markers.
   completedResults(): TranscriptionResult[];
 
   // Persist current completed results to a checkpoint file.
   checkpoint(): Promise<void>;
 
-  // Load checkpoint + manifest from disk (used on restart recovery).
-  static recover(sessionDir: string): Promise<FileManifestQueue>;
+  // Compact the manifest WAL into a clean state snapshot.
+  compact(): Promise<void>;
+
+  // Recovery: load manifest + checkpoint from an existing session dir.
+  // Resets any jobs in 'processing' state to retryable.
+  // Cleans up leftover compaction temp files and orphan WAVs.
+  static recover(
+    sessionDir: string,
+    options: { maxAttempts: number },
+  ): Promise<FileManifestQueue>;
 }
 ```
 
@@ -200,63 +401,112 @@ builds the `FileManifestQueue` class and its tests in isolation. The existing
 
 Deliverables:
 
-- **`src/voice/durable_queue/manifest.ts`** — the manifest WAL.
-  - JSON-lines file (`manifest.jsonl`) in the session spool directory.
-  - Each line is an append-only event: `commit`, `claim`, `ack`, `nack`,
-    `dead_letter`, `seal`.
-  - On load, replay events to reconstruct current state.
-  - Writes use atomic write-temp-then-rename for crash safety.
-  - Compaction: after N events or on explicit call, rewrite the manifest as
-    a clean state snapshot to prevent unbounded growth.
+- **`src/voice/durable_queue/types.ts`** — shared types: `ManifestHeader`,
+  `SegmentJob`, `JobStatus`, `ClaimedJob`, `QueueStats`,
+  `TranscriptionResult`, and the `TranscriptionJobQueue` interface.
 
-- **`src/voice/durable_queue/file_manifest_queue.ts`** — implements the
-  `TranscriptionJobQueue` interface against the manifest WAL.
-  - `commit()` appends a `commit` event and creates the job as `committed`.
-  - `claim()` finds the oldest `committed` or `failed` (retryable) job,
-    appends a `claim` event, returns it as `processing`.
-  - `ack()` appends an `ack` event with the transcription result text.
-  - `nack()` appends a `nack` event. If `attempts >= maxRetries`, auto
-    promotes to `dead_letter`.
-  - `deadLetter()` appends a `dead_letter` event. Job is permanently skipped.
-  - `seal()` appends a `seal` event. No more `commit` events accepted.
+- **`src/voice/durable_queue/manifest.ts`** — the manifest WAL.
+  - JSONL file (`manifest.jsonl`) in the session directory.
+  - First line is always the header (session metadata, schema version, next
+    job ID, sealed state).
+  - Subsequent lines are append-only events: `commit`, `claim`, `ack`,
+    `nack`, `dead_letter`, `seal`, `add_participant`, `recovery_reset`.
+  - Normal writes: open in append mode, write one JSONL line, `fsync`.
+  - Recovery: replay all events to reconstruct state. Discard a trailing
+    incomplete line (safe under at-least-once).
+  - Compaction: write full state to temp file → `fsync` → `rename` over
+    manifest → `fsync` directory. Clean up leftover temp files on recovery.
+  - All mutations serialized through an internal async mutex.
+
+- **`src/voice/durable_queue/file_manifest_queue.ts`** — implements
+  `TranscriptionJobQueue` against the manifest WAL.
+  - Constructor takes session directory path, session metadata, and config
+    (max attempts, etc). Creates the directory and writes the initial header.
+  - `commit()` assigns an ID from the header counter, appends a `commit`
+    event, increments and persists the counter. Returns the full
+    `SegmentJob` with its assigned ID.
+  - `claim()` finds the oldest eligible job (`committed` or `failed` with
+    `attempts < maxAttempts`), appends a `claim` event, returns it.
+  - `ack(id, result)` appends an `ack` event with the transcription text.
+  - `nack(id, error)` appends a `nack` event. If `attempts >= maxAttempts`,
+    auto-promotes to `dead_letter` instead.
+  - `deadLetter(id, error)` appends a `dead_letter` event.
+  - `seal()` appends a `seal` event, updates the header.
+  - `addParticipant()` appends an `add_participant` event.
   - `isFullyResolved()` returns true when sealed and all jobs are `done` or
     `dead_letter`.
   - `stats()` returns counts by status.
-  - `completedResults()` returns `{ userId, displayName, timestamp, text }`
-    for all `done` jobs, sorted by timestamp.
+  - `completedResults()` returns transcript entries for all `done` jobs
+    (userId, displayName, timestamp, text) plus gap markers for
+    `dead_letter` jobs, sorted by timestamp.
+  - `compact()` rewrites the manifest via atomic replacement.
+  - `recover()` static method: loads an existing manifest, replays events,
+    resets any `processing` jobs to retryable via a `recovery_reset` event,
+    cleans up compaction temp files, logs orphan WAVs.
 
 - **`src/voice/durable_queue/checkpoint.ts`** — incremental transcript
   persistence.
-  - `checkpoint()` writes the current `completedResults()` to a
-    `checkpoint.json` file in the session directory.
-  - On recovery, load checkpoint first, then replay manifest to pick up any
-    results that were acked after the last checkpoint.
+  - `checkpoint()` writes `completedResults()` to `checkpoint.json` in the
+    session directory via atomic write-temp-then-rename.
+  - On recovery, loads the checkpoint first, then replays manifest events
+    for any results that were ack'd after the last checkpoint.
 
-- **`src/voice/durable_queue/types.ts`** — shared types and the
-  `TranscriptionJobQueue` interface definition.
+- **`src/voice/durable_queue/disk_util.ts`** — disk space checks.
+  - `checkDiskSpace(path)` returns available MB.
+  - Used by `commit()` to enforce low-disk and critical-disk thresholds.
+
+- **Startup spool validation** — a utility function that verifies the spool
+  base directory is writable and not a tmpfs. Logs a warning if persistence
+  is questionable.
+
+- **Docker volume** — add a named/host-mounted volume for the spool
+  directory to `docker-compose.yml`, shared between blue and green
+  containers. Update `TRANSCRIPTION_SPOOL_DIR` default to `/data/voice-spool`.
+  Include a deployment migration note for moving existing spool data.
 
 - **Configuration:**
-  - `TRANSCRIPTION_MAX_RETRIES` — existing, reused (default: 2).
-  - `TRANSCRIPTION_SPOOL_RETENTION_HOURS` — new (default: 72). Retention
-    window for incomplete session spool directories.
+  - `TRANSCRIPTION_SPOOL_DIR` — default changes to `/data/voice-spool`.
+  - `TRANSCRIPTION_JOB_MAX_ATTEMPTS` — new (default: 3). Total processing
+    attempts before dead letter.
+  - `TRANSCRIPTION_REQUEST_RETRIES` — renamed from
+    `TRANSCRIPTION_MAX_RETRIES` (default: 2). Per-request HTTP retries,
+    unchanged behavior.
+  - `TRANSCRIPTION_SPOOL_RETENTION_HOURS` — new (default: 72). Applies
+    only to fully resolved sessions.
+  - `TRANSCRIPTION_LOW_DISK_MB` — new (default: 500).
+  - `TRANSCRIPTION_CRITICAL_DISK_MB` — new (default: 100).
 
 Tests:
 
 - Commit writes a segment to the manifest; claim returns it.
 - Ack marks a job done; ack'd jobs are not re-claimed.
-- Nack marks a job failed; failed jobs are re-claimed up to maxRetries.
-- Nack beyond maxRetries auto-promotes to dead_letter.
+- Nack marks a job failed; failed jobs are re-claimed up to maxAttempts.
+- Nack beyond maxAttempts auto-promotes to dead_letter.
 - Dead-lettered jobs are never re-claimed.
 - Seal prevents further commits; isFullyResolved is accurate.
 - Manifest survives simulated crash: write events, reconstruct a new
-  `FileManifestQueue` from the same directory, verify state matches.
+  `FileManifestQueue` from the same directory via `recover()`, verify state.
+- Recovery resets `processing` jobs to retryable via `recovery_reset` event.
+  A crash-after-claim test: commit → claim → simulate crash → recover →
+  job is claimable again.
+- Recovery detects and cleans up leftover compaction temp files.
+- Recovery logs orphan WAVs (files on disk with no manifest entry).
 - Checkpoint persists completed results; recovery loads checkpoint then
   replays newer manifest events.
 - Compaction rewrites the manifest without changing logical state.
-- Atomic write: a crash mid-write does not corrupt the manifest (temp file
-  is cleaned up, last good state is preserved).
+  Concurrent operations are blocked during compaction.
+- Mutation serialization: concurrent `claim()` calls never return the same
+  job. Ack racing with checkpoint. Compaction racing with commit/ack.
+  Multiple simultaneous commits retaining every event.
+- Incomplete trailing JSONL line is discarded on recovery.
+- Header contains session metadata, schema version, and sealed state.
+- Spool paths are stored relative; absolute/traversal paths are rejected on
+  recovery.
+- Low-disk warning triggers at threshold; critical-disk refusal prevents
+  new commits.
 - Stats accurately reflect all statuses including mixed states.
-- completedResults returns only done jobs, sorted by timestamp.
+- completedResults returns done jobs plus dead_letter gap markers, sorted.
+- Spool validation detects tmpfs and logs a warning.
 
 ### Phase 2: Pipeline integration
 
@@ -269,61 +519,69 @@ Deliverables:
 
 - **Refactor `VoiceSession`** — replace `transcriptionQueue:
 TranscriptionQueue` with `jobQueue: TranscriptionJobQueue`. The session
-  now creates a `FileManifestQueue` pointed at its spool directory on start.
+  creates a `FileManifestQueue` with session metadata (guild ID, channel
+  IDs, session ID, start time, participants) pointed at the spool directory.
 
-- **Refactor `spoolAndQueueTranscription()`** — current flow is:
+- **Refactor `spoolAndQueueTranscription()`** — current flow:
   1. Reserve ID from in-memory queue.
   2. Write WAV via `SegmentSpool.writeSegment()`.
   3. Enqueue in-memory with a `transcribe` closure.
 
   New flow:
-  1. Write WAV via `SegmentSpool.writeSegment()` (unchanged).
-  2. `jobQueue.commit()` — segment is now durable.
-  3. The in-process scheduler picks it up via `claim()`.
+  1. Write WAV via `SegmentSpool.writeSegment()` + `fsync`.
+  2. `jobQueue.commit()` — segment is now durable with an assigned ID.
+  3. Signal the scheduler that work is available.
 
-- **Refactor the scheduler loop** — extract the concurrency pump from the
-  old `TranscriptionQueue` into a new `TranscriptionScheduler` class (or
-  inline in `VoiceManager`) that:
+  The WAV filename uses the ID returned by `commit()`. Since `commit()`
+  assigns the ID, the spool write must happen first with a temp name, then
+  rename to the final ID-based name after commit returns — OR the commit
+  accepts an already-written path. Choose whichever is simpler; document
+  the ordering.
+
+- **New `TranscriptionScheduler` class** — extracted from the old queue's
+  concurrency pump. Responsibilities:
   1. Calls `jobQueue.claim()` to get the next job.
-  2. Reads the WAV from `spoolPath`.
+  2. Reads the WAV from the spool path (resolved relative to session dir).
   3. Sends to Whisper via `TranscriptionClient`.
-  4. On success: `jobQueue.ack(id, result)`.
-  5. On transient failure: `jobQueue.nack(id, error)`.
-  6. On permanent failure: `jobQueue.deadLetter(id, error)`.
-  7. Respects the existing concurrency limit.
-  8. Pumps continuously while jobs are available.
+  4. On success: `jobQueue.ack(id, result)`, then delete the WAV file.
+  5. On failure (all request retries exhausted): `jobQueue.nack(id, error)`.
+  6. Respects `TRANSCRIPTION_CONCURRENCY` for max parallel workers.
+  7. Pumps continuously while `claim()` returns jobs.
+  8. Checks a `draining` flag before each `claim()` (for shutdown).
 
-- **Refactor `SegmentSpool`** — the spool class remains responsible for WAV
-  file I/O. Cleanup logic changes: `cleanup()` now only removes WAV files
-  for jobs that are `done`. WAV files for `committed`, `processing`,
-  `failed`, and `dead_letter` jobs are retained. Full directory removal only
-  happens via retention policy cleanup (Phase 1 config).
+- **Refactor `SegmentSpool`** — cleanup logic changes:
+  - `cleanup()` is removed as a blanket operation.
+  - Individual WAV files are deleted after `ack()` (by the scheduler).
+  - Full session directory removal only via retention policy cleanup.
 
 - **Refactor progress/stats callers** — all callers of the old
-  `queue.stats()` switch to `jobQueue.stats()`. The stats shape may change
-  slightly (add `dead_letter`, remove `timeout`).
+  `queue.stats()` switch to `jobQueue.stats()`. Stats shape changes:
+  `timeout` status is removed, `dead_letter` is added.
 
 - **Remove `TranscriptionQueue`** — the old class and its tests are deleted.
 
-- **Remove `markUnfinishedTimedOut()`** — this concept no longer exists. The
-  durable queue doesn't have a drain timeout that marks things as timed out.
-  Segments stay `committed` or `failed` and are retried or eventually
-  dead-lettered.
+- **Remove `markUnfinishedTimedOut()`** — the drain timeout concept is gone.
+  Segments stay `committed` or `failed` and are retried or dead-lettered.
+
+- **Remove `TRANSCRIPTION_DRAIN_TIMEOUT_MS`** — no longer applicable.
 
 Tests:
 
-- End-to-end: spool a segment → commit → scheduler claims → Whisper mock
-  returns text → ack → completedResults contains the text.
+- End-to-end: segment captured → WAV written → committed → scheduler claims
+  → Whisper mock returns text → ack → WAV deleted → completedResults
+  contains the text.
 - Transient failure: Whisper mock throws → nack → scheduler re-claims →
   succeeds on retry → ack.
-- Permanent failure: Whisper mock throws N+1 times → dead_letter → scheduler
-  skips it → other segments still process.
-- Spool cleanup removes only done WAVs; committed/failed/dead_letter WAVs
-  remain.
-- Stats reflect the new statuses correctly in all callers (progress message,
-  stop response, shutdown summary).
-- Existing tests that exercised `TranscriptionQueue` are migrated or replaced
-  with equivalent coverage against the new pipeline.
+- Permanent failure: Whisper mock exhausts all attempts → dead_letter →
+  scheduler skips → other segments still process.
+- WAV files for done segments are deleted; WAV files for committed/failed/
+  dead_letter segments remain.
+- Stats reflect the new statuses correctly in all callers.
+- Existing tests that exercised `TranscriptionQueue` are migrated or
+  replaced with equivalent coverage against the new pipeline.
+- Scheduler respects concurrency limit.
+- Scheduler stops claiming when draining flag is set.
+- Write ordering: WAV exists on disk before manifest commit.
 
 ### Phase 3: Decoupled stop + checkpointing
 
@@ -354,21 +612,23 @@ Deliverables:
 
 - **Completion notification** — when the background scheduler resolves the
   manifest after stop:
-  - If all segments are `done`: post "✅ Transcription complete — X/X
-    segments. Final transcript attached."
-  - If some are `dead_letter`: post "⚠️ Transcription finished — X/Y
-    segments transcribed, Z permanently failed. Final transcript attached."
-  - Attach the final `.txt` transcript.
+  - All done: "✅ Transcription complete — X/X segments. Final transcript
+    attached."
+  - Some dead_letter: "⚠️ Transcription finished — X/Y segments transcribed,
+    Z permanently failed. Final transcript attached."
+  - Attach the final `.txt` transcript with dead-letter gap markers.
 
-- **Graceful shutdown interaction** — if the bot is shutting down while a
-  background drain is running, `stopAllForShutdown()` checkpoints all
-  active sessions and exits. Restart recovery (Phase 5) picks them up.
+- **Shutdown interaction** — if the bot is shutting down while a background
+  drain is running:
+  1. Scheduler stops claiming (draining flag).
+  2. In-flight ack/nack writes flush.
+  3. `jobQueue.checkpoint()` called.
+  4. Jobs in `processing` state remain in the manifest — restart recovery
+     (Phase 4) resets them.
 
 - **Configuration:**
   - `TRANSCRIPTION_CHECKPOINT_INTERVAL_SEGMENTS` — new (default: 50).
-    Checkpoint every N completed segments.
   - `TRANSCRIPTION_CHECKPOINT_INTERVAL_MS` — new (default: 60000).
-    Checkpoint every M milliseconds.
 
 Tests:
 
@@ -376,17 +636,16 @@ Tests:
 - Partial transcript contains all segments completed at time of stop.
 - Background scheduler continues after stop and processes remaining segments.
 - Completion notification posts with accurate counts and final transcript.
+- Dead-letter segments appear as gap markers in the final transcript.
 - Checkpoint file is updated periodically during active session.
-- Graceful shutdown during background drain checkpoints and exits cleanly.
-- Final transcript includes segments completed both before and after stop.
-- Dead-lettered segments appear as `[segment N — transcription failed]` gaps
-  in the transcript with timestamps.
+- Shutdown during background drain checkpoints and exits cleanly.
+- Jobs in `processing` at shutdown remain in manifest for recovery.
 
 ### Phase 4: Restart recovery
 
-**Startup scanner discovers incomplete sessions and resumes them.** This is
-where the durable queue architecture pays off — recovery is just "load the
-manifest and start the scheduler."
+**Startup scanner discovers incomplete sessions and resumes them.** Recovery
+is loading the manifest and starting the scheduler — the durable queue
+architecture makes this mechanical.
 
 Deliverables:
 
@@ -394,45 +653,57 @@ Deliverables:
   - Scans the spool base directory for session directories containing a
     `manifest.jsonl`.
   - For each manifest, calls `FileManifestQueue.recover()` to reconstruct
-    state.
+    state. This replays events, resets `processing` jobs to retryable via
+    `recovery_reset` events, cleans up compaction temp files, and logs
+    orphan WAVs.
   - Skips fully resolved manifests (all `done` or `dead_letter`).
-  - For unresolved manifests: starts a background scheduler to process
-    remaining jobs.
+  - For unresolved manifests: starts a background `TranscriptionScheduler`
+    to process remaining jobs.
 
 - **Recovery notification** — for each recovered session, post a message to
-  the original text channel (channel ID is stored in the manifest):
+  the original text channel (ID from `ManifestHeader.textChannelId`):
 
   > "🔄 Recovered X unfinished segments from a previous session. Processing
   > now — updated transcript will be posted when complete."
 
-- **Deduplication** — the manifest tracks which segments are `done`. Recovery
-  only re-claims `committed` or `failed` segments. No duplicates.
+- **Deduplication** — the manifest tracks job status. Recovery only claims
+  jobs that are `committed`, `failed`, or reset from `processing`. Ack'd
+  jobs are never re-processed. Transcript assembly deduplicates by job ID.
 
-- **Retention cleanup integration** — the startup scanner also runs the
-  retention policy: remove spool directories older than
-  `TRANSCRIPTION_SPOOL_RETENTION_HOURS` that are either fully resolved or
-  expired.
+- **Retention cleanup integration** — the startup scanner also applies the
+  retention policy:
+  - Fully resolved sessions older than `TRANSCRIPTION_SPOOL_RETENTION_HOURS`
+    are deleted.
+  - Unresolved sessions older than the retention threshold are NOT deleted;
+    they are logged as a warning for operator attention.
+
+- **Instance lease guard** — recovery only runs on the active lease holder.
+  The standby instance in a blue/green deployment does not scan or process
+  the shared spool.
 
 - **Wire into bot startup** — `VoiceManager` calls the recovery module
   during initialization, after the Discord client is ready (needs channel
-  access for notifications).
+  access for notifications) and after the instance lease is acquired.
 
 Tests:
 
 - Bot restart discovers incomplete spool directory and resumes processing.
-- Only `committed` and `failed` segments are re-claimed (no duplicates).
+- Recovery resets `processing` jobs (crash-after-claim → restart → job is
+  re-claimed and processed).
+- Only unfinished segments are re-claimed (no duplicates in transcript).
 - Recovery notification posts to the correct text channel.
 - Final transcript after recovery merges checkpoint results with newly
-  completed results.
-- Fully resolved spool directories are cleaned up on startup.
-- Spool directories older than retention threshold are cleaned up.
-- Recovery handles corrupt/partial manifests gracefully (logs warning, skips).
+  completed results correctly.
+- Fully resolved sessions are cleaned up after retention period.
+- Unresolved sessions older than retention are logged but NOT deleted.
+- Corrupt/partial manifests are logged and skipped gracefully.
+- Orphan WAVs are logged during recovery.
+- Standby instance does not perform recovery.
 
 ### Phase 5: Backpressure warnings + progress semantics
 
 **Operational visibility.** Mid-session warnings when the queue falls behind,
-and accurate progress reporting that distinguishes success from terminal
-state.
+adaptive segment sizing under load, and accurate progress reporting.
 
 Deliverables:
 
@@ -440,7 +711,10 @@ Deliverables:
   - Enqueue rate (commits/min over a sliding window).
   - Completion rate (acks/min over a sliding window).
   - Current queue depth (committed + failed count).
-  - Estimated drain time: `depth / completionRate` minutes.
+  - Estimated drain time: uses **weighted audio duration** (sum of remaining
+    segments' `durationMs` divided by observed processing rate) rather than
+    raw segment count, since adaptive segment sizing changes the average
+    segment length.
 
 - **Mid-session backpressure warning** — when estimated drain time exceeds
   `TRANSCRIPTION_BACKLOG_WARN_MINUTES` (default: 10), post a single warning
@@ -449,17 +723,33 @@ Deliverables:
   > "⚠️ Transcription is falling behind. ~X segments queued, estimated Y
   > minutes to catch up. Your transcript will still be fully captured, but
   > there may be a delay after you stop."
-  > Warning cooldown: at most one warning per session, or one every N minutes
-  > if the situation worsens significantly (e.g., estimated drain doubles).
+  > Warning cooldown: at most one every 15 minutes if the situation worsens
+  > significantly (e.g., estimated drain doubles).
 
-- **Adaptive segment sizing (backpressure flow control)** — when queue depth
-  crosses a high-water mark, signal the `SegmentBuffer` to widen its silence
-  gap threshold (e.g., 700ms → 1500ms). This produces fewer, longer segments,
-  reducing per-segment overhead. When the queue drains below a low-water mark,
-  restore the original threshold. This is TCP-style congestion control: adjust
-  send rate, don't drop data.
+- **Adaptive segment sizing (backpressure flow control)** — requires changes
+  to `SegmentBuffer` and `AudioReceiver`:
+  - Make `SegmentBuffer.silenceLimitMs` **mutable** (currently `readonly`).
+    Add a `setSilenceLimit(ms)` method.
+  - Add a **pressure broadcast** mechanism: the scheduler exposes a pressure
+    state (normal / elevated / critical) based on queue depth thresholds.
+    `VoiceManager` subscribes to pressure changes and calls
+    `setSilenceLimit()` on every active `SegmentBuffer` (one per speaker,
+    created inside `AudioReceiver`).
+  - Normal (below `TRANSCRIPTION_BACKPRESSURE_LOW_WATER`): original silence
+    limit (700ms).
+  - Elevated (above `TRANSCRIPTION_BACKPRESSURE_HIGH_WATER`): widened limit
+    (`TRANSCRIPTION_BACKPRESSURE_SILENCE_MS`, default: 1500ms).
+  - **Segment cap:** the widened silence limit must still respect `maxSegmentMs`
+    (30s default, which is Whisper's effective window). No change needed if
+    `maxSegmentMs` is already enforced.
+  - **Existing segments** that are mid-accumulation when the threshold changes
+    should adopt the new silence limit immediately (checked on each chunk).
+  - **Throughput validation:** include a test that verifies longer segments
+    actually reduce total processing time (fewer round-trips) rather than
+    just producing proportionally longer requests. If the relationship isn't
+    clearly beneficial, gate this feature behind a config flag.
 
-- **Progress semantics fix** — the progress display separates success from
+- **Progress semantics fix** — progress display separates success from
   terminal state:
 
   ```
@@ -468,33 +758,32 @@ Deliverables:
   0 queued · 0 in progress · 1776 transcribed · 1 dead letter
   ```
 
-  The percentage represents successfully transcribed segments. Dead-lettered
-  segments are counted separately, not toward 100%.
+  Percentage = done / total. Dead-lettered segments counted separately.
 
-- **Final status messages** distinguish three outcomes:
+- **Final status messages** distinguish outcomes:
   - All done: "✅ Transcription complete — 2529/2529 segments."
   - Partial with background: "⏳ 1776/2529 transcribed. Background
-    processing will continue — final transcript posted when done."
+    processing continues — final transcript posted when done."
   - Partial with dead letters: "⚠️ 2520/2529 segments transcribed. 9
     permanently failed. Final transcript attached."
 
 - **Configuration:**
   - `TRANSCRIPTION_BACKLOG_WARN_MINUTES` — new (default: 10).
   - `TRANSCRIPTION_BACKPRESSURE_HIGH_WATER` — new (default: 100).
-    Queue depth above which silence gap is widened.
   - `TRANSCRIPTION_BACKPRESSURE_LOW_WATER` — new (default: 25).
-    Queue depth below which silence gap is restored.
   - `TRANSCRIPTION_BACKPRESSURE_SILENCE_MS` — new (default: 1500).
-    Widened silence gap under backpressure.
 
 Tests:
 
 - Warning fires when estimated drain time exceeds threshold.
 - Warning does not repeat within cooldown period.
 - Warning is not emitted when queue is keeping pace.
-- Estimated drain time is approximately correct given measured throughput.
-- Backpressure widens silence gap when high-water mark is crossed.
+- Estimated drain time uses weighted audio duration, not segment count.
+- Backpressure widens silence gap on all active speaker buffers when
+  high-water mark is crossed.
 - Silence gap restores when queue drains below low-water mark.
+- Mid-accumulation segments adopt new silence limit.
+- Segment cap prevents segments from exceeding maxSegmentMs.
 - Progress bar percentage reflects transcribed count, not resolved count.
 - Final status message distinguishes all three outcome types.
 - Zero-queued and all-failed edge cases render correctly.
@@ -507,42 +796,41 @@ Deliverables:
 
 - **Synthetic overload test** — simulates a 3-hour session where segment
   arrival rate is 1.5x processing capacity. Whisper is mocked with a
-  configurable artificial delay. The test verifies:
-  - All segments eventually reach `done` or `dead_letter`.
+  configurable artificial delay. Verifies:
+  - Every segment reaches `done` or `dead_letter` — none silently discarded.
   - `/transcribe stop` returns a partial transcript within seconds.
   - Background drain completes without data loss.
   - Checkpoints are written periodically throughout.
-  - The final transcript includes every segment.
+  - Final transcript includes every segment (successful text or dead-letter
+    gap marker).
   - Progress UI is accurate at each stage.
 
 - **Restart-mid-drain test** — simulates a bot crash during background drain
   (after stop, while segments are still processing). Reconstructs from the
   manifest and verifies:
-  - Recovery picks up unfinished segments.
-  - No segments are duplicated in the final transcript.
+  - Recovery picks up unfinished segments including those in `processing`.
+  - No segments are duplicated in the final transcript (dedup by job ID).
   - Results from before and after the restart merge correctly.
 
 - **Whisper throughput benchmark** — document sustained segments/min at
   concurrency 1, 2, 3, 4 with representative multi-speaker Discord audio on
-  the current yharnam EPYC setup. Establish the real capacity ceiling for
-  the existing CPU-only configuration.
+  the current yharnam EPYC setup. Establish the real capacity ceiling.
 
-- **Capacity recommendation** — based on the benchmark, recommend default
-  concurrency setting and document the maximum number of concurrent speakers
-  that can be sustained without queue growth. Note where GPU offload or a
-  second Whisper instance would extend the ceiling.
+- **Capacity recommendation** — based on benchmark, recommend default
+  concurrency and document the maximum speaker count sustainable without
+  queue growth. Note where GPU offload or a second Whisper instance would
+  extend the ceiling.
 
-- **Tuning guide** — document env var recommendations for different session
-  profiles:
+- **Tuning guide** — document env var recommendations for session profiles:
   - 2 speakers / 30 min (light)
   - 4 speakers / 1 hr (medium)
   - 6+ speakers / 3+ hr (heavy — the incident scenario)
 
 Tests:
 
-- Overload test completes with 100% segment coverage (done + dead_letter).
+- Overload test completes with 100% segment coverage.
 - Restart-mid-drain test produces a correct, deduplicated final transcript.
-- Benchmark results are documented in `docs/` or `plans/`.
+- Benchmark results documented in `docs/` or `plans/`.
 
 ---
 
@@ -550,30 +838,39 @@ Tests:
 
 ### New variables
 
-| Variable                                     | Default | Phase | Description                            |
-| -------------------------------------------- | ------- | ----- | -------------------------------------- |
-| `TRANSCRIPTION_SPOOL_RETENTION_HOURS`        | `72`    | 1     | Hours to retain incomplete spool dirs  |
-| `TRANSCRIPTION_CHECKPOINT_INTERVAL_SEGMENTS` | `50`    | 3     | Checkpoint every N completed segments  |
-| `TRANSCRIPTION_CHECKPOINT_INTERVAL_MS`       | `60000` | 3     | Checkpoint every M milliseconds        |
-| `TRANSCRIPTION_BACKLOG_WARN_MINUTES`         | `10`    | 5     | Warn when estimated drain exceeds this |
-| `TRANSCRIPTION_BACKPRESSURE_HIGH_WATER`      | `100`   | 5     | Queue depth to trigger backpressure    |
-| `TRANSCRIPTION_BACKPRESSURE_LOW_WATER`       | `25`    | 5     | Queue depth to release backpressure    |
-| `TRANSCRIPTION_BACKPRESSURE_SILENCE_MS`      | `1500`  | 5     | Widened silence gap under backpressure |
+| Variable                                     | Default             | Phase | Description                                 |
+| -------------------------------------------- | ------------------- | ----- | ------------------------------------------- |
+| `TRANSCRIPTION_SPOOL_DIR`                    | `/data/voice-spool` | 1     | Changed default from `/tmp/spritebot-voice` |
+| `TRANSCRIPTION_JOB_MAX_ATTEMPTS`             | `3`                 | 1     | Processing attempts before dead letter      |
+| `TRANSCRIPTION_SPOOL_RETENTION_HOURS`        | `72`                | 1     | Retention for fully resolved sessions       |
+| `TRANSCRIPTION_LOW_DISK_MB`                  | `500`               | 1     | Warn on commit when disk below this         |
+| `TRANSCRIPTION_CRITICAL_DISK_MB`             | `100`               | 1     | Refuse commits when disk below this         |
+| `TRANSCRIPTION_CHECKPOINT_INTERVAL_SEGMENTS` | `50`                | 3     | Checkpoint every N completed segments       |
+| `TRANSCRIPTION_CHECKPOINT_INTERVAL_MS`       | `60000`             | 3     | Checkpoint every M milliseconds             |
+| `TRANSCRIPTION_BACKLOG_WARN_MINUTES`         | `10`                | 5     | Warn when estimated drain exceeds this      |
+| `TRANSCRIPTION_BACKPRESSURE_HIGH_WATER`      | `100`               | 5     | Queue depth to trigger backpressure         |
+| `TRANSCRIPTION_BACKPRESSURE_LOW_WATER`       | `25`                | 5     | Queue depth to release backpressure         |
+| `TRANSCRIPTION_BACKPRESSURE_SILENCE_MS`      | `1500`              | 5     | Widened silence gap under backpressure      |
+
+### Renamed variables
+
+| Old name                    | New name                        | Phase | Notes                                         |
+| --------------------------- | ------------------------------- | ----- | --------------------------------------------- |
+| `TRANSCRIPTION_MAX_RETRIES` | `TRANSCRIPTION_REQUEST_RETRIES` | 1     | Per-request HTTP retries (unchanged behavior) |
 
 ### Existing variables (unchanged)
 
-| Variable                           | Default                | Description                       |
-| ---------------------------------- | ---------------------- | --------------------------------- |
-| `TRANSCRIPTION_CONCURRENCY`        | `3`                    | Max parallel Whisper requests     |
-| `TRANSCRIPTION_REQUEST_TIMEOUT_MS` | `60000`                | Per-request HTTP timeout          |
-| `TRANSCRIPTION_MAX_RETRIES`        | `2`                    | Retry attempts before dead letter |
-| `TRANSCRIPTION_SPOOL_DIR`          | `/tmp/spritebot-voice` | Spool base directory              |
+| Variable                           | Default | Description                   |
+| ---------------------------------- | ------- | ----------------------------- |
+| `TRANSCRIPTION_CONCURRENCY`        | `3`     | Max parallel Whisper requests |
+| `TRANSCRIPTION_REQUEST_TIMEOUT_MS` | `60000` | Per-request HTTP timeout      |
 
 ### Removed variables
 
-| Variable                         | Reason                                                                                                           |
-| -------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
-| `TRANSCRIPTION_DRAIN_TIMEOUT_MS` | No longer applicable — stop is a commit point, not a deadline. Background processing continues until resolution. |
+| Variable                         | Phase | Reason                                     |
+| -------------------------------- | ----- | ------------------------------------------ |
+| `TRANSCRIPTION_DRAIN_TIMEOUT_MS` | 2     | Stop is a commit point, not a deadline     |
+| `TRANSCRIPTION_MAX_RETRIES`      | 1     | Renamed to `TRANSCRIPTION_REQUEST_RETRIES` |
 
 ---
 
@@ -584,21 +881,27 @@ This plan is complete when:
 - A 3+ hour session with ingestion rate exceeding processing rate produces a
   **complete** transcript (possibly delayed, never permanently lost).
 - Every captured segment reaches `done` or `dead_letter` — never silently
-  discarded.
+  discarded. Dead-lettered segments appear as explicit gap markers in the
+  transcript.
 - `/transcribe stop` returns a partial transcript within seconds regardless
   of queue depth.
 - Background processing continues from the durable manifest until fully
   resolved, with no drain timeout.
 - A bot crash and restart mid-session resumes unfinished segments from the
-  manifest without duplicates.
+  manifest without duplicates — including segments that were in `processing`
+  state at crash time.
 - Transcript checkpoints survive crashes and provide near-instant partial
   results on stop.
+- The spool directory survives container replacement and blue/green
+  deployment via a persistent host-mounted volume.
 - Mid-session warnings alert users when the queue is falling behind.
 - Backpressure flow control reduces segment rate under sustained overload.
 - Progress UI accurately distinguishes successfully transcribed segments
   from dead-lettered ones.
 - A synthetic overload regression test validates the full lifecycle including
   restart-mid-drain recovery.
+- Disk space exhaustion triggers warnings and graceful degradation, not
+  silent data loss.
 
 ---
 
@@ -608,13 +911,12 @@ This plan is complete when:
   durability. Reduces the likelihood of overload but doesn't eliminate the
   need for these safeguards.
 - **External message broker migration** — the `TranscriptionJobQueue`
-  interface is designed so a `BullMQQueue` or similar backend can be swapped
-  in later without consumer changes. Not needed at current scale.
+  interface supports a future `BullMQQueue` backend swap without consumer
+  changes. Not needed at current scale.
 - **Per-segment live posting** — removed by design in the original voice
   transcription plan.
-- **Transcript persistence to Postgres** — Phase 4 of the original voice
-  transcription plan. Still deferred.
-- **Multi-instance Whisper load balancing** — future capacity scaling option.
+- **Transcript persistence to Postgres** — deferred.
+- **Multi-instance Whisper load balancing** — future capacity option.
 
 ---
 
@@ -625,8 +927,10 @@ Phase 1 (durable queue)
   └─► Phase 2 (pipeline integration)
         ├─► Phase 3 (decoupled stop + checkpointing)
         │     └─► Phase 4 (restart recovery)
-        └─► Phase 5 (backpressure + progress)
-              └─► Phase 6 (overload regression test)
+        ├─► Phase 5 (backpressure + progress)
+        │
+        └───────────────────────────────────────►  Phase 6 (overload test)
+                                                    requires all of 1-5
 ```
 
 Phases 3→4 and 5 can be developed in parallel after Phase 2 ships.
@@ -635,5 +939,6 @@ Phase 6 requires all prior phases.
 ---
 
 _Plan drafted by Moldy on 2026-07-20, revised after architecture discussion
-with mads. Based on Sebastian's postmortem and cross-referenced with the
-shipped Transcription Reliability Phases 1–4._
+with mads and design review feedback from Codex. Based on Sebastian's
+postmortem and cross-referenced with the shipped Transcription Reliability
+Phases 1–4._
