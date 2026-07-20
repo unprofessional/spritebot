@@ -632,6 +632,17 @@ Phase 1 exit review:
   complexity signal or introducing multi-process requirements defaults the
   review toward BullMQ unless there is a documented reason to continue.
 
+**Phase 1 implementation checkpoint (2026-07-20): continue with
+FileManifestQueue.** The queue and WAL implementation total 676 physical lines
+including imports, whitespace, types used internally, and comments (below the
+approximate 800-line production-logic warning signal even before exclusions).
+The persistence invariants are covered by focused tests for concurrent claims
+and mutations, crash-tail truncation, poison-on-uncertain-write, compaction,
+checkpoint rebuilding, retry timing, interrupted-session recovery, resolution
+repair, path confinement, orphan retention, and restrictive permissions. No
+multi-process coordination or broader broker feature has entered scope. Revisit
+BullMQ before Phase 2 if review changes any of those facts.
+
 ### Phase 2: Pipeline integration
 
 **Replace the in-memory queue with the durable queue.** This is the
