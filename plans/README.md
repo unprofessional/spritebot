@@ -27,10 +27,11 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Completed
 
-| Plan                                                                               | Summary                                                                   |
-| ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
-| [done/discord-boundary-reliability.md](done/discord-boundary-reliability.md)       | Interaction responder, operation executor, full migration, CI enforcement |
-| [done/deployment-drain-readiness.md](done/deployment-drain-readiness.md)           | Graceful shutdown, drain, runtime lease, blue-green slots                 |
-| [done/transcription-reliability.md](done/transcription-reliability.md)             | Bounded queue, disk spool, partial dumps, progress UI                     |
-| [done/hotfix-interaction-expiry-crash.md](done/hotfix-interaction-expiry-crash.md) | Emergency fix for /create-character interaction expiry crash              |
-| [done/access-tier-audit.md](done/access-tier-audit.md)                             | Feature gate restructuring                                                |
+| Plan                                                                                   | Summary                                                                   |
+| -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [done/discord-boundary-reliability.md](done/discord-boundary-reliability.md)           | Interaction responder, operation executor, full migration, CI enforcement |
+| [done/deployment-drain-readiness.md](done/deployment-drain-readiness.md)               | Graceful shutdown, drain, runtime lease, blue-green slots                 |
+| [done/transcription-reliability.md](done/transcription-reliability.md)                 | Bounded queue, disk spool, partial dumps, progress UI                     |
+| [done/transcription-overload-resilience.md](done/transcription-overload-resilience.md) | Durable manifests, restart recovery, backpressure, overload validation    |
+| [done/hotfix-interaction-expiry-crash.md](done/hotfix-interaction-expiry-crash.md)     | Emergency fix for /create-character interaction expiry crash              |
+| [done/access-tier-audit.md](done/access-tier-audit.md)                                 | Feature gate restructuring                                                |
