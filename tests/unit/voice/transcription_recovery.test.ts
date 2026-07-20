@@ -125,6 +125,32 @@ describe('transcription restart recovery', () => {
     expect(transcribe).not.toHaveBeenCalled();
   });
 
+  test('caps concurrent recovery per guild and leaves excess sessions for a later scan', async () => {
+    await createPendingQueue('recovery-a');
+    await createPendingQueue('recovery-b');
+    const deferred = await createPendingQueue('recovery-c');
+    const logger = { log: jest.fn(), warn: jest.fn(), error: jest.fn() };
+    const onRecovered = jest.fn().mockResolvedValue(undefined);
+
+    const firstHandles = await recover({ logger, onRecovered });
+    await Promise.all(firstHandles.map((handle) => handle.completion));
+
+    expect(firstHandles).toHaveLength(2);
+    expect(onRecovered).toHaveBeenCalledTimes(2);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'deferred transcription recovery because guild concurrency cap was reached',
+      ),
+    );
+    await expect(access(deferred.spool.sessionDir)).resolves.toBeUndefined();
+
+    const secondHandles = await recover({ logger, onRecovered });
+    await Promise.all(secondHandles.map((handle) => handle.completion));
+
+    expect(secondHandles).toHaveLength(1);
+    expect(secondHandles[0].queue.header.sessionId).toBe('recovery-c');
+  });
+
   async function createQueue(sessionId: string, now: () => Date = () => new Date()) {
     const spool = new SegmentSpool({ guildId: 'guild', sessionId, baseDir });
     await spool.initialize();
@@ -141,6 +167,16 @@ describe('transcription restart recovery', () => {
       { maxAttempts: 3, retryBaseMs: 1, retryMaxMs: 1, jitter: () => 0, now },
     );
     return { queue, spool };
+  }
+
+  async function createPendingQueue(sessionId: string) {
+    const created = await createQueue(sessionId);
+    const spoolPath = await created.spool.writeSegment({
+      segmentId: `${sessionId}-pending`,
+      wav: Buffer.from(sessionId),
+    });
+    await created.queue.commit(job(`${sessionId}-pending`, spoolPath));
+    return created;
   }
 
   function recover(overrides: Record<string, unknown> = {}) {

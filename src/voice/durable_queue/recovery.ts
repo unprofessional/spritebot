@@ -21,6 +21,7 @@ type RecoveryOptions = {
   queueOptions: FileManifestQueueOptions;
   concurrency: number;
   retentionHours: number;
+  maxConcurrentSessionsPerGuild?: number;
   checkpointIntervalSegments: number;
   checkpointIntervalMs: number;
   isDraining: () => boolean;
@@ -39,6 +40,8 @@ export async function recoverTranscriptionSessions(
   const now = options.now ?? (() => new Date());
   const sessionDirs = await manifestSessionDirectories(options.baseDir);
   const recovered: RecoveredTranscriptionSession[] = [];
+  const recoveredByGuild = new Map<string, number>();
+  const maxConcurrentSessionsPerGuild = options.maxConcurrentSessionsPerGuild ?? 2;
 
   for (const sessionDir of sessionDirs) {
     try {
@@ -54,6 +57,15 @@ export async function recoverTranscriptionSessions(
       if (isOlderThan(queue.header.startedAt, options.retentionHours, now())) {
         logger.warn(`[voice] unresolved transcription spool is past retention: ${sessionDir}`);
       }
+
+      const guildRecoveryCount = recoveredByGuild.get(queue.header.guildId) ?? 0;
+      if (guildRecoveryCount >= maxConcurrentSessionsPerGuild) {
+        logger.warn(
+          `[voice] deferred transcription recovery because guild concurrency cap was reached guild=${queue.header.guildId} session=${queue.header.sessionId} cap=${maxConcurrentSessionsPerGuild}`,
+        );
+        continue;
+      }
+      recoveredByGuild.set(queue.header.guildId, guildRecoveryCount + 1);
 
       const interrupted = queue.recoveredCaptureInterrupted;
       await options.onRecovered(queue, interrupted).catch((err) => {

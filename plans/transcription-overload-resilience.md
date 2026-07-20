@@ -843,6 +843,9 @@ Deliverables:
     resolved. Retention cleanup may still apply to them.
   - For unresolved manifests: starts a background `TranscriptionScheduler`
     to process remaining jobs.
+  - Starts at most two recovered sessions per guild during one startup scan.
+    Additional unresolved manifests are retained and logged for a later scan
+    or operator review instead of creating unbounded recovery workers.
 
 - **Recovery notification** — for each recovered session, post a message to
   the original text channel (ID from `ManifestHeader.textChannelId`):
@@ -901,7 +904,9 @@ retention cleanup anchored to durable `resolvedAt`. Corrupt manifests and old
 unresolved sessions are retained and logged. Verification passed 88 suites /
 484 tests plus lint, Prettier, TypeScript build, and diff checks. Recovered
 sessions remain isolated by session directory and do not block a new live
-session for the guild; shared global concurrency control remains Phase 5 scope.
+session for the guild. Startup recovery caps active recovered sessions at two
+per guild and leaves any excess manifests on disk; shared global concurrency
+control remains Phase 5 scope.
 
 ### Phase 5: Backpressure warnings + progress semantics
 
