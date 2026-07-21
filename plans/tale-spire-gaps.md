@@ -11,7 +11,7 @@
 
 Track the remaining core-product, onboarding, distribution, and commercial work required before the TaleSpire integration can be marketed as a clean self-service SPRITE feature.
 
-NPC and creature modeling belongs to **SPRITEbot-prime**, not to the TaleSpire bridge. It is the first priority because it increases the base app's value independently and gives TaleSpire a stable canonical model to integrate with later. The remaining gaps cover selling the right plan, installing a second Discord app cleanly, and safely delivering the Symbiote.
+NPC and creature modeling belongs to **SPRITEbot-prime**, not to the TaleSpire bridge. It is the first priority because it increases the base app's value independently and establishes a game-platform-agnostic actor model. TaleSpire is the first adapter that can consume that foundation; Roll20 or another future integration should be able to use the same contract without another core schema redesign. The remaining gaps cover selling the right plan, installing a second Discord app cleanly, and safely delivering the Symbiote.
 
 ## Current State
 
@@ -32,9 +32,9 @@ That operator-assisted path is acceptable for testers, but not for a marketed pr
 
 NPCs and creatures are a base SPRITE product capability, not a TaleSpire-specific accommodation. GMs should be able to create, manage, reveal, and use them in SPRITEbot-prime even if they never install the TaleSpire integration.
 
-Implementing the canonical model first increases the value of the base app and prevents the integration from inventing a parallel entity model that later has to be migrated. TaleSpire should eventually import or link into this model; it should not define it.
+Implementing the canonical model first increases the value of the base app and prevents any integration from inventing a parallel entity model that later has to be migrated. TaleSpire, Roll20, and future platforms should import or link into this model; none of them should define it.
 
-This is more than making `character.user_id` nullable. NPCs and creatures have different control, selection, display, editing, and visibility semantics from player-owned characters.
+This is more than making `character.user_id` nullable. NPCs and creatures have different control, selection, display, editing, and visibility semantics from player-owned characters. The core model also needs a stable integration boundary so adapters can identify and synchronize entities without leaking provider-specific concepts into the domain schema.
 
 ### Product decisions — mads
 
@@ -53,6 +53,7 @@ This is more than making `character.user_id` nullable. NPCs and creatures have d
 - [ ] Define safe defaults. Recommendation: new NPCs/creatures default to `gm-only` and require an explicit reveal.
 - [ ] Define how a GM selects or speaks as an NPC/creature without disrupting their active player character.
 - [ ] Define lifecycle behavior: archive, delete, restore, transfer between games, and conversion between NPC/creature/player character where allowed.
+- [ ] Define the product-level sync policy for external platforms: whether SPRITE, the external platform, or the GM controls each field when both sides can edit it.
 
 ### Engineering tasks — Codex
 
@@ -63,6 +64,8 @@ This is more than making `character.user_id` nullable. NPCs and creatures have d
   1. generalize the existing character model into a shared actor/entity model;
   2. add a separate game-entity model that reuses character capabilities deliberately.
 - [ ] Trace the impact on stats, custom fields, inventory, RP proxying, active-character selection, autocomplete, public/link views, deletion/restoration, and existing URLs.
+- [ ] Define a provider-agnostic adapter contract for identifying, linking, importing, and synchronizing canonical entities.
+- [ ] Define source/provenance and conflict semantics for fields that can be edited in SPRITE or an external platform.
 - [ ] Recommend one strategy with migration, compatibility, rollout, and rollback plans.
 - [ ] Define authorization and visibility rules centrally before adding commands.
 
@@ -71,6 +74,7 @@ This is more than making `character.user_id` nullable. NPCs and creatures have d
 - [ ] Add the approved canonical entity schema and type discriminator.
 - [ ] Implement owner/controller semantics that do not require a Discord user for NPCs/creatures.
 - [ ] Add game-scoped authorization and visibility enforcement in the service layer.
+- [ ] Expose the approved provider-neutral entity/linking contract without adding TaleSpire- or Roll20-specific columns to the core entity tables.
 - [ ] Migrate existing player characters without changing their behavior.
 - [ ] Add DAOs and service tests for every entity kind and visibility state.
 
@@ -90,13 +94,15 @@ This is more than making `character.user_id` nullable. NPCs and creatures have d
 - [ ] Add end-to-end tests for a GM creating and using NPCs/creatures entirely inside SPRITEbot-prime.
 - [ ] Validate the feature with a real game workflow before designing the TaleSpire import UX.
 
-#### Phase P5 — TaleSpire follow-on
+#### Phase P5 — External adapter foundation and TaleSpire adapter
 
-- [ ] Update SPRITE-Integrations to target the approved canonical entity contract.
+- [ ] Implement provider/external-ID mappings at the adapter boundary rather than embedding TaleSpire identifiers in the canonical entity schema.
+- [ ] Update SPRITE-Integrations to target the approved canonical entity contract as the first adapter.
 - [ ] Let a GM link or import an observed TaleSpire creature as an existing/new SPRITE NPC or creature.
 - [ ] Keep unimported TaleSpire roster entries in the integration cache only.
-- [ ] Extend stat write-through, stale-link handling, and integration health reporting to the new canonical entities.
-- [ ] Preserve SPRITEbot-prime visibility rules; the integration must never widen visibility implicitly.
+- [ ] Extend stat write-through, stale-link handling, conflict handling, and integration health reporting to the new canonical entities.
+- [ ] Preserve SPRITEbot-prime authorization and visibility rules; no adapter may widen visibility implicitly.
+- [ ] Validate the contract by sketching how a second adapter such as Roll20 would map entities without core schema changes. A Roll20 implementation is not required for this phase.
 
 ### Acceptance criteria
 
@@ -107,6 +113,7 @@ This is more than making `character.user_id` nullable. NPCs and creatures have d
 - Visibility is enforced consistently across commands, autocomplete, RP proxying, notifications, API/web surfaces, and public links.
 - Existing player characters continue working without user-visible regressions.
 - TaleSpire integration work begins only after the canonical base-app contract is stable.
+- A future Roll20 or other platform adapter can link/sync entities through the same boundary without adding provider-specific fields to the core actor model.
 
 ---
 
@@ -263,14 +270,16 @@ Before public delivery, replace it with a revocable credential scoped to one gui
 
 This is the first product track and a prerequisite for TaleSpire entity import/linking. Its scope and value must stand on their own.
 
-### Track 2 — TaleSpire adaptation and public onboarding
+### Track 2 — Adapter layer, TaleSpire adaptation, and public onboarding
 
-1. Adapt SPRITE-Integrations linking/write-through to the stable SPRITEbot-prime entity contract.
-2. Decide the second-app setup flow and public product name.
-3. Replace the shared webhook secret with scoped campaign provisioning.
-4. Build SPRITE's guided `/talespire setup` and status handoff.
-5. Package and publish the versioned Symbiote artifact.
-6. Validate the complete clean-guild/clean-machine journey.
+1. Stabilize the provider-neutral external entity/linking contract.
+2. Adapt SPRITE-Integrations linking/write-through to that contract as adapter #1.
+3. Validate that a future Roll20-style adapter would not require core schema changes.
+4. Decide the second-app setup flow and public product name.
+5. Replace the shared webhook secret with scoped campaign provisioning.
+6. Build SPRITE's guided `/talespire setup` and status handoff.
+7. Package and publish the versioned Symbiote artifact.
+8. Validate the complete clean-guild/clean-machine journey.
 
 The provisioning and packaging designs may be researched while Track 1 is underway, but implementation must not force or preempt the core entity model.
 
@@ -298,7 +307,8 @@ This track is independent of TaleSpire while TaleSpire remains a Premium feature
 ### Codex — first assignment
 
 1. [ ] Produce the SPRITEbot-prime core-model design spike and ownership-assumption audit from Phase P1.
-2. [ ] Do not design the canonical model around TaleSpire payloads; treat TaleSpire as a later adapter/consumer.
+2. [ ] Define the provider-neutral adapter boundary and sync/conflict semantics as part of that design.
+3. [ ] Do not design the canonical model around TaleSpire or Roll20 payloads; treat both as later adapters/consumers.
 
 ### Codex — safe parallel research
 
@@ -322,5 +332,5 @@ TaleSpire marketing can move from private testers to public acquisition when:
 - [ ] The Symbiote has an official versioned download.
 - [ ] No deployment-wide secret is distributed to users.
 - [ ] Setup is resumable and status is diagnosable.
-- [ ] SPRITEbot-prime's canonical NPC/creature model is shipped and the TaleSpire adapter targets it.
+- [ ] SPRITEbot-prime's game-agnostic canonical NPC/creature model is shipped and the TaleSpire adapter targets its provider-neutral contract.
 - [ ] The complete journey has been tested in a clean guild with a clean TaleSpire installation.
