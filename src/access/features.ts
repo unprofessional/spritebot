@@ -13,6 +13,9 @@ export type FeatureKey =
   | 'pro:transcription' // voice transcription
   | 'integrations:talespire'; // TaleSpire bridge access
 
+/** Explicit interaction access policy. `public` means no entitlement gate is required. */
+export type FeaturePolicy = FeatureKey | 'public';
+
 /** Optional pretty labels for UI/receipts/logs */
 export const FEATURE_LABELS: Record<FeatureKey, string> = {
   core: 'Core',
@@ -31,7 +34,7 @@ export const FEATURE_LABELS: Record<FeatureKey, string> = {
  *
  * Tweak as your packaging evolves. This is a safe, user-friendly default.
  */
-export const CommandPolicy: Record<string, FeatureKey> = {
+export const CommandPolicy: Record<string, FeaturePolicy> = {
   // === Free (core) ===
   'view-character': 'core',
   'list-characters': 'core',
@@ -42,6 +45,13 @@ export const CommandPolicy: Record<string, FeatureKey> = {
   'switch-game': 'core',
   roll: 'core',
   help: 'core',
+  subscribe: 'public',
+  support: 'public',
+  verify: 'public',
+  'verify-greeting': 'public',
+  admin: 'public',
+  gift: 'public',
+  'toggle-bypass': 'public',
 
   // === Premium (stateful) ===
   'create-character': 'rpg:characters',
