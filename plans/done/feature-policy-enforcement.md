@@ -1,6 +1,6 @@
 # Plan: Feature Policy Enforcement
 
-> **Status:** TODO — low-hanging fruit
+> **Status:** Completed and archived (2026-07-21)
 
 ## Problem
 
@@ -27,7 +27,8 @@ Make CI fail when any registered command or component handler is missing a featu
 
 - `CommandPolicy` already exists for slash commands
 - `ComponentPolicy` (or equivalent) needs to exist for button/select/modal custom ID prefixes
-- Every entry maps to a `FeatureKey` — there is no `unknown` escape hatch
+- Every entry maps to a `FeatureKey` or the explicit `public` policy — there is no implicit or
+  `unknown` escape hatch
 - Read-only navigation (like `goBackToCharacter`, `goBackToGame`) maps to `core`
 - Mutating actions map to their respective feature tier
 
@@ -38,10 +39,10 @@ Make CI fail when any registered command or component handler is missing a featu
 
 ## Tasks
 
-- [ ] 1. Create or extend the component policy map in `src/access/features.ts`
-- [ ] 2. Ensure all existing component handlers have entries (audit current state)
-- [ ] 3. Write the enforcement test that cross-references registrations against policy maps
-- [ ] 4. Verify CI catches a simulated missing entry (add a fake handler, confirm test fails, remove it)
+- [x] 1. Create or extend the component policy map in `src/access/features.ts`
+- [x] 2. Ensure all existing component handlers have entries (audit current state)
+- [x] 3. Write the enforcement test that cross-references registrations against policy maps
+- [x] 4. Verify CI catches a simulated missing entry (add a fake handler, confirm test fails, remove it)
 
 ## Notes
 
