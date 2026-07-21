@@ -7,6 +7,7 @@ jest.mock('../../../src/access/authorize', () => ({
 import {
   AUTHORIZATION_UNAVAILABLE_MSG,
   guardCommand,
+  guardComponent,
   UPGRADE_MSG,
 } from '../../../src/access/guards';
 
@@ -34,6 +35,24 @@ describe('authorization guard failure copy', () => {
     mockAuthorizeInteraction.mockResolvedValue({ ok: false, reason: 'NOT_INCLUDED' });
 
     await expect(guardCommand(commandInteraction())).resolves.toBe(UPGRADE_MSG);
+  });
+
+  test('allows explicitly public commands without a guild or entitlement lookup', async () => {
+    await expect(
+      guardCommand({ commandName: 'support', user: { id: 'user-1' }, guild: null } as never),
+    ).resolves.toBe(true);
+    expect(mockAuthorizeInteraction).not.toHaveBeenCalled();
+  });
+
+  test('allows explicitly public components without an entitlement lookup', async () => {
+    await expect(
+      guardComponent({
+        customId: 'supportVerify:verify',
+        user: { id: 'user-1' },
+        guild: null,
+      } as never),
+    ).resolves.toBe(true);
+    expect(mockAuthorizeInteraction).not.toHaveBeenCalled();
   });
 });
 

@@ -1,5 +1,5 @@
 // src/access/components_policy.ts
-import type { FeatureKey } from './features';
+import type { FeaturePolicy } from './features';
 
 /**
  * Component (customId prefix) → required feature mapping.
@@ -12,7 +12,7 @@ import type { FeatureKey } from './features';
  * - Game/stat template admin → 'rpg:game-admin'
  * - Character create/edit/delete/visibility → 'rpg:characters'
  */
-export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
+export const ComponentPolicy: Array<[prefix: string, policy: FeaturePolicy]> = [
   // ===== GAME / STAT TEMPLATE ADMIN (gated) =====
   ['defineStats:', 'rpg:game-admin'],
   ['editGameStats:', 'rpg:game-admin'],
@@ -20,6 +20,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['finishStatSetup:', 'rpg:game-admin'],
   ['togglePublishGame:', 'rpg:game-admin'],
   ['confirmDeleteStat:', 'rpg:game-admin'],
+  ['confirmPurgeOrphans:', 'public'],
   ['deleteGame:', 'rpg:game-admin'],
   ['confirmDeleteGame:', 'rpg:game-admin'],
   ['restoreGameDropdown', 'rpg:game-admin'],
@@ -74,7 +75,7 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['cancel_inventory_item_action:', 'core'], // cancel action
   ['cancel_clear_inventory', 'core'], // cancel action
   ['cancelIcDelete:', 'core'], // cancel action
-  ['supportVerify:', 'core'], // support-server role verification
+  ['supportVerify:', 'public'], // support-server role verification
   ['charPage:', 'core'], // pagination on char views
   ['goBackToCharacter:', 'core'], // nav
   ['goBackToGame:', 'core'], // nav
@@ -88,4 +89,5 @@ export const ComponentPolicy: Array<[prefix: string, feature: FeatureKey]> = [
   ['help:role:', 'core'], // help navigation
   ['help:category:', 'core'], // help navigation
   ['help:back', 'core'], // help navigation
+  ['preparedModal:', 'public'], // process-local activation; submission is authoritatively gated
 ];
