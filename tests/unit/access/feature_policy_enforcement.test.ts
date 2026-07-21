@@ -1,64 +1,120 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
+import ts from 'typescript';
 
 import { ComponentPolicy } from '../../../src/access/components_policy';
 import { CommandPolicy } from '../../../src/access/features';
 
 const projectRoot = join(__dirname, '../../..');
 
-function source(path: string): string {
-  return readFileSync(join(projectRoot, path), 'utf8');
+function sourceFile(path: string): ts.SourceFile {
+  const absolutePath = join(projectRoot, path);
+  return ts.createSourceFile(
+    absolutePath,
+    readFileSync(absolutePath, 'utf8'),
+    ts.ScriptTarget.Latest,
+    true,
+    ts.ScriptKind.TS,
+  );
+}
+
+function visit(node: ts.Node, callback: (node: ts.Node) => void): void {
+  callback(node);
+  ts.forEachChild(node, (child) => visit(child, callback));
+}
+
+function stringValue(node: ts.Node | undefined): string | null {
+  return node && (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node))
+    ? node.text
+    : null;
 }
 
 function registeredCommandNames(): string[] {
-  // Command coverage is derived from the production command modules themselves. The existing e2e
-  // registration suite proves that each module loads and registers; this scan extracts only the
-  // top-level builder name (the first setName call in each file), not subcommands or options.
-  const { readdirSync } = require('node:fs') as typeof import('node:fs');
+  // The first setName call by source position is the command builder's name. Later calls belong to
+  // subcommands, choices, and options. The production registration e2e suite separately proves
+  // that every command module loads and registers.
   return readdirSync(join(projectRoot, 'src/commands'))
     .filter((file) => file.endsWith('.ts'))
     .map((file) => {
-      const match = source(`src/commands/${file}`).match(/\.setName\('([^']+)'\)/);
-      expect(match).not.toBeNull();
-      return match![1];
+      const calls: Array<{ name: string; position: number }> = [];
+      visit(sourceFile(`src/commands/${file}`), (node) => {
+        if (!ts.isCallExpression(node) || !ts.isPropertyAccessExpression(node.expression)) return;
+        if (node.expression.name.text !== 'setName') return;
+        const name = stringValue(node.arguments[0]);
+        if (name) calls.push({ name, position: node.getStart() });
+      });
+      calls.sort((left, right) => left.position - right.position);
+      expect(calls).not.toHaveLength(0);
+      return calls[0].name;
     });
 }
 
-function literalPrefixes(handlerSource: string): Set<string> {
+function literalRoutePrefixes(file: ts.SourceFile): Set<string> {
   const prefixes = new Set<string>();
 
-  for (const match of handlerSource.matchAll(/customId\.startsWith\('([^']+)'\)/g)) {
-    prefixes.add(match[1]);
-  }
-  for (const match of handlerSource.matchAll(/customId === '([^']+)'/g)) {
-    prefixes.add(match[1]);
-  }
+  visit(file, (node) => {
+    if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+      const receiver = node.expression.expression;
+      if (
+        ts.isIdentifier(receiver) &&
+        receiver.text === 'customId' &&
+        node.expression.name.text === 'startsWith'
+      ) {
+        const prefix = stringValue(node.arguments[0]);
+        if (prefix) prefixes.add(prefix);
+      }
+    }
+
+    if (
+      ts.isBinaryExpression(node) &&
+      (node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken ||
+        node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsToken)
+    ) {
+      const leftIsCustomId = ts.isIdentifier(node.left) && node.left.text === 'customId';
+      const rightIsCustomId = ts.isIdentifier(node.right) && node.right.text === 'customId';
+      const route = leftIsCustomId
+        ? stringValue(node.right)
+        : rightIsCustomId
+          ? stringValue(node.left)
+          : null;
+      if (route) prefixes.add(route);
+    }
+  });
 
   return prefixes;
 }
 
-function buttonRegexPrefixes(handlerSource: string): Set<string> {
+function prefixesFromRouteRegex(pattern: string): string[] {
+  const simple = pattern.match(/^\^([A-Za-z][A-Za-z0-9_-]*:?)/)?.[1];
+  if (simple === 'help:') return ['help:role:', 'help:back'];
+  if (simple) return [simple];
+
+  const alternatives = pattern.match(/^\^\(\?:([A-Za-z0-9_|-]+)\):/)?.[1];
+  return alternatives ? alternatives.split('|').map((alternative) => `${alternative}:`) : [];
+}
+
+function regexRoutePrefixes(file: ts.SourceFile): Set<string> {
   const prefixes = new Set<string>();
-
-  for (const match of handlerSource.matchAll(/\/\^([A-Za-z][A-Za-z0-9_-]*:?)/g)) {
-    prefixes.add(match[1]);
-  }
-
-  const grouped = handlerSource.match(/\^\(\?:([^)]*)\)/)?.[1];
-  if (grouped) {
-    for (const alternative of grouped.split('|')) prefixes.add(`${alternative}:`);
-  }
-
-  // The help route branches below the common prefix. Both branches are registered explicitly in
-  // ComponentPolicy, so retain their actual policy boundaries instead of treating all help IDs as
-  // one route.
-  if (handlerSource.includes('/^help:(?:role:')) {
-    prefixes.delete('help:');
-    prefixes.add('help:role:');
-    prefixes.add('help:back');
-  }
-
+  visit(file, (node) => {
+    if (!ts.isRegularExpressionLiteral(node) || !node.text.startsWith('/^')) return;
+    const closingSlash = node.text.lastIndexOf('/');
+    const pattern = node.text.slice(1, closingSlash);
+    for (const prefix of prefixesFromRouteRegex(pattern)) prefixes.add(prefix);
+  });
   return prefixes;
+}
+
+function registeredComponentPrefixes(): Set<string> {
+  const buttonRoutes = sourceFile('src/handlers/button_handlers/index.ts');
+  const selectRoutes = sourceFile('src/handlers/select_menu_handlers/index.ts');
+  const modalRoutes = sourceFile('src/handlers/modal_handlers/index.ts');
+
+  return new Set([
+    ...literalRoutePrefixes(buttonRoutes),
+    ...regexRoutePrefixes(buttonRoutes),
+    ...literalRoutePrefixes(selectRoutes),
+    ...literalRoutePrefixes(modalRoutes),
+  ]);
 }
 
 function hasComponentPolicy(prefix: string): boolean {
@@ -79,16 +135,7 @@ describe('feature policy registration completeness', () => {
   });
 
   test('every registered button, select, and modal route has an explicit feature policy', () => {
-    const buttonSource = source('src/handlers/button_handlers/index.ts');
-    const registeredPrefixes = new Set([
-      ...literalPrefixes(buttonSource),
-      ...buttonRegexPrefixes(buttonSource),
-      ...literalPrefixes(source('src/handlers/select_menu_handlers/index.ts')),
-      ...literalPrefixes(source('src/handlers/modal_handlers/index.ts')),
-    ]);
-    const missing = missingComponentPolicies(registeredPrefixes);
-
-    expect(missing).toEqual([]);
+    expect(missingComponentPolicies(registeredComponentPrefixes())).toEqual([]);
   });
 
   test('reports a newly registered component without a policy', () => {
