@@ -4,13 +4,12 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Active
 
-| Plan                                                           | Status                                |
-| -------------------------------------------------------------- | ------------------------------------- |
-| [ux-bdd-stories.md](ux-bdd-stories.md)                         | TODO — UX behavior specs              |
-| [discord-ui-testing.md](discord-ui-testing.md)                 | TODO — browser-driven UI tests        |
-| [feature-policy-enforcement.md](feature-policy-enforcement.md) | TODO — low-hanging fruit              |
-| [game-delete.md](game-delete.md)                               | Merged — production migration pending |
-| [whisper-gpu-cpu-failover.md](whisper-gpu-cpu-failover.md)     | Ready for implementation              |
+| Plan                                                           | Status                         |
+| -------------------------------------------------------------- | ------------------------------ |
+| [ux-bdd-stories.md](ux-bdd-stories.md)                         | TODO — UX behavior specs       |
+| [discord-ui-testing.md](discord-ui-testing.md)                 | TODO — browser-driven UI tests |
+| [feature-policy-enforcement.md](feature-policy-enforcement.md) | TODO — low-hanging fruit       |
+| [whisper-gpu-cpu-failover.md](whisper-gpu-cpu-failover.md)     | Ready for implementation       |
 
 ## Future
 
@@ -37,3 +36,4 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | [done/onboarding-nudges.md](done/onboarding-nudges.md)                                 | Contextual onboarding and zero-game guidance                              |
 | [done/support-server-verification.md](done/support-server-verification.md)             | Support-server verification and role assignment Phase 1                   |
 | [done/voice-transcription.md](done/voice-transcription.md)                             | Initial voice transcription rollout, superseded by resilience plans       |
+| [done/game-delete.md](done/game-delete.md)                                             | Recoverable game deletion; production schema verified                     |

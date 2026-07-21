@@ -1,6 +1,11 @@
 # GM Game Deletion
 
-**Status:** Implemented — merge and production migration pending.
+**Status:** Completed and archived (production verified 2026-07-21).
+
+Production verification on `shinralabs` confirmed that `public.game.deleted_at`
+exists as a nullable `timestamp without time zone`. The live database contained
+four soft-deleted games at verification time, confirming the deployed feature is
+actively using the migrated column.
 
 ## Overview
 
