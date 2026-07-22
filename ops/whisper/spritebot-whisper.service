@@ -13,7 +13,9 @@ ExecStart=/usr/bin/node %h/.local/lib/spritebot/whisper-supervisor.mjs
 Restart=on-failure
 RestartSec=10
 TimeoutStopSec=15
-KillMode=control-group
+# Send SIGTERM only to the supervisor; kill the entire cgroup if systemd's
+# TimeoutStopSec expires. The supervisor owns graceful child shutdown.
+KillMode=mixed
 UMask=0077
 NoNewPrivileges=true
 

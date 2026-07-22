@@ -29,7 +29,7 @@ Installed artifact verification after the canary:
 | Artifact                    | SHA-256                                                            |
 | --------------------------- | ------------------------------------------------------------------ |
 | `whisper-supervisor.mjs`    | `dc95be9087740eeedbb99d5fa7935b3391c45cbed5364ce0be9ed803352e6977` |
-| `spritebot-whisper.service` | `12e014740fe15d65591d8ba18a6524c65edb25b1cffd5f8749689229ff2dbc0d` |
+| `spritebot-whisper.service` | `d4355c3ccd4c066892c7717d007996ed02a954fd2910cb55cf5b14f8362cd01f` |
 | `whisper.env`               | `0b1977a9aa139dff2b02eb361ee76214f77a229b990cf2f7f5a5a42be7efe0c1` |
 
 The installed whisper.cpp revision remains `6fc7c33b4c3a2cec83e4b65abd5e96a890480375`.
