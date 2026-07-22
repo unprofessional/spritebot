@@ -3,7 +3,9 @@ const rollCommand = require('../../../src/commands/roll') as {
 };
 
 import { GameDAO } from '../../../src/dao/game.dao';
+import { query } from '../../../src/db/client';
 import { createCharacter } from '../../../src/services/character.service';
+import * as d20RollService from '../../../src/services/d20_roll.service';
 import { getOrCreatePlayer, setCurrentGame } from '../../../src/services/player.service';
 
 function createInteraction({
@@ -29,7 +31,9 @@ function createInteraction({
 
   return {
     interaction: {
+      id: `interaction-${userId}-${dice}`,
       guildId,
+      channelId: 'channel-1',
       member: memberDisplayName === null ? null : { displayName: memberDisplayName },
       user: {
         id: userId,
@@ -134,6 +138,58 @@ describe('/roll', () => {
         allowedMentions: { parse: [] },
       }),
     );
+  });
+
+  test('records only exact 1d20 rolls for distribution analysis', async () => {
+    const d20 = createInteraction({ dice: '1D20' });
+    await rollCommand.execute(d20.interaction, d20.responderContext);
+
+    const otherRoll = createInteraction({ userId: 'user-2', dice: '2d20' });
+    await rollCommand.execute(otherRoll.interaction, otherRoll.responderContext);
+
+    const recorded = await query<{
+      interaction_id: string;
+      result: number;
+      user_id: string;
+      guild_id: string | null;
+      channel_id: string;
+    }>(
+      `SELECT interaction_id, result, user_id, guild_id, channel_id
+       FROM d20_roll
+       WHERE interaction_id LIKE 'interaction-user-%'`,
+    );
+
+    expect(recorded.rows).toEqual([
+      {
+        interaction_id: 'interaction-user-1-1D20',
+        result: expect.any(Number),
+        user_id: 'user-1',
+        guild_id: 'guild-1',
+        channel_id: 'channel-1',
+      },
+    ]);
+    expect(recorded.rows[0].result).toBeGreaterThanOrEqual(1);
+    expect(recorded.rows[0].result).toBeLessThanOrEqual(20);
+  });
+
+  test('still returns a 1d20 result when telemetry storage fails', async () => {
+    const recordSpy = jest
+      .spyOn(d20RollService, 'recordD20Roll')
+      .mockRejectedValueOnce(new Error('database unavailable'));
+    const { interaction, reply, responderContext } = createInteraction({ dice: '1d20' });
+
+    await rollCommand.execute(interaction, responderContext);
+
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining('rolled `1d20`'),
+      }),
+    );
+    expect(warnSpy).toHaveBeenCalledWith(
+      '[roll] Failed to record 1d20 telemetry:',
+      expect.any(Error),
+    );
+    recordSpy.mockRestore();
   });
 
   test('explains unsupported dice expressions', async () => {

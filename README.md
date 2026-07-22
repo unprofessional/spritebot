@@ -109,7 +109,9 @@ main character sheet.
 
 Players can use `/roll dice:<expression>` for quick table rolls. The command accepts strict dice
 notation like `2d20` or `2D20`. Supported rolls range from `1d2` through `15d999`, and the roller
-uses Node's cryptographic random integer generator instead of `Math.random`.
+uses Node's cryptographic random integer generator instead of `Math.random`. Exact `1d20` rolls are
+retained for long-term distribution analysis with the outcome, Discord user/server/channel context,
+interaction ID, and timestamp. Other dice expressions are not retained.
 
 ### Roleplay Proxy
 
@@ -208,6 +210,7 @@ Primary tables include:
 - `rp_proxy_message`
 - `thread_bumps`
 - `entitlements_cache`
+- `d20_roll`
 - `gifted_guilds`
 - `lifecycle_notification_channel`
 
