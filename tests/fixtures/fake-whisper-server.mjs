@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
 
@@ -11,6 +11,10 @@ const behavior = process.env[`FAKE_${mode.toUpperCase()}_BEHAVIOR`] ?? 'healthy'
 const marker = process.env.FAKE_SIGNAL_MARKER;
 const stuckPidMarker = process.env.FAKE_STUCK_PID_MARKER;
 
+if (args.includes('--query-gpu=index')) {
+  process.exit(process.env.FAKE_GPU_PROBE_BEHAVIOR === 'fail' ? 25 : 0);
+}
+
 if (args.includes('--stuck-listener')) {
   const stuckServer = http.createServer((_request, response) => response.writeHead(200).end());
   stuckServer.listen(Number(valueAfter('--port')), valueAfter('--host'), () => {
@@ -20,6 +24,13 @@ if (args.includes('--stuck-listener')) {
 }
 
 if (behavior === 'fail_start') process.exit(23);
+if (behavior === 'fail_start_count') {
+  const startMarker = process.env.FAKE_GPU_START_MARKER;
+  const starts =
+    startMarker && existsSync(startMarker) ? Number(readFileSync(startMarker, 'utf8')) : 0;
+  if (startMarker) writeFileSync(startMarker, String(starts + 1));
+  if (starts < Number(process.env.FAKE_GPU_FAIL_STARTS ?? 1)) process.exit(23);
+}
 
 const startedAt = Date.now();
 const server = http.createServer((request, response) => {

@@ -21,11 +21,16 @@ journalctl --user -u spritebot-whisper.service -f
 systemctl --user restart spritebot-whisper.service
 ```
 
-A deliberate restart always tries GPU first. CPU fallback remains active until an operator restarts
-the unit; the supervisor does not interrupt healthy CPU service to probe for GPU recovery.
+A deliberate restart always tries GPU first. While CPU fallback is healthy, the supervisor waits
+five minutes and then runs lightweight `nvidia-smi` probes once per minute. Three consecutive
+successes earn a controlled GPU promotion attempt. CPU remains available throughout the probes and
+is stopped only for the actual promotion. If Whisper cannot start successfully on GPU, CPU is
+restored immediately and the next probe cycle waits 15 minutes.
 
-The structured `mode_ready`, `mode_failed`, and `mode_transition` journal events identify the active
-mode and failover reason. Confirm the child arguments when needed:
+The structured `mode_ready`, `mode_failed`, `mode_transition`, `gpu_recovery_probe`, and
+`mode_promotion` journal events identify the active mode and failover or promotion reason. A
+successful NVIDIA probe only permits an attempt; the Whisper `/health` startup check remains the
+authority for a successful promotion. Confirm the child arguments when needed:
 
 ```bash
 pgrep -a -x whisper-server
