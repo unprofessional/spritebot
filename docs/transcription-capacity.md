@@ -2,7 +2,41 @@
 
 ## Current yharnam benchmark
 
-Measured on 2026-07-20 against the deployed CPU-only Whisper service:
+### GPU-first supervisor (2026-07-22)
+
+`yharnam` now runs `spritebot-whisper.service`, which supervises one whisper.cpp child and keeps the
+existing `192.168.7.73:9700` endpoint. It starts CUDA GPU mode first and automatically replaces a
+failed GPU child with local CPU mode (`-ng -t 24`). CPU remains active until an operator deliberately
+restarts the service.
+
+Canary results using the same 11-second JFK WAV and large-v3 model:
+
+| Mode         | Eight-request wall time | Segments/min | Notes                                              |
+| ------------ | ----------------------- | ------------ | -------------------------------------------------- |
+| GPU, CUDA0   | 2.172 s                 | 220.98       | `-t 4`, RTX 3090 Ti                                |
+| CPU fallback | 57.899 s                | 8.29         | `-ng -t 24`, reconstructed from journal timestamps |
+
+The CPU benchmark interval is bounded by the first batch request start and the immediately following
+request start after all eight batch requests completed. GPU and CPU produced the same expected JFK
+transcript. A forced GPU command failure produced a healthy CPU listener in three seconds. A service
+stop left no child process or port listener before a clean GPU restart.
+
+Operational commands, forced-fallback testing, and rollback are documented in
+`ops/whisper/README.md`.
+
+Installed artifact verification after the canary:
+
+| Artifact                    | SHA-256                                                            |
+| --------------------------- | ------------------------------------------------------------------ |
+| `whisper-supervisor.mjs`    | `dc95be9087740eeedbb99d5fa7935b3391c45cbed5364ce0be9ed803352e6977` |
+| `spritebot-whisper.service` | `12e014740fe15d65591d8ba18a6524c65edb25b1cffd5f8749689229ff2dbc0d` |
+| `whisper.env`               | `0b1977a9aa139dff2b02eb361ee76214f77a229b990cf2f7f5a5a42be7efe0c1` |
+
+The installed whisper.cpp revision remains `6fc7c33b4c3a2cec83e4b65abd5e96a890480375`.
+
+### Original CPU baseline (2026-07-20)
+
+Measured on 2026-07-20 against the previously deployed CPU-only Whisper service:
 
 - Host: `yharnam`, AMD EPYC 7402P, 24 cores / 48 threads.
 - Server: whisper.cpp `v1.9.1-81-g6fc7c33b` (`6fc7c33b`).

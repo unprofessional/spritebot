@@ -1,6 +1,6 @@
 # Whisper GPU-First / CPU-Fallback Plan
 
-> **Status:** Ready for implementation
+> **Status:** Completed and archived (2026-07-22)
 > **Target host:** `yharnam`
 > **Owning repo:** SPRITEbot (source-controlled operational assets)
 > **Endpoint contract:** `http://192.168.7.73:9700/inference`
@@ -143,6 +143,8 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 
 ### Phase 1: Source-controlled supervisor
 
+**Checkpoint:** Complete.
+
 - Add `ops/whisper/whisper-supervisor.sh` (or a dependency-free Node script if
   signal handling and HTTP polling are materially clearer).
 - Add unit and environment templates plus an idempotent installation script.
@@ -151,6 +153,9 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 - Validate configuration before stopping the currently working service.
 
 ### Phase 2: yharnam canary and failure injection
+
+**Checkpoint:** Complete. Forced GPU failure reached CPU readiness in three seconds; JFK succeeded
+in GPU, CPU fallback, and restored GPU modes.
 
 - Install under the `hunter` user without enabling it initially.
 - Stop the legacy GPU unit, start the supervisor, and confirm logs report GPU
@@ -164,6 +169,9 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 - Test `SIGTERM` and confirm no child remains and port 9700 is released.
 
 ### Phase 3: Cutover and operations documentation
+
+**Checkpoint:** Complete. `spritebot-whisper.service` is enabled, the legacy unit is disabled, and
+operations/rollback instructions and fresh capacity measurements are recorded.
 
 - Enable `spritebot-whisper.service` and disable the legacy
   `whisper-server.service`.
