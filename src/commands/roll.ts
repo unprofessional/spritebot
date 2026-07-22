@@ -11,6 +11,7 @@ import {
 } from '../utils/dice_roller';
 import { getCharacterById } from '../services/character.service';
 import { getCurrentCharacter } from '../services/player.service';
+import { recordD20Roll } from '../services/d20_roll.service';
 import type {
   InteractionCommandContext,
   InteractionDispatchPolicySource,
@@ -53,6 +54,19 @@ module.exports = {
     }
 
     const result = rollDice(parsed.numDice, parsed.numSides);
+    try {
+      await recordD20Roll({
+        numDice: result.numDice,
+        numSides: result.numSides,
+        result: result.total,
+        interactionId: interaction.id,
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId,
+      });
+    } catch (err) {
+      console.warn('[roll] Failed to record 1d20 telemetry:', err);
+    }
     const rollerName = await resolveRollerDisplayName(interaction);
 
     return responder.respond({
