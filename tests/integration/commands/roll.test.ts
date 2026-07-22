@@ -150,11 +150,9 @@ describe('/roll', () => {
     const recorded = await query<{
       interaction_id: string;
       result: number;
-      user_id: string;
-      guild_id: string | null;
-      channel_id: string;
+      created_at: string;
     }>(
-      `SELECT interaction_id, result, user_id, guild_id, channel_id
+      `SELECT interaction_id, result, created_at
        FROM d20_roll
        WHERE interaction_id LIKE 'interaction-user-%'`,
     );
@@ -163,9 +161,7 @@ describe('/roll', () => {
       {
         interaction_id: 'interaction-user-1-1D20',
         result: expect.any(Number),
-        user_id: 'user-1',
-        guild_id: 'guild-1',
-        channel_id: 'channel-1',
+        created_at: expect.anything(),
       },
     ]);
     expect(recorded.rows[0].result).toBeGreaterThanOrEqual(1);

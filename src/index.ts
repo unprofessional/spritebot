@@ -9,6 +9,7 @@ import { initializeEntitlementEvents } from './client/entitlement_events';
 import { initializeCommands } from './client/initial_commands';
 import { initializeRoleplayProxy } from './client/rp_proxy_events';
 import { initializeSupportVerificationEvents } from './client/support_verification_events';
+import { ensureD20RollTable } from './db/d20_roll_schema';
 import { closeDb, getPoolStats } from './db/client';
 import { initializeDB, testPgConnection } from './db/db';
 import { sendLifecycleNotification } from './services/lifecycle_notification.service';
@@ -97,6 +98,7 @@ async function main(): Promise<void> {
   try {
     await testPgConnection();
     await initializeDB();
+    await ensureD20RollTable();
     await ensureRuntimeInstanceLeaseTable();
 
     const instanceId = runtimeInstanceId || createRuntimeInstanceId();

@@ -60,9 +60,6 @@ module.exports = {
         numSides: result.numSides,
         result: result.total,
         interactionId: interaction.id,
-        userId: interaction.user.id,
-        guildId: interaction.guildId,
-        channelId: interaction.channelId,
       });
     } catch (err) {
       console.warn('[roll] Failed to record 1d20 telemetry:', err);

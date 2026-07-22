@@ -8,9 +8,6 @@ describe('D20RollDAO', () => {
     const input = {
       interactionId: 'interaction-1',
       result: 1,
-      userId: 'user-1',
-      guildId: 'guild-1',
-      channelId: 'channel-1',
     };
 
     await dao.create(input);
@@ -18,12 +15,9 @@ describe('D20RollDAO', () => {
 
     const recorded = await query<{
       result: number;
-      user_id: string;
-      guild_id: string | null;
-      channel_id: string;
       created_at: string;
     }>(
-      `SELECT result, user_id, guild_id, channel_id, created_at
+      `SELECT result, created_at
        FROM d20_roll
        WHERE interaction_id = $1`,
       ['interaction-1'],
@@ -32,9 +26,6 @@ describe('D20RollDAO', () => {
     expect(recorded.rows).toEqual([
       {
         result: 1,
-        user_id: 'user-1',
-        guild_id: 'guild-1',
-        channel_id: 'channel-1',
         created_at: expect.anything(),
       },
     ]);
@@ -45,9 +36,6 @@ describe('D20RollDAO', () => {
       dao.create({
         interactionId: 'interaction-invalid',
         result: 21,
-        userId: 'user-1',
-        guildId: null,
-        channelId: 'dm-1',
       }),
     ).rejects.toThrow();
   });
