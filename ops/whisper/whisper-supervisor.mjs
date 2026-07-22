@@ -29,6 +29,13 @@ function loadConfig() {
     healthIntervalMs: positiveInteger('WHISPER_HEALTH_INTERVAL_SECONDS', 5) * 1000,
     healthFailureThreshold: positiveInteger('WHISPER_HEALTH_FAILURE_THRESHOLD', 3),
     shutdownTimeoutMs: positiveInteger('WHISPER_SHUTDOWN_TIMEOUT_SECONDS', 10) * 1000,
+    gpuProbeBinary: process.env.WHISPER_GPU_PROBE_BINARY || '/usr/bin/nvidia-smi',
+    gpuRecoveryCooldownMs: positiveInteger('WHISPER_GPU_RECOVERY_COOLDOWN_SECONDS', 300) * 1000,
+    gpuRecoveryProbeIntervalMs:
+      positiveInteger('WHISPER_GPU_RECOVERY_PROBE_INTERVAL_SECONDS', 60) * 1000,
+    gpuRecoverySuccessThreshold: positiveInteger('WHISPER_GPU_RECOVERY_SUCCESS_THRESHOLD', 3),
+    gpuRecoveryBackoffMs: positiveInteger('WHISPER_GPU_RECOVERY_BACKOFF_SECONDS', 900) * 1000,
+    gpuProbeTimeoutMs: positiveInteger('WHISPER_GPU_PROBE_TIMEOUT_SECONDS', 10) * 1000,
   };
   for (const [name, value] of [
     ['WHISPER_BINARY', config.binary],
@@ -117,8 +124,36 @@ async function waitUntilReady(config, child, mode, attempt) {
   return { ok: false, reason: 'startup_timeout' };
 }
 
-async function monitor(config, child, exit) {
+function probeGpu(config) {
+  return new Promise((resolve) => {
+    const child = spawn(
+      config.gpuProbeBinary,
+      ['-i', config.gpuDevice, '--query-gpu=index', '--format=csv,noheader,nounits'],
+      {
+        env: { ...process.env, CUDA_VISIBLE_DEVICES: config.gpuDevice },
+        stdio: 'ignore',
+      },
+    );
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      resolve(ok);
+    };
+    const timeout = setTimeout(() => {
+      child.kill('SIGKILL');
+      finish(false);
+    }, config.gpuProbeTimeoutMs);
+    child.once('error', () => finish(false));
+    child.once('exit', (code) => finish(code === 0));
+  });
+}
+
+async function monitor(config, child, exit, mode, recoveryCooldownMs = 0) {
   let failures = 0;
+  let recoverySuccesses = 0;
+  let nextRecoveryProbeAt = Date.now() + recoveryCooldownMs;
   while (true) {
     const outcome = await Promise.race([exit, sleep(config.healthIntervalMs).then(() => null)]);
     if (outcome?.kind === 'exit') {
@@ -127,6 +162,19 @@ async function monitor(config, child, exit) {
     if (await probeHealth(config)) failures = 0;
     else failures += 1;
     if (failures >= config.healthFailureThreshold) return `health_failures:${failures}`;
+    if (mode === 'cpu' && Date.now() >= nextRecoveryProbeAt) {
+      const ok = await probeGpu(config);
+      recoverySuccesses = ok ? recoverySuccesses + 1 : 0;
+      log('gpu_recovery_probe', {
+        mode: 'cpu',
+        reason: ok ? 'probe_succeeded' : 'probe_failed',
+        pid: child.pid ?? null,
+        successes: recoverySuccesses,
+        required: config.gpuRecoverySuccessThreshold,
+      });
+      if (recoverySuccesses >= config.gpuRecoverySuccessThreshold) return 'gpu_recovery';
+      nextRecoveryProbeAt = Date.now() + config.gpuRecoveryProbeIntervalMs;
+    }
   }
 }
 
@@ -197,19 +245,44 @@ async function main() {
     return;
   }
 
-  for (const [index, mode] of ['gpu', 'cpu'].entries()) {
-    const attempt = index + 1;
+  let mode = 'gpu';
+  let attempt = 0;
+  let promotionAttempt = false;
+  let cpuRecoveryCooldownMs = config.gpuRecoveryCooldownMs;
+  while (!stopping) {
+    attempt += 1;
     if (stopping) return;
     activeChild = startChild(config, mode, attempt);
     const readiness = await waitUntilReady(config, activeChild, mode, attempt);
+    let modeReason = readiness.ok ? null : readiness.reason;
     if (!readiness.ok) {
       log('mode_failed', { mode, reason: readiness.reason, pid: activeChild.pid ?? null, attempt });
     } else {
-      const reason = await monitor(config, activeChild, readiness.exit);
+      const reason = await monitor(
+        config,
+        activeChild,
+        readiness.exit,
+        mode,
+        mode === 'cpu' ? cpuRecoveryCooldownMs : 0,
+      );
+      modeReason = reason;
       if (stopping) return;
-      log('mode_failed', { mode, reason, pid: activeChild.pid ?? null, attempt });
+      if (mode === 'cpu' && reason === 'gpu_recovery') {
+        log('mode_promotion', {
+          mode: 'gpu',
+          reason: 'gpu_probe_threshold_met',
+          pid: activeChild.pid ?? null,
+          attempt: attempt + 1,
+        });
+      } else {
+        log('mode_failed', { mode, reason, pid: activeChild.pid ?? null, attempt });
+      }
     }
-    await stopChild(activeChild, config.shutdownTimeoutMs, 'mode_failed');
+    await stopChild(
+      activeChild,
+      config.shutdownTimeoutMs,
+      modeReason === 'gpu_recovery' ? 'gpu_promotion' : 'mode_failed',
+    );
     if (!(await waitForFreePort(config))) {
       log('port_release_failed', {
         mode,
@@ -220,11 +293,29 @@ async function main() {
       process.exitCode = 1;
       return;
     }
-    if (mode === 'gpu')
-      log('mode_transition', { mode: 'cpu', reason: 'gpu_failed', pid: null, attempt: 2 });
+    if (mode === 'gpu') {
+      cpuRecoveryCooldownMs = promotionAttempt
+        ? config.gpuRecoveryBackoffMs
+        : config.gpuRecoveryCooldownMs;
+      log('mode_transition', {
+        mode: 'cpu',
+        reason: promotionAttempt ? 'gpu_promotion_failed' : 'gpu_failed',
+        pid: null,
+        attempt: attempt + 1,
+      });
+      mode = 'cpu';
+      promotionAttempt = false;
+      continue;
+    }
+    if (modeReason === 'gpu_recovery') {
+      mode = 'gpu';
+      promotionAttempt = true;
+      continue;
+    }
+    break;
   }
 
-  log('supervisor_failed', { reason: 'gpu_and_cpu_failed', pid: null, attempt: 2 });
+  log('supervisor_failed', { reason: 'gpu_and_cpu_failed', pid: null, attempt });
   process.exitCode = 1;
 }
 

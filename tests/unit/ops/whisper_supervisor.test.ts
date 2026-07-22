@@ -37,6 +37,12 @@ async function startSupervisor(extraEnv: NodeJS.ProcessEnv = {}) {
       WHISPER_HEALTH_INTERVAL_SECONDS: '1',
       WHISPER_HEALTH_FAILURE_THRESHOLD: '1',
       WHISPER_SHUTDOWN_TIMEOUT_SECONDS: '1',
+      WHISPER_GPU_PROBE_BINARY: fakeServer,
+      WHISPER_GPU_RECOVERY_COOLDOWN_SECONDS: '1',
+      WHISPER_GPU_RECOVERY_PROBE_INTERVAL_SECONDS: '1',
+      WHISPER_GPU_RECOVERY_SUCCESS_THRESHOLD: '2',
+      WHISPER_GPU_RECOVERY_BACKOFF_SECONDS: '2',
+      WHISPER_GPU_PROBE_TIMEOUT_SECONDS: '1',
       ...extraEnv,
     },
   });
@@ -57,6 +63,22 @@ async function waitForOutput(
       throw new Error(`Exited before ${text}: ${running.output()}`);
     if (Date.now() >= deadline)
       throw new Error(`Timed out waiting for ${text}: ${running.output()}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+async function waitForOccurrences(
+  running: Awaited<ReturnType<typeof startSupervisor>>,
+  text: string,
+  count: number,
+  timeoutMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (running.output().split(text).length - 1 < count) {
+    if (running.child.exitCode !== null)
+      throw new Error(`Exited before ${count} occurrences of ${text}: ${running.output()}`);
+    if (Date.now() >= deadline)
+      throw new Error(`Timed out waiting for ${count} occurrences of ${text}: ${running.output()}`);
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
@@ -97,6 +119,44 @@ test('falls back to CPU after the GPU health threshold', async () => {
   const running = await startSupervisor({ FAKE_GPU_BEHAVIOR: 'unhealthy_after_ready' });
   await waitForOutput(running, '"event":"mode_ready","mode":"cpu"');
   expect(running.output()).toContain('health_failures:1');
+  await stop(running);
+});
+
+test('promotes healthy CPU fallback after consecutive GPU recovery probes', async () => {
+  const marker = join(mkdtempSync(join(tmpdir(), 'whisper-supervisor-')), 'gpu-starts');
+  const running = await startSupervisor({
+    FAKE_GPU_BEHAVIOR: 'fail_start_count',
+    FAKE_GPU_START_MARKER: marker,
+  });
+  await waitForOutput(running, '"event":"mode_ready","mode":"cpu"');
+  await waitForOutput(running, '"event":"mode_promotion","mode":"gpu"');
+  await waitForOutput(running, '"event":"mode_ready","mode":"gpu"', 10_000);
+  expect(running.output()).toContain('"successes":2,"required":2');
+  await stop(running);
+});
+
+test('keeps CPU active when a GPU recovery probe fails', async () => {
+  const running = await startSupervisor({
+    FAKE_GPU_BEHAVIOR: 'fail_start',
+    FAKE_GPU_PROBE_BEHAVIOR: 'fail',
+  });
+  await waitForOutput(running, '"event":"gpu_recovery_probe"');
+  expect(running.output()).toContain('"reason":"probe_failed"');
+  expect(running.output()).not.toContain('"event":"mode_promotion"');
+  await stop(running);
+});
+
+test('restores CPU and applies backoff after an earned GPU promotion fails', async () => {
+  const marker = join(mkdtempSync(join(tmpdir(), 'whisper-supervisor-')), 'gpu-starts');
+  const running = await startSupervisor({
+    FAKE_GPU_BEHAVIOR: 'fail_start_count',
+    FAKE_GPU_FAIL_STARTS: '2',
+    FAKE_GPU_START_MARKER: marker,
+  });
+  await waitForOutput(running, '"event":"mode_promotion","mode":"gpu"');
+  await waitForOutput(running, '"reason":"gpu_promotion_failed"');
+  await waitForOccurrences(running, '"event":"mode_ready","mode":"cpu"', 2);
+  expect(Number(readFileSync(marker, 'utf8'))).toBe(2);
   await stop(running);
 });
 

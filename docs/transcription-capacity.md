@@ -6,8 +6,9 @@
 
 `yharnam` now runs `spritebot-whisper.service`, which supervises one whisper.cpp child and keeps the
 existing `192.168.7.73:9700` endpoint. It starts CUDA GPU mode first and automatically replaces a
-failed GPU child with local CPU mode (`-ng -t 24`). CPU remains active until an operator deliberately
-restarts the service.
+failed GPU child with local CPU mode (`-ng -t 24`). While CPU is healthy, consecutive slow-cadence
+GPU probes can earn a controlled promotion attempt. A failed Whisper GPU startup restores CPU and
+backs off before probing again.
 
 Canary results using the same 11-second JFK WAV and large-v3 model:
 
@@ -19,7 +20,9 @@ Canary results using the same 11-second JFK WAV and large-v3 model:
 The CPU benchmark interval is bounded by the first batch request start and the immediately following
 request start after all eight batch requests completed. GPU and CPU produced the same expected JFK
 transcript. A forced GPU command failure produced a healthy CPU listener in three seconds. A service
-stop left no child process or port listener before a clean GPU restart.
+stop left no child process or port listener before a clean GPU restart. A later automatic-promotion
+canary deliberately failed the first GPU start, reached CPU readiness, recorded two successful
+device probes, gracefully stopped CPU, and returned to healthy GPU mode on attempt three.
 
 Operational commands, forced-fallback testing, and rollback are documented in
 `ops/whisper/README.md`.
@@ -28,9 +31,9 @@ Installed artifact verification after the canary:
 
 | Artifact                    | SHA-256                                                            |
 | --------------------------- | ------------------------------------------------------------------ |
-| `whisper-supervisor.mjs`    | `dc95be9087740eeedbb99d5fa7935b3391c45cbed5364ce0be9ed803352e6977` |
+| `whisper-supervisor.mjs`    | `cfc8ac2e6f4f109e24b7ebf5a8a20216258f1042c1cf76f33a9f1224b161309e` |
 | `spritebot-whisper.service` | `d4355c3ccd4c066892c7717d007996ed02a954fd2910cb55cf5b14f8362cd01f` |
-| `whisper.env`               | `0b1977a9aa139dff2b02eb361ee76214f77a229b990cf2f7f5a5a42be7efe0c1` |
+| `whisper.env`               | `ab4b383f8b29620a8eb9bf4b917a29f15f0caf3390538c3f9c77802daf59178f` |
 
 The installed whisper.cpp revision remains `6fc7c33b4c3a2cec83e4b65abd5e96a890480375`.
 
