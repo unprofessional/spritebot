@@ -4,11 +4,10 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Active
 
-| Plan                                                       | Status                         |
-| ---------------------------------------------------------- | ------------------------------ |
-| [ux-bdd-stories.md](ux-bdd-stories.md)                     | TODO — UX behavior specs       |
-| [discord-ui-testing.md](discord-ui-testing.md)             | TODO — browser-driven UI tests |
-| [whisper-gpu-cpu-failover.md](whisper-gpu-cpu-failover.md) | Ready for implementation       |
+| Plan                                           | Status                         |
+| ---------------------------------------------- | ------------------------------ |
+| [ux-bdd-stories.md](ux-bdd-stories.md)         | TODO — UX behavior specs       |
+| [discord-ui-testing.md](discord-ui-testing.md) | TODO — browser-driven UI tests |
 
 ## Future
 
@@ -37,3 +36,4 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | [done/voice-transcription.md](done/voice-transcription.md)                             | Initial voice transcription rollout, superseded by resilience plans       |
 | [done/game-delete.md](done/game-delete.md)                                             | Recoverable game deletion; production schema verified                     |
 | [done/feature-policy-enforcement.md](done/feature-policy-enforcement.md)               | CI coverage for command and component entitlement policies                |
+| [done/whisper-gpu-cpu-failover.md](done/whisper-gpu-cpu-failover.md)                   | GPU-first Whisper supervision with automatic local CPU fallback           |
