@@ -1,6 +1,6 @@
 # Whisper GPU-First / CPU-Fallback Plan
 
-> **Status:** Ready for implementation
+> **Status:** Completed and archived (2026-07-22)
 > **Target host:** `yharnam`
 > **Owning repo:** SPRITEbot (source-controlled operational assets)
 > **Endpoint contract:** `http://192.168.7.73:9700/inference`
@@ -43,8 +43,9 @@ consume request and durable-job retries and can eventually dead-letter segments.
 - Guarantee that only one Whisper child owns port 9700 at a time.
 - Make mode changes visible in journald and easy for an operator to inspect.
 - Preserve graceful systemd stop/restart behavior without orphan children.
-- Keep return-to-GPU controlled and explicit while CPU is healthy, avoiding
-  automatic failback flapping or interruption of in-flight CPU requests.
+- Return to GPU automatically but conservatively: probe without interrupting
+  CPU, require consecutive successes, and restore CPU with a longer backoff if
+  the earned Whisper GPU startup attempt fails.
 
 ## Non-goals
 
@@ -52,8 +53,7 @@ consume request and durable-job retries and can eventually dead-letter segments.
 - Load balancing across multiple Whisper endpoints.
 - Masking model corruption, port conflicts, or failures common to both modes.
 - Changing SPRITEbot's durable queue, retry policy, or endpoint configuration.
-- Automatically interrupting a healthy CPU fallback merely to probe GPU
-  recovery.
+- Interrupting a healthy CPU fallback merely to run a lightweight GPU probe.
 
 ---
 
@@ -97,18 +97,15 @@ audio paths.
 - Retain `Restart=on-failure`, but configure a bounded start limit so a failure
   common to GPU and CPU does not create an infinite tight loop.
 
-### Controlled return to GPU
+### Conservative return to GPU
 
-CPU mode remains active until an operator deliberately restarts the supervisor:
-
-```bash
-systemctl --user restart spritebot-whisper.service
-```
-
-A restart always attempts GPU first and automatically returns to CPU if GPU is
-still unavailable. This creates one explicit, observable interruption instead
-of periodic automated failback attempts. A future maintenance window may add
-automatic failback only if request draining can be coordinated safely.
+CPU mode remains available during a five-minute recovery cooldown and
+lightweight `nvidia-smi` probes. Three consecutive successful probes, spaced one
+minute apart, earn a GPU promotion attempt. The probe proves only that the
+driver and device respond; GPU promotion succeeds only after whisper.cpp loads
+the model and passes `/health`. A failed promotion restores CPU immediately and
+applies a 15-minute retry backoff. This bounds interruptions and prevents one
+lucky probe from causing repeated flapping.
 
 ### Unit consolidation
 
@@ -135,6 +132,12 @@ WHISPER_CPU_THREADS=24
 WHISPER_STARTUP_TIMEOUT_SECONDS=20
 WHISPER_HEALTH_INTERVAL_SECONDS=5
 WHISPER_HEALTH_FAILURE_THRESHOLD=3
+WHISPER_GPU_PROBE_BINARY=/usr/bin/nvidia-smi
+WHISPER_GPU_RECOVERY_COOLDOWN_SECONDS=300
+WHISPER_GPU_RECOVERY_PROBE_INTERVAL_SECONDS=60
+WHISPER_GPU_RECOVERY_SUCCESS_THRESHOLD=3
+WHISPER_GPU_RECOVERY_BACKOFF_SECONDS=900
+WHISPER_GPU_PROBE_TIMEOUT_SECONDS=10
 ```
 
 ---
@@ -142,6 +145,8 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 ## Implementation phases
 
 ### Phase 1: Source-controlled supervisor
+
+**Checkpoint:** Complete.
 
 - Add `ops/whisper/whisper-supervisor.sh` (or a dependency-free Node script if
   signal handling and HTTP polling are materially clearer).
@@ -151,6 +156,9 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 - Validate configuration before stopping the currently working service.
 
 ### Phase 2: yharnam canary and failure injection
+
+**Checkpoint:** Complete. Forced GPU failure reached CPU readiness in three seconds; JFK succeeded
+in GPU, CPU fallback, and restored GPU modes.
 
 - Install under the `hunter` user without enabling it initially.
 - Stop the legacy GPU unit, start the supervisor, and confirm logs report GPU
@@ -164,6 +172,9 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 - Test `SIGTERM` and confirm no child remains and port 9700 is released.
 
 ### Phase 3: Cutover and operations documentation
+
+**Checkpoint:** Complete. `spritebot-whisper.service` is enabled, the legacy unit is disabled, and
+operations/rollback instructions and fresh capacity measurements are recorded.
 
 - Enable `spritebot-whisper.service` and disable the legacy
   `whisper-server.service`.
@@ -186,6 +197,7 @@ WHISPER_HEALTH_FAILURE_THRESHOLD=3
 | CPU fallback also fails          | Supervisor exits non-zero; bounded systemd restart is visible       |
 | Service receives `SIGTERM`       | Active child exits; no orphan and no listener remains               |
 | Operator restarts while CPU mode | GPU retried first; CPU restored automatically if GPU remains broken |
+| GPU recovers while CPU is active | Consecutive probes earn promotion; failed startup restores CPU      |
 | SPRITEbot requests during switch | Transient failures retry; committed WAVs remain durable             |
 
 ---
