@@ -1,5 +1,5 @@
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
-import { chmodSync, mkdtempSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync } from 'node:fs';
 import net from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -115,6 +115,43 @@ test('forwards SIGTERM to the active verified child', async () => {
   await waitForOutput(running, '"event":"mode_ready","mode":"gpu"');
   await stop(running);
   expect(readFileSync(marker, 'utf8')).toContain('gpu:SIGTERM');
+});
+
+test('forwards SIGTERM to the active CPU fallback child', async () => {
+  const marker = join(mkdtempSync(join(tmpdir(), 'whisper-supervisor-')), 'signals');
+  const running = await startSupervisor({
+    FAKE_GPU_BEHAVIOR: 'fail_start',
+    FAKE_SIGNAL_MARKER: marker,
+  });
+  await waitForOutput(running, '"event":"mode_ready","mode":"cpu"');
+  await stop(running);
+  expect(readFileSync(marker, 'utf8')).toContain('cpu:SIGTERM');
+});
+
+test('force-kills a child that ignores graceful shutdown', async () => {
+  const running = await startSupervisor({ FAKE_GPU_BEHAVIOR: 'ignore_term' });
+  await waitForOutput(running, '"event":"mode_ready","mode":"gpu"');
+  await stop(running);
+  expect(running.output()).toContain('"event":"child_killing"');
+});
+
+test('fails instead of starting CPU when the failed GPU leaves the port occupied', async () => {
+  const marker = join(mkdtempSync(join(tmpdir(), 'whisper-supervisor-')), 'stuck-pid');
+  const running = await startSupervisor({
+    FAKE_GPU_BEHAVIOR: 'unhealthy_leave_stuck_port',
+    FAKE_UNHEALTHY_AFTER_MS: '1',
+    FAKE_STUCK_PID_MARKER: marker,
+  });
+  try {
+    expect(await waitForExit(running.child)).toBe(1);
+    expect(running.output()).toContain('"event":"port_release_failed"');
+    expect(running.output()).not.toContain('"event":"mode_ready","mode":"cpu"');
+  } finally {
+    if (existsSync(marker)) {
+      const pid = Number(readFileSync(marker, 'utf8').trim());
+      if (Number.isSafeInteger(pid)) process.kill(pid, 'SIGKILL');
+    }
+  }
 });
 
 test('rejects invalid configuration before spawning', async () => {
