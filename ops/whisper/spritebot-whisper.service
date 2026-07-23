@@ -1,0 +1,23 @@
+[Unit]
+Description=SPRITEbot Whisper GPU-first inference supervisor
+After=network-online.target
+Wants=network-online.target
+Conflicts=whisper-server.service
+StartLimitIntervalSec=60
+StartLimitBurst=5
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/spritebot/whisper.env
+ExecStart=/usr/bin/node %h/.local/lib/spritebot/whisper-supervisor.mjs
+Restart=on-failure
+RestartSec=10
+TimeoutStopSec=15
+# Send SIGTERM only to the supervisor; kill the entire cgroup if systemd's
+# TimeoutStopSec expires. The supervisor owns graceful child shutdown.
+KillMode=mixed
+UMask=0077
+NoNewPrivileges=true
+
+[Install]
+WantedBy=default.target

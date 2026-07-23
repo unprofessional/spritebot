@@ -41,6 +41,10 @@ export async function guardCommand(interaction: CommandInteraction): Promise<tru
     console.debug(`[GuardCommand] No gating policy → allowed`);
     return true; // no gate for this command
   }
+  if (requiredFeature === 'public') {
+    console.debug(`[GuardCommand] Explicit public policy → allowed`);
+    return true;
+  }
   console.debug(`[GuardCommand] Required feature=${requiredFeature}`);
 
   const guildId = interaction.guild?.id ?? null;
@@ -90,6 +94,10 @@ export async function guardComponent(
   }
 
   const [, requiredFeature] = match;
+  if (requiredFeature === 'public') {
+    console.debug(`[GuardComponent] Explicit public policy → allowed`);
+    return true;
+  }
   console.debug(`[GuardComponent] Required feature=${requiredFeature}`);
 
   const guildId = interaction.guild?.id ?? null;
