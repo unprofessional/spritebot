@@ -1,6 +1,6 @@
 # Support Server Verification — Role Assignment Plan
 
-> **Status:** Draft — awaiting review
+> **Status:** Phase 1 completed and archived (2026-07-20); Phase 2 remains deferred
 > **Server:** SPRITEbot Support (`1526058725587292160`)
 > **Vestibule channel:** `#vestibule` — where unverified members land
 > **Target:** SPRITEbot codebase (spritebot repo)

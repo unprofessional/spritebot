@@ -1,5 +1,7 @@
 # SPRITEbot Admin Housekeeping — Implementation Plan
 
+> **Status:** Completed and archived (2026-07-20)
+
 > **Status:** Planning
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14)
 

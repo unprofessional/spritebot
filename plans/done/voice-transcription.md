@@ -1,5 +1,7 @@
 # SPRITEbot Voice Transcription — Implementation Plan
 
+> **Status:** Core rollout completed; archived as superseded by the durable queue and GPU/CPU failover plans (2026-07-20)
+
 > **Status:** Phase 3 implemented — live Discord voice smoke pending
 > **Target:** SPRITEbot (TypeScript/Node, discord.js 14, Docker on shinralabs)
 > **Approach:** CPU-first (whisper.cpp). GPU offload is a future optimization.

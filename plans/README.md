@@ -4,26 +4,19 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Active
 
-| Plan                                                             | Status                                   |
-| ---------------------------------------------------------------- | ---------------------------------------- |
-| [help-command.md](help-command.md)                               | Implemented — merge pending              |
-| [ux-bdd-stories.md](ux-bdd-stories.md)                           | TODO — UX behavior specs                 |
-| [discord-ui-testing.md](discord-ui-testing.md)                   | TODO — browser-driven UI tests           |
-| [feature-policy-enforcement.md](feature-policy-enforcement.md)   | TODO — low-hanging fruit                 |
-| [game-delete.md](game-delete.md)                                 | Merged — production migration pending    |
-| [voice-transcription.md](voice-transcription.md)                 | Phase 3 implemented — live smoke pending |
-| [support-server-verification.md](support-server-verification.md) | Draft                                    |
+| Plan                                           | Status                         |
+| ---------------------------------------------- | ------------------------------ |
+| [ux-bdd-stories.md](ux-bdd-stories.md)         | TODO — UX behavior specs       |
+| [discord-ui-testing.md](discord-ui-testing.md) | TODO — browser-driven UI tests |
 
 ## Future
 
-| Plan | Status |
-| [lfg-board.md](lfg-board.md) | Future — needs critical mass |
+| Plan                                                   | Status                                   |
 | ------------------------------------------------------ | ---------------------------------------- |
-| [discord-premium-apps.md](discord-premium-apps.md) | Planning (replaces stripe-subscriptions) |
-| [admin-housekeeping.md](admin-housekeeping.md) | Planning |
-| [onboarding-nudges.md](onboarding-nudges.md) | Planning |
-| [pro-tier-transcription.md](pro-tier-transcription.md) | Planning |
-| [stripe-subscriptions.md](stripe-subscriptions.md) | Superseded by discord-premium-apps |
+| [lfg-board.md](lfg-board.md)                           | Future — needs critical mass             |
+| [discord-premium-apps.md](discord-premium-apps.md)     | Planning (replaces stripe-subscriptions) |
+| [pro-tier-transcription.md](pro-tier-transcription.md) | Planning                                 |
+| [stripe-subscriptions.md](stripe-subscriptions.md)     | Superseded by discord-premium-apps       |
 
 ## Completed
 
@@ -35,3 +28,12 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | [done/transcription-overload-resilience.md](done/transcription-overload-resilience.md) | Durable manifests, restart recovery, backpressure, overload validation    |
 | [done/hotfix-interaction-expiry-crash.md](done/hotfix-interaction-expiry-crash.md)     | Emergency fix for /create-character interaction expiry crash              |
 | [done/access-tier-audit.md](done/access-tier-audit.md)                                 | Feature gate restructuring                                                |
+| [done/admin-housekeeping.md](done/admin-housekeeping.md)                               | Admin audits, safe purge, restore flow, cleanup scheduler, legacy audit   |
+| [done/help-command.md](done/help-command.md)                                           | Guided, entitlement-aware help navigation                                 |
+| [done/integrations-entitlement-support.md](done/integrations-entitlement-support.md)   | TaleSpire feature key and Premium SKU mapping                             |
+| [done/onboarding-nudges.md](done/onboarding-nudges.md)                                 | Contextual onboarding and zero-game guidance                              |
+| [done/support-server-verification.md](done/support-server-verification.md)             | Support-server verification and role assignment Phase 1                   |
+| [done/voice-transcription.md](done/voice-transcription.md)                             | Initial voice transcription rollout, superseded by resilience plans       |
+| [done/game-delete.md](done/game-delete.md)                                             | Recoverable game deletion; production schema verified                     |
+| [done/feature-policy-enforcement.md](done/feature-policy-enforcement.md)               | CI coverage for command and component entitlement policies                |
+| [done/whisper-gpu-cpu-failover.md](done/whisper-gpu-cpu-failover.md)                   | GPU-first Whisper supervision with automatic local CPU fallback           |
