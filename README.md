@@ -110,12 +110,14 @@ main character sheet.
 Players can use `/roll dice:<expression>` for quick table rolls. The command accepts strict dice
 notation like `2d20` or `2D20`. Supported rolls range from `1d2` through `15d999`, and the roller
 uses Node's cryptographic random integer generator instead of `Math.random`. Exact `1d20` rolls are
-retained for distribution analysis with only the outcome, interaction ID, and timestamp. Other dice
-expressions and roller identity or server/channel context are not retained.
+retained for distribution analysis with the outcome, interaction ID, timestamp, Discord user ID,
+guild ID, and channel ID. Other dice expressions are not retained.
 
 Run `npm run analyze:d20` with the normal PostgreSQL environment variables to print counts and
 percentages for faces 1–20, cumulative results, recent 100/400/1000-roll windows, and a chi-square
 goodness-of-fit test. Treat samples below 100 rolls as exploratory; 400 or more is preferable.
+Filters can be combined using `--guild=<id>`, `--channel=<id>`, `--user=<id>`,
+`--since=<ISO timestamp>`, and `--until=<ISO timestamp>`.
 
 ### Roleplay Proxy
 
