@@ -5,6 +5,37 @@ dotenv.config({ quiet: true });
 
 const FACES = 20;
 const DEFAULT_WINDOWS = [100, 400, 1000];
+const FILTER_OPTIONS = new Map([
+  ['guild', 'guild_id'],
+  ['channel', 'channel_id'],
+  ['user', 'user_id'],
+]);
+
+function buildFilteredQuery(args) {
+  const conditions = [];
+  const values = [];
+  for (const argument of args) {
+    const match = /^--([^=]+)=(.+)$/.exec(argument);
+    if (!match) throw new Error(`Invalid filter: ${argument}`);
+    const [, name, value] = match;
+    if (FILTER_OPTIONS.has(name)) {
+      values.push(value);
+      conditions.push(`${FILTER_OPTIONS.get(name)} = $${values.length}`);
+    } else if (name === 'since' || name === 'until') {
+      const timestamp = new Date(value);
+      if (Number.isNaN(timestamp.getTime())) throw new Error(`Invalid ${name} timestamp: ${value}`);
+      values.push(timestamp.toISOString());
+      conditions.push(`created_at ${name === 'since' ? '>=' : '<'} $${values.length}`);
+    } else {
+      throw new Error(`Unknown filter: --${name}`);
+    }
+  }
+  const where = conditions.length > 0 ? ` WHERE ${conditions.join(' AND ')}` : '';
+  return {
+    text: `SELECT result FROM d20_roll${where} ORDER BY created_at, id`,
+    values,
+  };
+}
 
 function logGamma(value) {
   const coefficients = [
@@ -126,7 +157,8 @@ async function main() {
     database: process.env.PG_DB,
   });
   try {
-    const result = await pool.query('SELECT result FROM d20_roll ORDER BY created_at, id');
+    const query = buildFilteredQuery(process.argv.slice(2));
+    const result = await pool.query(query.text, query.values);
     const rolls = result.rows.map((row) => Number(row.result));
     console.log(formatSummary('all recorded 1d20 rolls', summarizeRolls(rolls)));
     for (const windowSize of DEFAULT_WINDOWS) {
@@ -142,7 +174,7 @@ async function main() {
   }
 }
 
-module.exports = { formatSummary, regularizedGammaQ, summarizeRolls };
+module.exports = { buildFilteredQuery, formatSummary, regularizedGammaQ, summarizeRolls };
 
 if (require.main === module) {
   main().catch((error) => {
