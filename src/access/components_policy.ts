@@ -41,6 +41,8 @@ export const ComponentPolicy: Array<[prefix: string, policy: FeaturePolicy]> = [
   ['addGameEntityInventoryModal:', 'rpg:game-admin'],
   ['equipGameEntityInventory:', 'rpg:game-admin'],
   ['deleteGameEntityInventory:', 'rpg:game-admin'],
+  ['geInvEquip:', 'rpg:game-admin'],
+  ['geInvDelete:', 'rpg:game-admin'],
   ['deleteGameEntity:', 'rpg:game-admin'],
   ['confirmDeleteGameEntity:', 'rpg:game-admin'],
   ['backToGameEntity:', 'rpg:game-admin'],

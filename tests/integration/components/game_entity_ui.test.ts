@@ -11,10 +11,12 @@ import type { DiscordInteractionResponder } from '../../../src/discord/interacti
 import { handle as handleEntityButtons } from '../../../src/handlers/button_handlers/game_entity_buttons';
 import { handle as handleEntityModal } from '../../../src/handlers/modal_handlers/game_entity_modals';
 import {
+  createGameEntityInventoryItem,
   createGameEntity,
   getGameEntity,
   updateGameEntityMeta,
 } from '../../../src/services/game_entity.service';
+import { handle as handleEntityInventorySelector } from '../../../src/handlers/select_menu_handlers/game_entity_inventory_select';
 import { getOrCreatePlayer, setCurrentGame } from '../../../src/services/player.service';
 
 const viewEntityCommand = require('../../../src/commands/view-entity') as {
@@ -339,6 +341,37 @@ describe('game entity Discord UI', () => {
       content: '⚠️ Quantity must be a positive whole number.',
       ephemeral: true,
     });
+  });
+
+  test('opens inventory item actions with Discord-safe custom IDs', async () => {
+    const { entity } = await setupEntity('private');
+    const item = await createGameEntityInventoryItem(entity.id, 'gm-1', {
+      name: 'Sword of Diamonds',
+    });
+    const respond = jest.fn().mockResolvedValue(undefined);
+
+    await handleEntityInventorySelector(
+      {
+        customId: `manageGameEntityInventory:${entity.id}`,
+        values: [item.id],
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+
+    const payload = respond.mock.calls[0][0];
+    expect(payload.embeds[0].toJSON()).toEqual(
+      expect.objectContaining({ title: 'Sword of Diamonds' }),
+    );
+    const customIds = payload.components[0].components.map(
+      (component: { data: { custom_id: string } }) => component.data.custom_id,
+    );
+    expect(customIds).toEqual([
+      `geInvEquip:${entity.id}:${item.id}:on`,
+      `geInvDelete:${entity.id}:${item.id}`,
+      `viewGameEntityInventory:${entity.id}`,
+    ]);
+    expect(customIds.every((customId: string) => customId.length <= 100)).toBe(true);
   });
 
   test('requires confirmation to delete and restores the entity as private', async () => {
