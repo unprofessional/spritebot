@@ -4,10 +4,11 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Active
 
-| Plan                                           | Status                         |
-| ---------------------------------------------- | ------------------------------ |
-| [ux-bdd-stories.md](ux-bdd-stories.md)         | TODO — UX behavior specs       |
-| [discord-ui-testing.md](discord-ui-testing.md) | TODO — browser-driven UI tests |
+| Plan                                           | Status                            |
+| ---------------------------------------------- | --------------------------------- |
+| [game-entities.md](game-entities.md)           | Ready for review — NPCs/creatures |
+| [ux-bdd-stories.md](ux-bdd-stories.md)         | TODO — UX behavior specs          |
+| [discord-ui-testing.md](discord-ui-testing.md) | TODO — browser-driven UI tests    |
 
 ## Future
 

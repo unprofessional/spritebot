@@ -1,6 +1,7 @@
 import { CharacterDAO } from '../../../src/dao/character.dao';
 import { CharacterStatFieldDAO } from '../../../src/dao/character_stat_field.dao';
 import { GameDAO } from '../../../src/dao/game.dao';
+import { GameEntityDAO } from '../../../src/dao/game_entity.dao';
 import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import { query } from '../../../src/db/client';
 import {
@@ -15,6 +16,7 @@ import {
 
 describe('admin_housekeeping.service', () => {
   const gameDAO = new GameDAO();
+  const gameEntityDAO = new GameEntityDAO();
   const characterDAO = new CharacterDAO();
   const statTemplateDAO = new StatTemplateDAO();
   const statFieldDAO = new CharacterStatFieldDAO();
@@ -56,6 +58,16 @@ describe('admin_housekeeping.service', () => {
     await query(
       `UPDATE character SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
       [character.id],
+    );
+    const entity = await gameEntityDAO.create({
+      game_id: characterGame.id,
+      created_by: 'gm-1',
+      kind: 'npc',
+      name: 'Faded Guide',
+    });
+    await query(
+      `UPDATE game_entity SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [entity.id],
     );
 
     await query(
@@ -107,6 +119,7 @@ describe('admin_housekeeping.service', () => {
         'abandoned-games': 1,
         'empty-published-games': 1,
         'soft-deleted-characters': 1,
+        'soft-deleted-game-entities': 1,
         'stale-proxy-messages': 1,
         'stale-channel-modes': 1,
         'expired-gifted-guilds': 1,
@@ -154,6 +167,26 @@ describe('admin_housekeeping.service', () => {
     await query(
       `UPDATE character SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '7 days' WHERE id = $1`,
       [recentlyDeletedCharacter.id],
+    );
+    const oldDeletedEntity = await gameEntityDAO.create({
+      game_id: softDeletedGame.id,
+      created_by: 'gm-1',
+      kind: 'npc',
+      name: 'Forgotten Guide',
+    });
+    await query(
+      `UPDATE game_entity SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '31 days' WHERE id = $1`,
+      [oldDeletedEntity.id],
+    );
+    const recentlyDeletedEntity = await gameEntityDAO.create({
+      game_id: softDeletedGame.id,
+      created_by: 'gm-1',
+      kind: 'creature',
+      name: 'Recoverable Beast',
+    });
+    await query(
+      `UPDATE game_entity SET deleted_at = CURRENT_TIMESTAMP - INTERVAL '7 days' WHERE id = $1`,
+      [recentlyDeletedEntity.id],
     );
 
     await query(
@@ -217,6 +250,7 @@ describe('admin_housekeeping.service', () => {
     expect(counts).toEqual({
       'soft-deleted-games': 0,
       'soft-deleted-characters': 1,
+      'soft-deleted-game-entities': 1,
       'stale-proxy-messages': 1,
       'stale-channel-modes': 1,
       'expired-gifted-guilds': 1,
@@ -234,6 +268,10 @@ describe('admin_housekeeping.service', () => {
         recentlyDeletedCharacter.id,
       ]),
     ).resolves.toMatchObject({ rows: [{ count: 1 }] });
+    await expect(gameEntityDAO.findById(oldDeletedEntity.id)).resolves.toBeNull();
+    await expect(gameEntityDAO.findById(recentlyDeletedEntity.id)).resolves.toMatchObject({
+      id: recentlyDeletedEntity.id,
+    });
     await expect(
       query<{ count: string | number }>(
         `

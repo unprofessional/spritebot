@@ -83,6 +83,7 @@ type ExampleRow = { id: string; name: string | null; detail: string | null };
 type PurgeRow = {
   soft_deleted_games: string | number;
   soft_deleted_characters: string | number;
+  soft_deleted_game_entities: string | number;
   stale_proxy_messages: string | number;
   stale_channel_modes: string | number;
   expired_gifted_guilds: string | number;
@@ -219,6 +220,27 @@ const CATEGORY_DEFINITIONS: CategoryDefinition[] = [
       WHERE c.deleted_at IS NOT NULL
         AND c.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
       ORDER BY c.deleted_at ASC
+      LIMIT $1
+    `,
+  },
+  {
+    category: 'soft-deleted-game-entities',
+    label: '🪦 Soft-deleted NPCs and creatures (>30 days)',
+    safeToPurge: true,
+    countSql: `
+      SELECT COUNT(*) AS count
+      FROM game_entity ge
+      WHERE ge.deleted_at IS NOT NULL
+        AND ge.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+    `,
+    examplesSql: `
+      SELECT ge.id::text AS id,
+             ge.name AS name,
+             ge.kind || ', deleted ' || ge.deleted_at::text AS detail
+      FROM game_entity ge
+      WHERE ge.deleted_at IS NOT NULL
+        AND ge.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+      ORDER BY ge.deleted_at ASC
       LIMIT $1
     `,
   },
@@ -369,6 +391,19 @@ export async function purgeSafeOrphans(
         )
       RETURNING 1
     ),
+    deleted_game_entities AS (
+      DELETE FROM game_entity ge
+      WHERE ge.deleted_at IS NOT NULL
+        AND ge.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM game g
+          WHERE g.id = ge.game_id
+            AND g.deleted_at IS NOT NULL
+            AND g.deleted_at < CURRENT_TIMESTAMP - INTERVAL '30 days'
+        )
+      RETURNING 1
+    ),
     deleted_proxy_messages AS (
       DELETE FROM rp_proxy_message rpm
       WHERE rpm.created_at < CURRENT_TIMESTAMP - INTERVAL '90 days'
@@ -394,6 +429,7 @@ export async function purgeSafeOrphans(
     SELECT
       (SELECT COUNT(*) FROM deleted_games) AS soft_deleted_games,
       (SELECT COUNT(*) FROM deleted_characters) AS soft_deleted_characters,
+      (SELECT COUNT(*) FROM deleted_game_entities) AS soft_deleted_game_entities,
       (SELECT COUNT(*) FROM deleted_proxy_messages) AS stale_proxy_messages,
       (SELECT COUNT(*) FROM deleted_channel_modes) AS stale_channel_modes,
       (SELECT COUNT(*) FROM deleted_gifted_guilds) AS expired_gifted_guilds,
@@ -413,6 +449,11 @@ export async function purgeSafeOrphans(
       category: 'soft-deleted-characters',
       label: labelForCategory('soft-deleted-characters'),
       count: toCount(row.soft_deleted_characters),
+    },
+    {
+      category: 'soft-deleted-game-entities',
+      label: labelForCategory('soft-deleted-game-entities'),
+      count: toCount(row.soft_deleted_game_entities),
     },
     {
       category: 'stale-proxy-messages',
