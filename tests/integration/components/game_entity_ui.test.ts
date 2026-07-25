@@ -2,6 +2,7 @@ import { GameDAO } from '../../../src/dao/game.dao';
 import { handle as handleEntitySelector } from '../../../src/components/game_entity_selector';
 import { build as buildEntityFieldSelector } from '../../../src/components/game_entity_field_selector';
 import { build as buildEntityCard } from '../../../src/components/view_game_entity_card';
+import { handle as handleRestoreEntity } from '../../../src/components/restore_game_entity_selector';
 import type { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
 import { handle as handleEntityButtons } from '../../../src/handlers/button_handlers/game_entity_buttons';
 import { handle as handleEntityModal } from '../../../src/handlers/modal_handlers/game_entity_modals';
@@ -225,5 +226,94 @@ describe('game entity Discord UI', () => {
       content: '⚠️ Quantity must be a positive whole number.',
       ephemeral: true,
     });
+  });
+
+  test('requires confirmation to delete and restores the entity as private', async () => {
+    const { entity } = await setupEntity('public');
+    const respond = jest.fn().mockResolvedValue(undefined);
+
+    await handleEntityButtons(
+      {
+        customId: `deleteGameEntity:${entity.id}`,
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    expect(respond).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining(`Delete **${entity.name}**?`),
+        components: expect.any(Array),
+      }),
+    );
+    expect(await getGameEntity(entity.id)).not.toBeNull();
+
+    respond.mockClear();
+    await handleEntityButtons(
+      {
+        customId: `confirmDeleteGameEntity:${entity.id}`,
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    expect(respond).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('Entity deleted') }),
+    );
+    expect(await getGameEntity(entity.id)).toBeNull();
+
+    respond.mockClear();
+    await handleRestoreEntity(
+      {
+        customId: 'restoreGameEntityDropdown',
+        values: [entity.id],
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    expect(respond).toHaveBeenCalledWith({
+      content: `✅ Restored **${entity.name}** as a private ${entity.kind}.`,
+      components: [],
+    });
+    await expect(getGameEntity(entity.id)).resolves.toMatchObject({ visibility: 'private' });
+  });
+
+  test('denies crafted delete and restore interactions from a non-manager', async () => {
+    const { entity } = await setupEntity('private');
+    const respond = jest.fn().mockResolvedValue(undefined);
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    await handleEntityButtons(
+      {
+        customId: `deleteGameEntity:${entity.id}`,
+        user: { id: 'player-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    expect(respond).toHaveBeenCalledWith({
+      content: '❌ You cannot manage that NPC or creature.',
+      ephemeral: true,
+    });
+
+    await handleEntityButtons(
+      {
+        customId: `confirmDeleteGameEntity:${entity.id}`,
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    respond.mockClear();
+    await handleRestoreEntity(
+      {
+        customId: 'restoreGameEntityDropdown',
+        values: [entity.id],
+        user: { id: 'player-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    expect(respond).toHaveBeenCalledWith({
+      content: '⚠️ That entity can no longer be restored.',
+      components: [],
+    });
+    expect(await getGameEntity(entity.id)).toBeNull();
+    errorSpy.mockRestore();
   });
 });
