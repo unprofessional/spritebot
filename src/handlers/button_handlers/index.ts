@@ -51,6 +51,7 @@ import * as helpRoleButtons from '../help/help_role_button';
 import * as characterViewButtons from './character_view_buttons';
 import * as fallbackButtons from './fallback_buttons';
 import * as gameViewButtons from './game_view_buttons';
+import * as gameEntityButtons from './game_entity_buttons';
 import * as inventoryButtons from './inventory_buttons';
 
 type ButtonRoute = [
@@ -97,6 +98,7 @@ const directRoutes: ButtonRoute[] = [
 ];
 
 export function getButtonInteractionPolicy(customId: string): InteractionDispatchPolicy {
+  if (isGameEntityButton(customId)) return gameEntityButtons.getInteractionPolicy(customId);
   const directRoute = directRoutes.find(([pattern]) => pattern.test(customId));
   if (directRoute) return directRoute[2];
   if (isInventoryButton(customId)) return inventoryButtons.getInteractionPolicy(customId);
@@ -111,6 +113,12 @@ function isInventoryButton(customId: string): boolean {
   );
 }
 
+function isGameEntityButton(customId: string): boolean {
+  return /^(?:editGameEntity|toggleGameEntityVisibility|viewGameEntityInventory|addGameEntityInventory|equipGameEntityInventory|deleteGameEntityInventory|deleteGameEntity|confirmDeleteGameEntity|backToGameEntity):/.test(
+    customId,
+  );
+}
+
 export async function handleButton(
   interaction: ButtonInteraction,
   responder: DiscordInteractionResponder,
@@ -119,6 +127,10 @@ export async function handleButton(
 
   for (const [pattern, handler] of directRoutes) {
     if (pattern.test(customId)) return handler(interaction, responder);
+  }
+
+  if (isGameEntityButton(customId)) {
+    return gameEntityButtons.handle(interaction, responder);
   }
 
   if (isInventoryButton(customId)) {
