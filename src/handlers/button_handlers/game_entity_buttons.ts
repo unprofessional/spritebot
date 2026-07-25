@@ -72,9 +72,9 @@ export async function handle(
       const visibility =
         action === 'setGameEntityVisibility'
           ? parseVisibility(itemId)
-          : entity.visibility === 'private'
-            ? 'public'
-            : 'private';
+          : entity.visibility === 'public'
+            ? 'private'
+            : 'public';
       const updated = await updateGameEntityMeta(entityId, interaction.user.id, { visibility });
       if (!updated) return missing(responder);
       await responder.respond({
