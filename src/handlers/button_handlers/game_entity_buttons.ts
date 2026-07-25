@@ -63,14 +63,14 @@ export async function handle(
       return;
     }
 
-    if (action === 'toggleGameEntityVisibility') {
+    if (action === 'toggleGameEntityVisibility' || action === 'setGameEntityVisibility') {
       await assertManager(entityId, interaction.user.id);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
       const visibility =
-        entity.visibility === 'private'
-          ? 'link-only'
-          : entity.visibility === 'link-only'
+        action === 'setGameEntityVisibility'
+          ? parseVisibility(itemId)
+          : entity.visibility === 'private'
             ? 'public'
             : 'private';
       const updated = await updateGameEntityMeta(entityId, interaction.user.id, { visibility });
@@ -211,4 +211,9 @@ function textRow(
     .setStyle(style);
   if (placeholder) input.setPlaceholder(placeholder);
   return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+}
+
+function parseVisibility(value: string | undefined): 'private' | 'public' | 'link-only' {
+  if (value === 'private' || value === 'public' || value === 'link-only') return value;
+  throw new Error('Invalid game entity visibility.');
 }
