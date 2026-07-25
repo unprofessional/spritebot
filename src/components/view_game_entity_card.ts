@@ -56,10 +56,7 @@ export function build(entity: HydratedGameEntity, canManage: boolean) {
       .setCustomId(`editGameEntity:${entity.id}`)
       .setLabel('✏️ Edit')
       .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId(`toggleGameEntityVisibility:${entity.id}`)
-      .setLabel(`👁️ ${nextVisibility(entity.visibility)}`)
-      .setStyle(ButtonStyle.Secondary),
+    ...visibilityButtons(entity),
     new ButtonBuilder()
       .setCustomId(`viewGameEntityInventory:${entity.id}`)
       .setLabel('🎒 Inventory')
@@ -152,10 +149,21 @@ function formatInventoryLine(item: HydratedGameEntityInventoryItem): string {
   return `${item.equipped ? '✅' : '▫️'} **${item.name}**${quantity}`;
 }
 
-function nextVisibility(visibility: string): string {
-  if (visibility === 'private') return 'Make Link-only';
-  if (visibility === 'link-only') return 'Publish';
-  return 'Make Private';
+function visibilityButtons(entity: HydratedGameEntity): ButtonBuilder[] {
+  const choices = (
+    [
+      ['public', '🌐 Publish'],
+      ['link-only', '🔗 Link-only'],
+      ['private', '🔒 Make Private'],
+    ] as const
+  ).filter(([visibility]) => visibility !== entity.visibility);
+
+  return choices.map(([visibility, label]) =>
+    new ButtonBuilder()
+      .setCustomId(`setGameEntityVisibility:${entity.id}:${visibility}`)
+      .setLabel(label)
+      .setStyle(ButtonStyle.Secondary),
+  );
 }
 
 function labelForKind(kind: string): string {
