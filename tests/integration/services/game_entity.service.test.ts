@@ -15,6 +15,7 @@ import {
   setGameEntityInventoryEquipped,
   setGameEntityInventoryQuantity,
   updateGameEntityCustomField,
+  updateGameEntityCustomFields,
   updateGameEntityInventoryField,
   updateGameEntityInventoryItem,
   updateGameEntityMeta,
@@ -347,5 +348,71 @@ describe('game_entity.service', () => {
 
     metaSpy.mockRestore();
     itemSpy.mockRestore();
+  });
+
+  test('bulk-updates custom fields and compound stat values with metadata', async () => {
+    const game = await createGame();
+    const template = await templateDAO.create({
+      game_id: game.id,
+      label: 'Threat',
+      field_type: 'short',
+    });
+    const entity = await createGameEntity({
+      requesterId: 'gm-1',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Hydra',
+    });
+
+    await updateGameEntityCustomFields(entity.id, 'gm-1', {
+      Habitat: 'Swamp',
+      Temperament: { value: 'Hostile', meta: { public: true } },
+    });
+    await updateGameEntityStats(entity.id, 'gm-1', {
+      [template.id]: { value: 'Severe', meta: { source: 'gm' } },
+    });
+
+    await expect(getGameEntity(entity.id)).resolves.toEqual(
+      expect.objectContaining({
+        customFields: [
+          expect.objectContaining({ name: 'Habitat', value: 'Swamp' }),
+          expect.objectContaining({
+            name: 'Temperament',
+            value: 'Hostile',
+            meta: { public: true },
+          }),
+        ],
+        stats: [
+          expect.objectContaining({
+            template_id: template.id,
+            value: 'Severe',
+            meta: { source: 'gm' },
+          }),
+        ],
+      }),
+    );
+  });
+
+  test('filters entity lists by kind', async () => {
+    const game = await createGame();
+    await createGameEntity({
+      requesterId: 'gm-1',
+      gameId: game.id,
+      kind: 'npc',
+      name: 'Guide',
+    });
+    await createGameEntity({
+      requesterId: 'gm-1',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Griffin',
+    });
+
+    await expect(getGameEntities(game.id, 'npc')).resolves.toEqual([
+      expect.objectContaining({ kind: 'npc', name: 'Guide' }),
+    ]);
+    await expect(getGameEntities(game.id, 'creature')).resolves.toEqual([
+      expect.objectContaining({ kind: 'creature', name: 'Griffin' }),
+    ]);
   });
 });

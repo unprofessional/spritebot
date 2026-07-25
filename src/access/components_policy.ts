@@ -29,6 +29,20 @@ export const ComponentPolicy: Array<[prefix: string, policy: FeaturePolicy]> = [
   ['selectStatType:', 'rpg:game-admin'],
   ['editStatTemplateModal:', 'rpg:game-admin'],
   ['createStatModal:', 'rpg:game-admin'],
+  ['editGameEntity:', 'rpg:game-admin'],
+  ['editGameEntityField:', 'rpg:game-admin'],
+  ['editGameEntityModal:', 'rpg:game-admin'],
+  ['toggleGameEntityVisibility:', 'rpg:game-admin'],
+  ['viewGameEntityInventory:', 'rpg:game-admin'],
+  ['manageGameEntityInventory:', 'rpg:game-admin'],
+  ['addGameEntityInventory:', 'rpg:game-admin'],
+  ['addGameEntityInventoryModal:', 'rpg:game-admin'],
+  ['equipGameEntityInventory:', 'rpg:game-admin'],
+  ['deleteGameEntityInventory:', 'rpg:game-admin'],
+  ['deleteGameEntity:', 'rpg:game-admin'],
+  ['confirmDeleteGameEntity:', 'rpg:game-admin'],
+  ['backToGameEntity:', 'rpg:game-admin'],
+  ['restoreGameEntityDropdown', 'rpg:game-admin'],
 
   // ===== CHARACTER CREATE / EDIT / DELETE (gated) =====
   ['submitNewCharacter', 'rpg:characters'],
@@ -85,6 +99,7 @@ export const ComponentPolicy: Array<[prefix: string, policy: FeaturePolicy]> = [
   ['switchGameDropdown', 'core'], // switch context
   ['joinGameDropdown', 'core'], // join game (request)
   ['selectPublicCharacter', 'core'], // filter public list
+  ['selectGameEntity', 'core'], // browse public game entities
   ['calculateCharacterStats:', 'core'], // compute/display only (non-mutating)
   ['help:role:', 'core'], // help navigation
   ['help:category:', 'core'], // help navigation

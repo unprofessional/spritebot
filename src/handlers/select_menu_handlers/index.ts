@@ -28,9 +28,13 @@ import { interactionPolicy as restoreGamePolicy } from '../../components/restore
 import { interactionPolicy as switchCharacterPolicy } from '../../components/switch_character_selector';
 import { interactionPolicy as switchGamePolicy } from '../../components/switch_game_selector';
 import { interactionPolicy as statTypePolicy } from '../../components/stat_type_selector';
+import * as gameEntityFieldSelector from '../../components/game_entity_field_selector';
+import * as gameEntitySelector from '../../components/game_entity_selector';
+import * as restoreGameEntitySelector from '../../components/restore_game_entity_selector';
 import * as helpCategorySelect from '../help/help_category_select';
 import * as adjustNumericStatSelectHandler from './adjust_numeric_stat_select';
 import * as characterStatSelect from './character_stat_select_menu';
+import * as gameEntityInventorySelect from './game_entity_inventory_select';
 import * as inventoryItemSelect from './inventory_item_select';
 
 const fallbackInteractionPolicy = {
@@ -40,6 +44,11 @@ const fallbackInteractionPolicy = {
 
 export function getSelectMenuInteractionPolicy(customId: string): InteractionDispatchPolicy {
   if (customId.startsWith('help:category:')) return helpCategorySelect.interactionPolicy;
+  if (customId === 'selectGameEntity') return gameEntitySelector.interactionPolicy;
+  if (customId === 'restoreGameEntityDropdown') return restoreGameEntitySelector.interactionPolicy;
+  if (customId.startsWith('editGameEntityField:')) return gameEntityFieldSelector.interactionPolicy;
+  if (customId.startsWith('manageGameEntityInventory:'))
+    return gameEntityInventorySelect.interactionPolicy;
   if (customId === 'switchCharacterDropdown') return switchCharacterPolicy;
   if (customId === 'switchGameDropdown') return switchGamePolicy;
   if (customId === 'joinGameDropdown') return joinGamePolicy;
@@ -69,6 +78,13 @@ export async function handleSelectMenu(
 
   if (customId.startsWith('help:category:'))
     return helpCategorySelect.handle(interaction, responder);
+  if (customId === 'selectGameEntity') return gameEntitySelector.handle(interaction, responder);
+  if (customId === 'restoreGameEntityDropdown')
+    return restoreGameEntitySelector.handle(interaction, responder);
+  if (customId.startsWith('editGameEntityField:'))
+    return gameEntityFieldSelector.handle(interaction, responder);
+  if (customId.startsWith('manageGameEntityInventory:'))
+    return gameEntityInventorySelect.handle(interaction, responder);
   if (customId === 'switchCharacterDropdown')
     return handleSwitchCharacterSelector(interaction, responder);
   if (customId === 'switchGameDropdown') return handleSwitchGameSelector(interaction, responder);

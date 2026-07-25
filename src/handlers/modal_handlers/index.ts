@@ -11,6 +11,7 @@ import * as inventoryModals from './inventory_modals';
 import * as icEditModal from './ic_edit_modal';
 import * as statCalculatorModal from './stat_calculator_modal';
 import * as statTemplateModals from './stat_template_modals';
+import * as gameEntityModals from './game_entity_modals';
 
 const componentUpdateInteractionPolicy = {
   mode: { kind: 'component-update' },
@@ -27,7 +28,10 @@ export function getModalInteractionPolicy(
   const { customId } = interaction;
   if (customId.startsWith('ic-edit-modal:')) return ephemeralReplyInteractionPolicy;
   if (
-    (customId.startsWith('addInventoryModal:') || customId.startsWith('editInventoryModal:')) &&
+    (customId.startsWith('addInventoryModal:') ||
+      customId.startsWith('editInventoryModal:') ||
+      customId.startsWith('editGameEntityModal:') ||
+      customId.startsWith('addGameEntityInventoryModal:')) &&
     !interaction.message
   ) {
     return ephemeralReplyInteractionPolicy;
@@ -43,7 +47,9 @@ export function getModalInteractionPolicy(
     customId.startsWith('editCharacterField:') ||
     customId.startsWith('adjustStatModal:') ||
     customId.startsWith('addInventoryModal:') ||
-    customId.startsWith('editInventoryModal:')
+    customId.startsWith('editInventoryModal:') ||
+    customId.startsWith('editGameEntityModal:') ||
+    customId.startsWith('addGameEntityInventoryModal:')
   ) {
     return componentUpdateInteractionPolicy;
   }
@@ -82,6 +88,13 @@ export async function handleModal(
   // === Stat Calculation ===
   if (customId.startsWith('adjustStatModal:'))
     return statCalculatorModal.handle(interaction, responder);
+
+  if (
+    customId.startsWith('editGameEntityModal:') ||
+    customId.startsWith('addGameEntityInventoryModal:')
+  ) {
+    return gameEntityModals.handle(interaction, responder);
+  }
 
   // === Inventory ===
   if (customId.startsWith('addInventoryModal:') || customId.startsWith('editInventoryModal:')) {
