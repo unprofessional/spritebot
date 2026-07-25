@@ -6,6 +6,7 @@ import {
   TextInputStyle,
   type StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import { canManageGameEntity, getGameEntity } from '../services/game_entity.service';
@@ -53,7 +54,7 @@ export function build(entity: HydratedGameEntity) {
 
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`${id}:${entity.id}`)
+      .setCustomId(discordCustomId(`${id}:${entity.id}`))
       .setPlaceholder('Choose a field')
       .addOptions(
         options.map((option) => ({
@@ -77,19 +78,19 @@ export async function handle(
   }
   if (scope === 'custom-new') {
     const modal = new ModalBuilder()
-      .setCustomId(`editGameEntityCustomModal:${entityId}`)
+      .setCustomId(discordCustomId(`editGameEntityCustomModal:${entityId}`))
       .setTitle('Add Custom Entity Field')
       .addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('name')
+            .setCustomId(discordCustomId('name'))
             .setLabel('Field Name')
             .setStyle(TextInputStyle.Short)
             .setRequired(true),
         ),
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('value')
+            .setCustomId(discordCustomId('value'))
             .setLabel('Field Value')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true),
@@ -124,7 +125,7 @@ export async function handle(
     field;
 
   const modal = new ModalBuilder()
-    .setCustomId(`editGameEntityModal:${entityId}:${scope}:${field}`)
+    .setCustomId(discordCustomId(`editGameEntityModal:${entityId}:${scope}:${field}`))
     .setTitle(truncate(scope === 'stat' ? `Edit Stat: ${label}` : `Edit ${label}`, 45));
 
   if (scope === 'stat' && (fieldType === 'count' || stat?.meta.max !== undefined)) {
@@ -139,7 +140,7 @@ export async function handle(
   }
 
   const input = new TextInputBuilder()
-    .setCustomId('value')
+    .setCustomId(discordCustomId('value'))
     .setLabel(truncate(`New value for ${label}`, 45))
     .setStyle(fieldType === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
     .setRequired(scope === 'core' && field === 'name');
@@ -161,7 +162,7 @@ async function getManagedEntity(entityId: string, requesterId: string) {
 
 function inputRow(id: string, label: string, required: boolean, value: string) {
   const input = new TextInputBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setLabel(truncate(label, 45))
     .setStyle(TextInputStyle.Short)
     .setRequired(required);

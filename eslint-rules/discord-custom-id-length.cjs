@@ -50,6 +50,29 @@ function estimateLength(node) {
   return null;
 }
 
+function validateCustomId(context, argument) {
+  if (
+    argument?.type !== 'CallExpression' ||
+    argument.callee.type !== 'Identifier' ||
+    argument.callee.name !== 'discordCustomId'
+  ) {
+    context.report({
+      node: argument,
+      messageId: 'guardRequired',
+    });
+    return;
+  }
+
+  const length = estimateLength(argument.arguments[0]);
+  if (length !== null && length > DISCORD_CUSTOM_ID_MAX_LENGTH) {
+    context.report({
+      node: argument.arguments[0],
+      messageId: 'tooLong',
+      data: { length, max: DISCORD_CUSTOM_ID_MAX_LENGTH },
+    });
+  }
+}
+
 module.exports = {
   meta: {
     type: 'problem',
@@ -58,6 +81,8 @@ module.exports = {
     },
     schema: [],
     messages: {
+      guardRequired:
+        'Route every Discord custom ID through discordCustomId() before assigning it to a component or modal.',
       tooLong:
         'Discord custom ID can be {{length}} characters; the maximum is {{max}}. Shorten the action prefix or encoded fields.',
     },
@@ -72,14 +97,16 @@ module.exports = {
           return;
         }
 
-        const length = estimateLength(node.arguments[0]);
-        if (length !== null && length > DISCORD_CUSTOM_ID_MAX_LENGTH) {
-          context.report({
-            node: node.arguments[0],
-            messageId: 'tooLong',
-            data: { length, max: DISCORD_CUSTOM_ID_MAX_LENGTH },
-          });
-        }
+        validateCustomId(context, node.arguments[0]);
+      },
+      Property(node) {
+        const key =
+          node.key.type === 'Identifier'
+            ? node.key.name
+            : node.key.type === 'Literal'
+              ? String(node.key.value)
+              : null;
+        if (key === 'custom_id') validateCustomId(context, node.value);
       },
     };
   },

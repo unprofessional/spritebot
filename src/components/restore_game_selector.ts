@@ -4,6 +4,7 @@ import {
   StringSelectMenuInteraction,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
@@ -34,7 +35,7 @@ export async function build(
   }
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Choose a game to restore')
     .addOptions(
       games.slice(0, 25).map((game) =>

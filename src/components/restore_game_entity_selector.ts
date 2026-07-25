@@ -3,6 +3,7 @@ import {
   StringSelectMenuBuilder,
   type StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import { getRestorableGameEntities, restoreGameEntity } from '../services/game_entity.service';
@@ -16,7 +17,7 @@ export const interactionPolicy = {
 
 export function build(entities: GameEntity[]) {
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Choose an entity to restore')
     .addOptions(
       entities.slice(0, 25).map((entity) => ({

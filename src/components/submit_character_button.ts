@@ -1,6 +1,6 @@
-// src/components/submit_character_button.ts
-
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/submit_character_button.ts
 
 import { getCharacterWithStats } from '../services/character.service';
 import {
@@ -23,7 +23,7 @@ const interactionPolicy = {
 
 function build(isDisabled = false): ActionRowBuilder<ButtonBuilder> {
   const button = new ButtonBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setLabel('✅ Submit Character')
     .setStyle(ButtonStyle.Success)
     .setDisabled(isDisabled);

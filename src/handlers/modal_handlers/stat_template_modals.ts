@@ -1,5 +1,3 @@
-// src/handlers/modal_handlers/stat_template_modals.ts
-
 import {
   ActionRowBuilder,
   ModalBuilder,
@@ -10,6 +8,8 @@ import {
   APIActionRowComponent,
   APITextInputComponent,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
+// src/handlers/modal_handlers/stat_template_modals.ts
 
 import {
   getGame,
@@ -155,7 +155,7 @@ function buildStatTemplateModal({
   const components = [
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
-        .setCustomId('label')
+        .setCustomId(discordCustomId('label'))
         .setLabel('Field Label (e.g. HP, CLASS, STRENGTH)')
         .setStyle(TextInputStyle.Short)
         .setValue(field?.label ?? '')
@@ -163,7 +163,7 @@ function buildStatTemplateModal({
     ),
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
-        .setCustomId('default_value')
+        .setCustomId(discordCustomId('default_value'))
         .setLabel(isCount ? 'Default MAX Value (optional)' : 'Default Value (optional)')
         .setStyle(TextInputStyle.Short)
         .setValue(field?.default_value ?? '')
@@ -173,7 +173,7 @@ function buildStatTemplateModal({
       ? [
           new ActionRowBuilder<TextInputBuilder>().addComponents(
             new TextInputBuilder()
-              .setCustomId('default_current')
+              .setCustomId(discordCustomId('default_current'))
               .setLabel('Default CURRENT Value (optional)')
               .setStyle(TextInputStyle.Short)
               .setValue(countDefaults?.current?.toString() ?? '')
@@ -183,7 +183,7 @@ function buildStatTemplateModal({
       : []),
     new ActionRowBuilder<TextInputBuilder>().addComponents(
       new TextInputBuilder()
-        .setCustomId('sort_order')
+        .setCustomId(discordCustomId('sort_order'))
         .setLabel('Sort Order (lower = higher up)')
         .setStyle(TextInputStyle.Short)
         .setValue(field?.sort_order?.toString() ?? '0')
@@ -192,7 +192,7 @@ function buildStatTemplateModal({
   ];
 
   return new ModalBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setTitle(title)
     .addComponents(...components);
 }

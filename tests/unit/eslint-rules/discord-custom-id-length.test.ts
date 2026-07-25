@@ -34,9 +34,10 @@ describe('discord-custom-id-length ESLint rule', () => {
       declare const builder: { setCustomId(value: string): void };
       declare const entityId: string;
       declare const item: { id: string; equipped: boolean };
-      builder.setCustomId(
+      declare function discordCustomId(value: string): string;
+      builder.setCustomId(discordCustomId(
         \`equipGameEntityInventory:\${entityId}:\${item.id}:\${item.equipped ? 'off' : 'on'}\`,
-      );
+      ));
     `);
 
     expect(result.messages).toEqual([
@@ -52,11 +53,41 @@ describe('discord-custom-id-length ESLint rule', () => {
       declare const builder: { setCustomId(value: string): void };
       declare const entityId: string;
       declare const item: { id: string; equipped: boolean };
-      builder.setCustomId(
+      declare function discordCustomId(value: string): string;
+      builder.setCustomId(discordCustomId(
         \`geInvEquip:\${entityId}:\${item.id}:\${item.equipped ? 'off' : 'on'}\`,
-      );
+      ));
     `);
 
     expect(result.messages).toEqual([]);
+  });
+
+  test('rejects custom IDs that bypass the shared runtime guard', async () => {
+    const [result] = await lint(`
+      declare const builder: { setCustomId(value: string): void };
+      builder.setCustomId('static-id');
+    `);
+
+    expect(result.messages).toEqual([
+      expect.objectContaining({
+        ruleId: 'local/discord-custom-id-length',
+        message: expect.stringContaining('through discordCustomId()'),
+      }),
+    ]);
+  });
+
+  test('also rejects raw component custom_id properties that bypass the guard', async () => {
+    const [result] = await lint(`
+      declare const gameId: string;
+      const component = { custom_id: \`finishStatSetup:\${gameId}\` };
+      void component;
+    `);
+
+    expect(result.messages).toEqual([
+      expect.objectContaining({
+        ruleId: 'local/discord-custom-id-length',
+        message: expect.stringContaining('through discordCustomId()'),
+      }),
+    ]);
   });
 });
