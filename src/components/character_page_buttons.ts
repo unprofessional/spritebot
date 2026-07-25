@@ -1,6 +1,7 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 // src/components/character_page_buttons.ts
 
-import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
 import { getCharactersByGame } from '../services/character.service';
 import { getCurrentGame } from '../services/player.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -22,7 +23,7 @@ function build(page: number, hasPrev: boolean, hasNext: boolean): ActionRowBuild
   if (hasPrev) {
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(`${id}:prev:${page}`)
+        .setCustomId(discordCustomId(`${id}:prev:${page}`))
         .setLabel('⬅️ Previous')
         .setStyle(ButtonStyle.Secondary),
     );
@@ -31,7 +32,7 @@ function build(page: number, hasPrev: boolean, hasNext: boolean): ActionRowBuild
   if (hasNext) {
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(`${id}:next:${page}`)
+        .setCustomId(discordCustomId(`${id}:next:${page}`))
         .setLabel('➡️ Next')
         .setStyle(ButtonStyle.Secondary),
     );

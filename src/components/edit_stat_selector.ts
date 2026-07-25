@@ -1,6 +1,6 @@
-// src/components/edit_stat_selector.ts
-
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/edit_stat_selector.ts
 
 import { gatedPreparedComponentModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
@@ -30,7 +30,7 @@ function build(
   });
 
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setPlaceholder('Select a stat field to edit')
     .addOptions(options);
 

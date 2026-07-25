@@ -374,6 +374,59 @@ describe('game entity Discord UI', () => {
     expect(customIds.every((customId: string) => customId.length <= 100)).toBe(true);
   });
 
+  test('requires confirmation before permanently deleting an entity inventory item', async () => {
+    const { entity } = await setupEntity('private');
+    const item = await createGameEntityInventoryItem(entity.id, 'gm-1', {
+      name: 'Sword of Diamonds',
+    });
+    const respond = jest.fn().mockResolvedValue(undefined);
+
+    await handleEntityButtons(
+      {
+        customId: `geInvDelete:${entity.id}:${item.id}`,
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+
+    expect(respond).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: `🗑️ Permanently delete **${item.name}** from this entity's inventory?`,
+        embeds: [],
+      }),
+    );
+    await expect(getGameEntity(entity.id)).resolves.toEqual(
+      expect.objectContaining({
+        inventory: [expect.objectContaining({ id: item.id })],
+      }),
+    );
+
+    const confirmationIds = respond.mock.calls[0][0].components[0].components.map(
+      (component: { data: { custom_id: string } }) => component.data.custom_id,
+    );
+    expect(confirmationIds).toEqual([
+      `geInvDeleteOk:${entity.id}:${item.id}`,
+      `geInvDeleteCancel:${entity.id}:${item.id}`,
+    ]);
+    expect(confirmationIds.every((customId: string) => customId.length <= 100)).toBe(true);
+
+    respond.mockClear();
+    await handleEntityButtons(
+      {
+        customId: `geInvDeleteOk:${entity.id}:${item.id}`,
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+
+    await expect(getGameEntity(entity.id)).resolves.toEqual(
+      expect.objectContaining({ inventory: [] }),
+    );
+    expect(respond).toHaveBeenCalledWith(
+      expect.objectContaining({ content: '🗑️ Inventory item deleted.' }),
+    );
+  });
+
   test('requires confirmation to delete and restores the entity as private', async () => {
     const { entity } = await setupEntity('public');
     const respond = jest.fn().mockResolvedValue(undefined);

@@ -1,5 +1,3 @@
-// src/components/create_stat_modal.ts
-
 import {
   ModalBuilder,
   TextInputBuilder,
@@ -9,6 +7,8 @@ import {
   type ActionRowData,
   type MessageActionRowComponentData,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/create_stat_modal.ts
 
 import { addStatTemplates, getStatTemplates, getGame } from '../services/game.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -30,13 +30,13 @@ function build(gameId: string, statType: string): ModalBuilder {
   if (!statType) throw new Error('[create_stat_modal.build] Missing statType');
 
   const labelInput = new TextInputBuilder()
-    .setCustomId('label')
+    .setCustomId(discordCustomId('label'))
     .setLabel("Field Label: What's it called?")
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
 
   const defaultInput = new TextInputBuilder()
-    .setCustomId('default_value')
+    .setCustomId(discordCustomId('default_value'))
     .setLabel(statType === 'count' ? 'Default MAX Value (optional)' : 'Default Value (optional)')
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
@@ -45,7 +45,7 @@ function build(gameId: string, statType: string): ModalBuilder {
     statType === 'count'
       ? new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('default_current')
+            .setCustomId(discordCustomId('default_current'))
             .setLabel('Default CURRENT Value (optional)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false),
@@ -53,13 +53,13 @@ function build(gameId: string, statType: string): ModalBuilder {
       : null;
 
   const sortInput = new TextInputBuilder()
-    .setCustomId('sort_index')
+    .setCustomId(discordCustomId('sort_index'))
     .setLabel('Sort Order (optional): 0=top, 9=lower')
     .setStyle(TextInputStyle.Short)
     .setRequired(false);
 
   return new ModalBuilder()
-    .setCustomId(`${id}:${gameId}:${statType}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}:${statType}`))
     .setTitle(`Add ${statType.replace('-', ' ')} stat`)
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(labelInput),

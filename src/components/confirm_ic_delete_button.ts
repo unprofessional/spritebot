@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   CacheType,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import { deleteRoleplayProxyMessage } from '../services/rp_message_proxy.service';
 import { resultMessage, resultReason } from '../utils/ic_delete_result';
@@ -23,11 +24,11 @@ function build(channelId: string, messageId: string, userId: string) {
 
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${confirmId}:${payload}`)
+      .setCustomId(discordCustomId(`${confirmId}:${payload}`))
       .setLabel('Confirm Delete')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId(`${cancelId}:${payload}`)
+      .setCustomId(discordCustomId(`${cancelId}:${payload}`))
       .setLabel('Cancel')
       .setStyle(ButtonStyle.Secondary),
   );
