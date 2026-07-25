@@ -1,5 +1,3 @@
-// src/handlers/button_handlers/inventory_buttons.ts
-
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -9,6 +7,8 @@ import {
   TextInputStyle,
   type ButtonInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
+// src/handlers/button_handlers/inventory_buttons.ts
 
 import { build as buildInventoryCard } from '../../components/view_inventory_card';
 import {
@@ -57,26 +57,26 @@ export async function handle(
 
     const page = parseInt(rawPage, 10) || 0;
     const modal = new ModalBuilder()
-      .setCustomId(`addInventoryModal:${characterId}:${page}`)
+      .setCustomId(discordCustomId(`addInventoryModal:${characterId}:${page}`))
       .setTitle('Add Inventory Item')
       .addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('name')
+            .setCustomId(discordCustomId('name'))
             .setLabel('Item Name')
             .setStyle(TextInputStyle.Short)
             .setRequired(true),
         ),
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('type')
+            .setCustomId(discordCustomId('type'))
             .setLabel('Item Type / Category (optional)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false),
         ),
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('quantity')
+            .setCustomId(discordCustomId('quantity'))
             .setLabel('Quantity')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
@@ -84,7 +84,7 @@ export async function handle(
         ),
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId('description')
+            .setCustomId(discordCustomId('description'))
             .setLabel('Description (optional)')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false),
@@ -209,11 +209,11 @@ export async function handle(
     const page = parseInt(rawPage, 10) || 0;
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`invDelOk:${characterId}:${itemId}:${page}`)
+        .setCustomId(discordCustomId(`invDelOk:${characterId}:${itemId}:${page}`))
         .setLabel('Yes, Delete Item')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId(`cancel_inventory_item_action:${characterId}:${page}`)
+        .setCustomId(discordCustomId(`cancel_inventory_item_action:${characterId}:${page}`))
         .setLabel('↩️ Go Back')
         .setStyle(ButtonStyle.Secondary),
     );
@@ -264,11 +264,11 @@ export async function handle(
     const page = parseInt(rawPage, 10) || 0;
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`confirm_clear_inventory:${characterId}:${page}`)
+        .setCustomId(discordCustomId(`confirm_clear_inventory:${characterId}:${page}`))
         .setLabel('Yes, Delete All Items')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder()
-        .setCustomId(`cancel_clear_inventory:${characterId}:${page}`)
+        .setCustomId(discordCustomId(`cancel_clear_inventory:${characterId}:${page}`))
         .setLabel('Cancel')
         .setStyle(ButtonStyle.Secondary),
     );

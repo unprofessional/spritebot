@@ -5,6 +5,7 @@ import {
   EmbedBuilder,
   StringSelectMenuBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 import type { HydratedGameEntity, HydratedGameEntityInventoryItem } from '../types/game_entity';
 import { formatCharacterStatValue } from '../utils/character_stat_display';
 
@@ -53,16 +54,16 @@ export function build(entity: HydratedGameEntity, canManage: boolean) {
 
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`editGameEntity:${entity.id}`)
+      .setCustomId(discordCustomId(`editGameEntity:${entity.id}`))
       .setLabel('✏️ Edit')
       .setStyle(ButtonStyle.Primary),
     ...visibilityButtons(entity),
     new ButtonBuilder()
-      .setCustomId(`viewGameEntityInventory:${entity.id}`)
+      .setCustomId(discordCustomId(`viewGameEntityInventory:${entity.id}`))
       .setLabel('🎒 Inventory')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`deleteGameEntity:${entity.id}`)
+      .setCustomId(discordCustomId(`deleteGameEntity:${entity.id}`))
       .setLabel('🗑️ Delete')
       .setStyle(ButtonStyle.Danger),
   );
@@ -78,11 +79,11 @@ export function buildInventory(entity: HydratedGameEntity) {
   const rows: ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] = [
     new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`addGameEntityInventory:${entity.id}`)
+        .setCustomId(discordCustomId(`addGameEntityInventory:${entity.id}`))
         .setLabel('➕ Add Item')
         .setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
-        .setCustomId(`backToGameEntity:${entity.id}`)
+        .setCustomId(discordCustomId(`backToGameEntity:${entity.id}`))
         .setLabel('↩️ Back')
         .setStyle(ButtonStyle.Secondary),
     ),
@@ -92,7 +93,7 @@ export function buildInventory(entity: HydratedGameEntity) {
     rows.push(
       new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
         new StringSelectMenuBuilder()
-          .setCustomId(`manageGameEntityInventory:${entity.id}`)
+          .setCustomId(discordCustomId(`manageGameEntityInventory:${entity.id}`))
           .setPlaceholder('Choose an inventory item')
           .addOptions(
             entity.inventory.slice(0, 25).map((item) => ({
@@ -127,15 +128,17 @@ export function buildInventoryItemActions(entityId: string, item: HydratedGameEn
     );
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`geInvEquip:${entityId}:${item.id}:${item.equipped ? 'off' : 'on'}`)
+      .setCustomId(
+        discordCustomId(`geInvEquip:${entityId}:${item.id}:${item.equipped ? 'off' : 'on'}`),
+      )
       .setLabel(item.equipped ? '▫️ Unequip' : '✅ Equip')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`geInvDelete:${entityId}:${item.id}`)
+      .setCustomId(discordCustomId(`geInvDelete:${entityId}:${item.id}`))
       .setLabel('🗑️ Delete Item')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId(`viewGameEntityInventory:${entityId}`)
+      .setCustomId(discordCustomId(`viewGameEntityInventory:${entityId}`))
       .setLabel('↩️ Back')
       .setStyle(ButtonStyle.Secondary),
   );
@@ -158,7 +161,7 @@ function visibilityButtons(entity: HydratedGameEntity): ButtonBuilder[] {
 
   return choices.map(([visibility, label]) =>
     new ButtonBuilder()
-      .setCustomId(`setGameEntityVisibility:${entity.id}:${visibility}`)
+      .setCustomId(discordCustomId(`setGameEntityVisibility:${entity.id}:${visibility}`))
       .setLabel(label)
       .setStyle(ButtonStyle.Secondary),
   );

@@ -7,6 +7,7 @@ import {
   TextInputStyle,
   type ButtonInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
 import {
   gatedImmediateModalInteractionPolicy,
   type InteractionDispatchPolicy,
@@ -94,7 +95,7 @@ export async function handle(
     if (action === 'addGameEntityInventory') {
       await assertManager(entityId, interaction.user.id);
       const modal = new ModalBuilder()
-        .setCustomId(`addGameEntityInventoryModal:${entityId}`)
+        .setCustomId(discordCustomId(`addGameEntityInventoryModal:${entityId}`))
         .setTitle('Add Entity Inventory Item')
         .addComponents(
           textRow('name', 'Item Name', true),
@@ -127,11 +128,11 @@ export async function handle(
       if (!item) return missing(responder);
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`geInvDeleteOk:${entityId}:${itemId}`)
+          .setCustomId(discordCustomId(`geInvDeleteOk:${entityId}:${itemId}`))
           .setLabel('Confirm Delete')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-          .setCustomId(`geInvDeleteCancel:${entityId}:${itemId}`)
+          .setCustomId(discordCustomId(`geInvDeleteCancel:${entityId}:${itemId}`))
           .setLabel('Cancel')
           .setStyle(ButtonStyle.Secondary),
       );
@@ -165,11 +166,11 @@ export async function handle(
       if (!entity) return missing(responder);
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
-          .setCustomId(`confirmDeleteGameEntity:${entityId}`)
+          .setCustomId(discordCustomId(`confirmDeleteGameEntity:${entityId}`))
           .setLabel('Confirm Delete')
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-          .setCustomId(`backToGameEntity:${entityId}`)
+          .setCustomId(discordCustomId(`backToGameEntity:${entityId}`))
           .setLabel('Cancel')
           .setStyle(ButtonStyle.Secondary),
       );
@@ -236,7 +237,7 @@ function textRow(
   placeholder?: string,
 ) {
   const input = new TextInputBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setLabel(label)
     .setRequired(required)
     .setStyle(style);

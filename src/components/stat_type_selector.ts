@@ -1,11 +1,11 @@
-// src/components/stat_type_selector.ts
-
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   type MessageActionRowComponentBuilder,
   type StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/stat_type_selector.ts
 
 import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
@@ -16,7 +16,7 @@ const interactionPolicy = gatedImmediateModalInteractionPolicy;
 
 function build(gameId: string): ActionRowBuilder<MessageActionRowComponentBuilder> {
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setPlaceholder('➕ Add a new stat field...')
     .addOptions([
       {

@@ -7,6 +7,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import type {
   RpProxyContentResult,
@@ -49,7 +50,7 @@ export function resultMessage(status: string, reason?: string): string {
 
 export function buildIcEditModal(messageId: string, content?: string): ModalBuilder {
   const input = new TextInputBuilder()
-    .setCustomId('content')
+    .setCustomId(discordCustomId('content'))
     .setLabel('Message Content')
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(true)
@@ -57,7 +58,7 @@ export function buildIcEditModal(messageId: string, content?: string): ModalBuil
   if (content) input.setValue(content);
 
   return new ModalBuilder()
-    .setCustomId(`ic-edit-modal:${messageId}`)
+    .setCustomId(discordCustomId(`ic-edit-modal:${messageId}`))
     .setTitle('Edit IC Message')
     .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
 }

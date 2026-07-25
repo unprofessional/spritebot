@@ -1,11 +1,12 @@
-// src/components/restore_character_selector.ts
-
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/restore_character_selector.ts
+
 import { getRestorableCharacters, restoreCharacterForUser } from '../services/character.service';
 import { formatTimeAgo } from '../utils/time_ago';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -35,7 +36,7 @@ export async function build(
   }
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Choose a character to restore')
     .addOptions(
       characters.slice(0, 25).map((character) =>

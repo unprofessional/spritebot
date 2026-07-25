@@ -3,6 +3,7 @@ import {
   StringSelectMenuBuilder,
   type StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import { getGame } from '../services/game.service';
@@ -19,7 +20,7 @@ export const interactionPolicy = {
 export function build(entities: GameEntity[]) {
   return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(id)
+      .setCustomId(discordCustomId(id))
       .setPlaceholder('Choose an NPC or creature')
       .addOptions(
         entities.slice(0, 25).map((entity) => ({

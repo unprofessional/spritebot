@@ -1,4 +1,5 @@
 import { ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
@@ -12,7 +13,7 @@ const interactionPolicy = {
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setLabel('✅ Confirm Delete')
     .setStyle(ButtonStyle.Danger);
 }

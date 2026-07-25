@@ -1,6 +1,6 @@
-// src/components/delete_character_button.ts
-
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/delete_character_button.ts
 
 import { getCharacterWithStats } from '../services/character.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -15,7 +15,7 @@ const interactionPolicy = {
 
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${characterId}`)
+    .setCustomId(discordCustomId(`${id}:${characterId}`))
     .setLabel('🗑️ Delete Character')
     .setStyle(ButtonStyle.Danger);
 }
@@ -41,7 +41,7 @@ async function handle(
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       buildConfirmDeleteButton(characterId),
       new ButtonBuilder()
-        .setCustomId(`goBackToCharacter:${characterId}`)
+        .setCustomId(discordCustomId(`goBackToCharacter:${characterId}`))
         .setLabel('↩️ Cancel')
         .setStyle(ButtonStyle.Secondary),
     );

@@ -1,11 +1,11 @@
-// src/components/switch_game_selector.ts
-
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/switch_game_selector.ts
 
 import { getCharactersByUser } from '../services/character.service';
 import { getGamesByGuild, getGamesByUser } from '../services/game.service';
@@ -68,7 +68,7 @@ export async function build(userId: string, guildId: string): Promise<BuildRespo
   );
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Choose your game')
     .addOptions(options);
 

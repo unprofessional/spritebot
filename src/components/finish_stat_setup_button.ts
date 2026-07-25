@@ -11,6 +11,7 @@ import {
 import { getGame, getStatTemplates } from '../services/game.service';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
@@ -25,7 +26,7 @@ const interactionPolicy = {
 
 function build(gameId: string): APIButtonComponentWithCustomId {
   return {
-    custom_id: `${id}:${gameId}`,
+    custom_id: discordCustomId(`${id}:${gameId}`),
     label: '↩️ Cancel / Go Back',
     style: ButtonStyle.Secondary,
     type: 2,

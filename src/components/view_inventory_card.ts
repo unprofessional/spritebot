@@ -9,6 +9,7 @@ import {
   EmbedBuilder,
   StringSelectMenuBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 export const id = 'viewInventoryCard';
 export const inventoryPageId = 'inventoryPage';
@@ -17,7 +18,7 @@ const pageSize = 6;
 
 export function buildViewInventoryButton(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`view_inventory:${characterId}`)
+    .setCustomId(discordCustomId(`view_inventory:${characterId}`))
     .setLabel('🎒 Inventory')
     .setStyle(ButtonStyle.Secondary);
 }
@@ -67,11 +68,11 @@ export function build(
 
   const controls = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`add_inventory_item:${character.id}:${safePage}`)
+      .setCustomId(discordCustomId(`add_inventory_item:${character.id}:${safePage}`))
       .setLabel('➕ Add Item')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`clear_inventory:${character.id}:${safePage}`)
+      .setCustomId(discordCustomId(`clear_inventory:${character.id}:${safePage}`))
       .setLabel('🗑️ Delete All')
       .setStyle(ButtonStyle.Danger),
   );
@@ -100,7 +101,7 @@ function buildEditSelectRow(
   items: InventoryCharacter['inventory'],
 ): ActionRowBuilder<StringSelectMenuBuilder> {
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`editInventoryItemSelect:${characterId}:${page}`)
+    .setCustomId(discordCustomId(`editInventoryItemSelect:${characterId}:${page}`))
     .setPlaceholder('View/Edit an inventory item')
     .addOptions(
       items.map((item) => ({
@@ -124,12 +125,12 @@ function buildPaginationRow(
 ): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${inventoryPageId}:prev:${characterId}:${page}`)
+      .setCustomId(discordCustomId(`${inventoryPageId}:prev:${characterId}:${page}`))
       .setLabel('⬅️ Previous')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 0),
     new ButtonBuilder()
-      .setCustomId(`${inventoryPageId}:next:${characterId}:${page}`)
+      .setCustomId(discordCustomId(`${inventoryPageId}:next:${characterId}:${page}`))
       .setLabel('➡️ Next')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages - 1),
