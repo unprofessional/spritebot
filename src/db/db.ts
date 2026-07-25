@@ -37,6 +37,11 @@ export async function initializeDB(): Promise<void> {
       'character_custom_field',
       'character_inventory',
       'character_inventory_field',
+      'game_entity',
+      'game_entity_stat_field',
+      'game_entity_custom_field',
+      'game_entity_inventory',
+      'game_entity_inventory_field',
       'thread_bumps', // <— NEW
       'rp_channel_mode',
       'rp_proxy_message',

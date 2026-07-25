@@ -30,7 +30,7 @@ describe('game deletion buttons', () => {
 
     expect(gmResponder.respond).toHaveBeenCalledWith(
       expect.objectContaining({
-        content: expect.stringContaining('all its characters'),
+        content: expect.stringContaining('characters, NPCs, and creatures'),
         components: expect.any(Array),
       }),
     );
@@ -59,6 +59,9 @@ describe('game deletion buttons', () => {
         content: expect.stringContaining('Deleted **Button Campaign**'),
         components: [],
       }),
+    );
+    expect(response.respond.mock.calls[0][0].content).toContain(
+      'NPCs and creatures affected: **0**',
     );
     await expect(gameDAO.findById(game.id)).resolves.toBeNull();
   });
