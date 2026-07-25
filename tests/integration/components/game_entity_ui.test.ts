@@ -1,6 +1,10 @@
 import { GameDAO } from '../../../src/dao/game.dao';
+import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import { handle as handleEntitySelector } from '../../../src/components/game_entity_selector';
-import { build as buildEntityFieldSelector } from '../../../src/components/game_entity_field_selector';
+import {
+  build as buildEntityFieldSelector,
+  handle as handleEntityFieldSelector,
+} from '../../../src/components/game_entity_field_selector';
 import { build as buildEntityCard } from '../../../src/components/view_game_entity_card';
 import { handle as handleRestoreEntity } from '../../../src/components/restore_game_entity_selector';
 import type { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
@@ -22,6 +26,7 @@ const viewEntityCommand = require('../../../src/commands/view-entity') as {
 
 describe('game entity Discord UI', () => {
   const gameDAO = new GameDAO();
+  const statTemplateDAO = new StatTemplateDAO();
 
   async function setupEntity(visibility: 'private' | 'public' | 'link-only') {
     const game = await gameDAO.create({
@@ -178,6 +183,86 @@ describe('game entity Discord UI', () => {
     expect(hydrated?.customFields).toEqual([
       expect.objectContaining({ name: 'Faction', value: 'Sun Court' }),
     ]);
+  });
+
+  test('renders and edits count stats with the shared current/max contract', async () => {
+    const game = await gameDAO.create({
+      name: 'Count Entity Game',
+      description: '',
+      created_by: 'gm-1',
+      guild_id: 'guild-1',
+    });
+    const template = await statTemplateDAO.create({
+      game_id: game.id,
+      label: 'Hit Points',
+      field_type: 'count',
+      default_value: '12',
+      meta: { default_current: 8 },
+    });
+    const entity = await createGameEntity({
+      requesterId: 'gm-1',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Owlbear',
+    });
+
+    const selector = buildEntityFieldSelector(entity).toJSON();
+    expect(selector.components[0].options).toContainEqual(
+      expect.objectContaining({
+        label: 'Hit Points',
+        value: `stat|${template.id}|count`,
+        description: '8 / 12',
+      }),
+    );
+
+    const showModal = jest.fn().mockResolvedValue(undefined);
+    await handleEntityFieldSelector(
+      {
+        customId: `editGameEntityField:${entity.id}`,
+        values: [`stat|${template.id}|count`],
+        user: { id: 'gm-1' },
+      } as never,
+      { showModal } as unknown as DiscordInteractionResponder,
+    );
+    const modal = showModal.mock.calls[0][0].toJSON();
+    expect(modal).toEqual(
+      expect.objectContaining({
+        custom_id: `editGameEntityModal:${entity.id}:stat:${template.id}`,
+        title: 'Edit Stat: Hit Points',
+      }),
+    );
+    expect(modal.components.map((row: { components: unknown[] }) => row.components[0])).toEqual([
+      expect.objectContaining({ custom_id: `${template.id}:max`, value: '12' }),
+      expect.objectContaining({ custom_id: `${template.id}:current`, value: '8' }),
+    ]);
+
+    const respond = jest.fn().mockResolvedValue(undefined);
+    await handleEntityModal(
+      {
+        customId: `editGameEntityModal:${entity.id}:stat:${template.id}`,
+        user: { id: 'gm-1' },
+        fields: {
+          getTextInputValue: (field: string) =>
+            ({ [`${template.id}:max`]: '20', [`${template.id}:current`]: '7' })[field] ?? '',
+        },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+
+    await expect(getGameEntity(entity.id)).resolves.toEqual(
+      expect.objectContaining({
+        stats: [
+          expect.objectContaining({
+            label: 'Hit Points',
+            field_type: 'count',
+            meta: expect.objectContaining({ max: 20, current: 7 }),
+          }),
+        ],
+      }),
+    );
+    expect(respond.mock.calls[0][0].embeds[0].toJSON().fields).toContainEqual(
+      expect.objectContaining({ name: 'Hit Points', value: '7 / 20' }),
+    );
   });
 
   test('rejects malformed direct entity IDs without querying PostgreSQL', async () => {
