@@ -1,5 +1,3 @@
-// src/handlers/select_menu_handlers/character_stat_select_menu.ts
-
 import {
   ModalBuilder,
   TextInputBuilder,
@@ -7,6 +5,8 @@ import {
   ActionRowBuilder,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
+// src/handlers/select_menu_handlers/character_stat_select_menu.ts
 
 import { gatedPreparedComponentModalInteractionPolicy } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
@@ -62,12 +62,12 @@ export async function handle(
     const inputStyle = coreField === 'bio' ? TextInputStyle.Paragraph : TextInputStyle.Short;
 
     const modal = new ModalBuilder()
-      .setCustomId(`editCharacterField:${characterId}:${selectedKey}`)
+      .setCustomId(discordCustomId(`editCharacterField:${characterId}:${selectedKey}`))
       .setTitle(truncate(`Edit ${label}`))
       .addComponents(
         new ActionRowBuilder<TextInputBuilder>().addComponents(
           new TextInputBuilder()
-            .setCustomId(selectedKey)
+            .setCustomId(discordCustomId(selectedKey))
             .setLabel(truncate(`Value for ${label}`))
             .setStyle(inputStyle)
             .setValue(typeof value === 'string' ? value : '')
@@ -98,7 +98,7 @@ export async function handle(
   const fieldType = stat.field_type ?? (stat.meta?.field_type as string | undefined);
 
   const modal = new ModalBuilder().setCustomId(
-    `editStatModal:${characterId}:${fieldType}:${fieldKey}`,
+    discordCustomId(`editStatModal:${characterId}:${fieldType}:${fieldKey}`),
   );
 
   modal.setTitle(truncate(`Edit Stat: ${label}`));
@@ -110,7 +110,7 @@ export async function handle(
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId(`${fieldKey}:max`)
+          .setCustomId(discordCustomId(`${fieldKey}:max`))
           .setLabel(truncate(`Max value for ${label}`))
           .setStyle(TextInputStyle.Short)
           .setValue(String(max))
@@ -118,7 +118,7 @@ export async function handle(
       ),
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId(`${fieldKey}:current`)
+          .setCustomId(discordCustomId(`${fieldKey}:current`))
           .setLabel(truncate(`Current value for ${label}`))
           .setStyle(TextInputStyle.Short)
           .setValue(String(current))
@@ -131,7 +131,7 @@ export async function handle(
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId(fieldKey)
+          .setCustomId(discordCustomId(fieldKey))
           .setLabel(truncate(`New value for ${label}`))
           .setStyle(inputStyle)
           .setValue(stat.value ?? '')

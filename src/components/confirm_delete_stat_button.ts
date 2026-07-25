@@ -1,6 +1,6 @@
-// src/components/confirm_delete_stat_button.ts
-
 import { ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/confirm_delete_stat_button.ts
 
 import {
   deleteStatTemplate,
@@ -23,7 +23,7 @@ const interactionPolicy = {
 
 function build(statId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${statId}`)
+    .setCustomId(discordCustomId(`${id}:${statId}`))
     .setLabel('✅ Confirm Delete')
     .setStyle(ButtonStyle.Danger);
 }

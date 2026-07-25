@@ -5,6 +5,7 @@ import {
   TextInputStyle,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
 
 import { getCharacterWithStats } from '../../services/character.service';
 import type { CharacterWithStats, CharacterStatWithLabel } from '../../types/character';
@@ -49,18 +50,18 @@ export async function handle(
 
   if (customId.startsWith('adjustStatSelect:')) {
     const modal = new ModalBuilder()
-      .setCustomId(`adjustStatModal:${characterId}:${statId}`)
+      .setCustomId(discordCustomId(`adjustStatModal:${characterId}:${statId}`))
       .setTitle('Adjust Stat Value');
 
     const operatorInput = new TextInputBuilder()
-      .setCustomId('deltaOperator')
+      .setCustomId(discordCustomId('deltaOperator'))
       .setLabel('Math operator (+, -, *, /)')
       .setStyle(TextInputStyle.Short)
       .setRequired(true)
       .setPlaceholder('+');
 
     const valueInput = new TextInputBuilder()
-      .setCustomId('deltaValue')
+      .setCustomId(discordCustomId('deltaValue'))
       .setLabel('Value to apply with operator')
       .setStyle(TextInputStyle.Short)
       .setRequired(true)

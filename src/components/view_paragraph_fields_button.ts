@@ -1,6 +1,6 @@
-// src/components/view_paragraph_fields_button.ts
-
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/view_paragraph_fields_button.ts
 
 import { getCharacterWithStats } from '../services/character.service';
 import { CharacterWithStats } from '../types/character';
@@ -19,7 +19,7 @@ const interactionPolicy = {
  */
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${characterId}`)
+    .setCustomId(discordCustomId(`${id}:${characterId}`))
     .setLabel('📜 View Full Descriptions')
     .setStyle(ButtonStyle.Secondary);
 }

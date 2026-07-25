@@ -6,6 +6,7 @@ import {
   CacheType,
   type GuildMember,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import { supportGuildId } from '../config/env_config';
 import { verifySupportMember } from '../services/support_verification.service';
@@ -31,7 +32,7 @@ const supportMemberReadPolicy = defineDiscordOperationPolicy({
 function build(): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${id}:verify`)
+      .setCustomId(discordCustomId(`${id}:verify`))
       .setLabel('Verify')
       .setStyle(ButtonStyle.Primary),
   );

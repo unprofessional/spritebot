@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
 
 export function build() {
   const embed = new EmbedBuilder()
@@ -8,11 +9,11 @@ export function build() {
 
   const roles = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('help:role:player')
+      .setCustomId(discordCustomId('help:role:player'))
       .setLabel("🎮 I'm a Player")
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('help:role:gm')
+      .setCustomId(discordCustomId('help:role:gm'))
       .setLabel("🛡️ I'm a GM / Server Admin")
       .setStyle(ButtonStyle.Secondary),
   );

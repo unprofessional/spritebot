@@ -6,6 +6,7 @@ import {
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
 
 import type { FeatureKey } from '../../access/features';
 import { getVisibleHelpCategories, type HelpCategoryId, type HelpRole } from './help_content';
@@ -29,7 +30,7 @@ export function buildNavigation(
 ) {
   const categories = getVisibleHelpCategories(role, features);
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(`help:category:${role}`)
+    .setCustomId(discordCustomId(`help:category:${role}`))
     .setPlaceholder('Choose a help topic')
     .addOptions(
       categories.map((category) =>
@@ -45,7 +46,7 @@ export function buildNavigation(
   const categoryRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
   const backRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId('help:back')
+      .setCustomId(discordCustomId('help:back'))
       .setLabel('← Back to roles')
       .setStyle(ButtonStyle.Secondary),
   );

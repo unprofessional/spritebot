@@ -1,5 +1,3 @@
-// src/components/character_field_selector.ts
-
 import {
   ActionRowBuilder,
   ModalBuilder,
@@ -8,6 +6,8 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/character_field_selector.ts
 
 import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
@@ -36,7 +36,7 @@ export function build(
   statTemplates: StatTemplate[] = [],
 ): ActionRowBuilder<StringSelectMenuBuilder> {
   const dropdown = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Choose a character field to define')
     .addOptions(
       fieldOptions.map((f) => {
@@ -84,21 +84,23 @@ export async function handle(
   }
 
   const modal = new ModalBuilder()
-    .setCustomId(`createDraftCharacterField:${fieldKey}|${label}|${fieldType || ''}`)
+    .setCustomId(
+      discordCustomId(`createDraftCharacterField:${fieldKey}|${label}|${fieldType || ''}`),
+    )
     .setTitle(truncate(`Enter value for ${label}`));
 
   if (fieldType === 'count') {
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId(`${fieldKey}:max`)
+          .setCustomId(discordCustomId(`${fieldKey}:max`))
           .setLabel(truncate(`MAX value for ${label}`))
           .setStyle(TextInputStyle.Short)
           .setRequired(true),
       ),
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId(`${fieldKey}:current`)
+          .setCustomId(discordCustomId(`${fieldKey}:current`))
           .setLabel(truncate(`CURRENT (optional)`))
           .setStyle(TextInputStyle.Short)
           .setRequired(false),
@@ -110,7 +112,7 @@ export async function handle(
     modal.addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId(fieldKey)
+          .setCustomId(discordCustomId(fieldKey))
           .setLabel(truncate(`Value for ${label}`))
           .setStyle(inputStyle)
           .setRequired(true),

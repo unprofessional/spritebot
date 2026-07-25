@@ -1,11 +1,12 @@
-// src/components/paragraph_field_selector.ts
-
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuInteraction,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/paragraph_field_selector.ts
+
 import { getCharacterWithStats } from '../services/character.service';
 import { CharacterWithStats, CharacterStatWithLabel } from '../types/character';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -52,7 +53,7 @@ function build(character: CharacterWithStats): ActionRowBuilder<StringSelectMenu
   if (!options.length) return null;
 
   const dropdown = new StringSelectMenuBuilder()
-    .setCustomId(`${id}:${character.id}`)
+    .setCustomId(discordCustomId(`${id}:${character.id}`))
     .setPlaceholder('📜 Select a paragraph field to view')
     .addOptions(options);
 

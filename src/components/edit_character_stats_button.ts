@@ -1,5 +1,3 @@
-// src/components/edit_character_stats_button.ts
-
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -8,6 +6,8 @@ import {
   ButtonInteraction,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/edit_character_stats_button.ts
 
 import { getCharacterWithStats } from '../services/character.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -27,7 +27,7 @@ type EditableStat = CharacterStatWithLabel & { name?: string };
 
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${characterId}`)
+    .setCustomId(discordCustomId(`${id}:${characterId}`))
     .setLabel('✏️ Update Stats')
     .setStyle(ButtonStyle.Primary);
 }
@@ -113,7 +113,7 @@ async function handle(
   }
 
   const dropdown = new StringSelectMenuBuilder()
-    .setCustomId(`editCharacterStatDropdown:${characterId}`)
+    .setCustomId(discordCustomId(`editCharacterStatDropdown:${characterId}`))
     .setPlaceholder('🛠️ Manually update a stat or core field')
     .addOptions(
       options.map((option) =>
@@ -125,7 +125,7 @@ async function handle(
     );
 
   const cancelButton = new ButtonBuilder()
-    .setCustomId(`goBackToCharacter:${characterId}`)
+    .setCustomId(discordCustomId(`goBackToCharacter:${characterId}`))
     .setLabel('↩️ Cancel / Go Back')
     .setStyle(ButtonStyle.Secondary);
 

@@ -1,6 +1,6 @@
-// src/components/toggle_publish_button.ts
-
 import { ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/toggle_publish_button.ts
 
 import { getStatTemplates, togglePublish } from '../services/game.service';
 import { getOrCreatePlayer } from '../services/player.service';
@@ -19,7 +19,7 @@ const interactionPolicy = {
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setLabel('📣 Toggle Visibility')
     .setStyle(ButtonStyle.Success);
 }
