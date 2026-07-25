@@ -35,12 +35,11 @@ module.exports = {
     .addStringOption((option) =>
       option
         .setName('visibility')
-        .setDescription('Who can discover this entity')
+        .setDescription('Whether this entity starts published')
         .setRequired(false)
         .addChoices(
-          { name: 'Private', value: 'private' },
-          { name: 'Link-only', value: 'link-only' },
-          { name: 'Public', value: 'public' },
+          { name: 'Not Published', value: 'private' },
+          { name: 'Published', value: 'public' },
         ),
     ),
   interactionPolicy: {
