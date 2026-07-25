@@ -1,5 +1,3 @@
-// src/components/calculate_character_stats_button.ts
-
 import {
   ButtonBuilder,
   ButtonStyle,
@@ -8,6 +6,8 @@ import {
   StringSelectMenuOptionBuilder,
   ButtonInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/calculate_character_stats_button.ts
 
 import { getCharacterWithStats } from '../services/character.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -42,7 +42,7 @@ interface StatField {
  */
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${characterId}`)
+    .setCustomId(discordCustomId(`${id}:${characterId}`))
     .setLabel('🧮 Calc Stats')
     .setStyle(ButtonStyle.Secondary);
 }
@@ -94,14 +94,14 @@ async function handle(
   });
 
   const dropdown = new StringSelectMenuBuilder()
-    .setCustomId(`adjustStatSelect:${characterId}`)
+    .setCustomId(discordCustomId(`adjustStatSelect:${characterId}`))
     .setPlaceholder('🧮 Do quick math on numeric stats (+, -, ×, ÷)')
     .addOptions(options);
 
   const dropdownRow = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(dropdown);
 
   const cancelButton = new ButtonBuilder()
-    .setCustomId(`goBackToCharacter:${characterId}`)
+    .setCustomId(discordCustomId(`goBackToCharacter:${characterId}`))
     .setLabel('↩️ Cancel / Go Back')
     .setStyle(ButtonStyle.Secondary);
 

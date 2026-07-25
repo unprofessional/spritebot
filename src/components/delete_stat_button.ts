@@ -1,5 +1,3 @@
-// src/components/delete_stat_button.ts
-
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -7,6 +5,8 @@ import {
   type APIEmbed,
   type ButtonInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/delete_stat_button.ts
 
 import { getGame, getStatTemplates } from '../services/game.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -24,7 +24,7 @@ const interactionPolicy = {
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setLabel('🗑️ Delete Stat')
     .setStyle(ButtonStyle.Danger);
 }

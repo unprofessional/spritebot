@@ -1,5 +1,3 @@
-// src/components/delete_stat_selector.ts
-
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -9,6 +7,8 @@ import {
   type MessageActionRowComponentBuilder,
   type StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/delete_stat_selector.ts
 
 import { getStatTemplateById } from '../services/game.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -27,7 +27,7 @@ function build(
   statTemplates: StatTemplate[],
 ): ActionRowBuilder<StringSelectMenuBuilder> {
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setPlaceholder('Select a stat field to delete')
     .addOptions(
       statTemplates.map((f, i) => ({
@@ -68,7 +68,7 @@ async function handle(
 
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
-        .setCustomId(`confirmDeleteStat:${selected}`)
+        .setCustomId(discordCustomId(`confirmDeleteStat:${selected}`))
         .setLabel('✅ Confirm Delete')
         .setStyle(ButtonStyle.Danger),
       new ButtonBuilder(buildCancelButton(gameId)),

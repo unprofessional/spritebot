@@ -7,6 +7,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
 } from 'discord.js';
+import { discordCustomId } from '../../utils/discord_custom_id';
 
 import { belongsToUser } from '../../services/character.service';
 import { getItemForCharacter } from '../../services/inventory.service';
@@ -55,19 +56,21 @@ export async function handle(
   const page = parseInt(rawPage, 10) || 0;
   const actionRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`invEq:${characterId}:${itemId}:${page}:${item.equipped ? 'off' : 'on'}`)
+      .setCustomId(
+        discordCustomId(`invEq:${characterId}:${itemId}:${page}:${item.equipped ? 'off' : 'on'}`),
+      )
       .setLabel(item.equipped ? 'Unequip Item' : 'Equip Item')
       .setStyle(item.equipped ? ButtonStyle.Secondary : ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`invEdit:${characterId}:${itemId}:${page}`)
+      .setCustomId(discordCustomId(`invEdit:${characterId}:${itemId}:${page}`))
       .setLabel('View/Edit Item')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId(`invDel:${characterId}:${itemId}:${page}`)
+      .setCustomId(discordCustomId(`invDel:${characterId}:${itemId}:${page}`))
       .setLabel('Delete Item')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
-      .setCustomId(`cancel_inventory_item_action:${characterId}:${page}`)
+      .setCustomId(discordCustomId(`cancel_inventory_item_action:${characterId}:${page}`))
       .setLabel('↩️ Go Back')
       .setStyle(ButtonStyle.Secondary),
   );
@@ -95,12 +98,12 @@ export async function buildEditModal(
   }
 
   const modal = new ModalBuilder()
-    .setCustomId(`editInventoryModal:${characterId}:${itemId}:${page}`)
+    .setCustomId(discordCustomId(`editInventoryModal:${characterId}:${itemId}:${page}`))
     .setTitle(truncate(`Edit ${item.name}`))
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId('name')
+          .setCustomId(discordCustomId('name'))
           .setLabel('Item Name')
           .setStyle(TextInputStyle.Short)
           .setValue(item.name)
@@ -108,7 +111,7 @@ export async function buildEditModal(
       ),
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId('type')
+          .setCustomId(discordCustomId('type'))
           .setLabel('Item Type / Category (optional)')
           .setStyle(TextInputStyle.Short)
           .setValue(item.type ?? '')
@@ -116,7 +119,7 @@ export async function buildEditModal(
       ),
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId('quantity')
+          .setCustomId(discordCustomId('quantity'))
           .setLabel('Quantity')
           .setStyle(TextInputStyle.Short)
           .setValue(String(item.quantity))
@@ -124,7 +127,7 @@ export async function buildEditModal(
       ),
       new ActionRowBuilder<TextInputBuilder>().addComponents(
         new TextInputBuilder()
-          .setCustomId('description')
+          .setCustomId(discordCustomId('description'))
           .setLabel('Description (optional)')
           .setStyle(TextInputStyle.Paragraph)
           .setValue(item.description ?? '')

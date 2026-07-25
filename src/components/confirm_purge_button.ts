@@ -1,6 +1,7 @@
+import { ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 // src/components/confirm_purge_button.ts
 
-import { ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
 import {
   purgeSafeOrphans,
   type HousekeepingPurgeResult,
@@ -18,7 +19,7 @@ const OPS_GUILD_ID = process.env.DEV_GUILD_ID ?? '';
 
 function build(requestedBy: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${requestedBy}`)
+    .setCustomId(discordCustomId(`${id}:${requestedBy}`))
     .setLabel('Confirm Purge')
     .setStyle(ButtonStyle.Danger);
 }
