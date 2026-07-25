@@ -1,5 +1,6 @@
 import { CharacterDAO } from '../../../src/dao/character.dao';
 import { GameDAO } from '../../../src/dao/game.dao';
+import { GameEntityDAO } from '../../../src/dao/game_entity.dao';
 import { PlayerDAO } from '../../../src/dao/player.dao';
 import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import { query } from '../../../src/db/client';
@@ -11,6 +12,7 @@ import {
 
 describe('game.service deletion lifecycle', () => {
   const gameDAO = new GameDAO();
+  const gameEntityDAO = new GameEntityDAO();
   const characterDAO = new CharacterDAO();
   const playerDAO = new PlayerDAO();
   const statTemplateDAO = new StatTemplateDAO();
@@ -125,6 +127,53 @@ describe('game.service deletion lifecycle', () => {
       current_game_id: null,
       current_character_id: null,
     });
+  });
+
+  test('deletes and restores only active game entities as private', async () => {
+    const game = await createGame();
+    const gameDeleted = await gameEntityDAO.create({
+      game_id: game.id,
+      created_by: 'gm-1',
+      kind: 'npc',
+      name: 'Returning Guide',
+      visibility: 'public',
+    });
+    const independentlyDeleted = await gameEntityDAO.create({
+      game_id: game.id,
+      created_by: 'gm-1',
+      kind: 'creature',
+      name: 'Still Gone',
+      visibility: 'link-only',
+    });
+    await gameEntityDAO.softDelete(independentlyDeleted.id);
+
+    const deleted = await deleteGame(game.id, 'gm-1');
+
+    expect(deleted).toEqual(
+      expect.objectContaining({ ok: true, characterCount: 0, entityCount: 1 }),
+    );
+    await expect(gameEntityDAO.findById(gameDeleted.id)).resolves.toMatchObject({
+      deleted_by_game: true,
+      visibility: 'private',
+    });
+    await expect(gameEntityDAO.findById(independentlyDeleted.id)).resolves.toMatchObject({
+      deleted_by_game: false,
+    });
+
+    const restored = await restoreGame(game.id, 'gm-1');
+
+    expect(restored).toEqual(
+      expect.objectContaining({ ok: true, characterCount: 0, entityCount: 1 }),
+    );
+    await expect(gameEntityDAO.findById(gameDeleted.id)).resolves.toMatchObject({
+      deleted_at: null,
+      deleted_by_game: false,
+      visibility: 'private',
+    });
+    await expect(gameEntityDAO.findById(independentlyDeleted.id)).resolves.toMatchObject({
+      deleted_by_game: false,
+    });
+    expect((await gameEntityDAO.findById(independentlyDeleted.id))?.deleted_at).toBeTruthy();
   });
 
   test('clears stale IC modes when the player identity was deleted before the game', async () => {

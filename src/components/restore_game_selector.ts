@@ -49,7 +49,7 @@ export async function build(
 
   return {
     content:
-      '♻️ Choose a game to restore. Its game-deleted characters will return as private characters.',
+      '♻️ Choose a game to restore. Its game-deleted characters, NPCs, and creatures will return as private.',
     components: [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu)],
     ephemeral: true,
   };
@@ -76,7 +76,7 @@ export async function handle(
   }
 
   await responder.respond({
-    content: `✅ Restored **${result.game.name}** and **${result.characterCount}** game-deleted character(s). Restored characters are private. Players can rejoin or switch back to the game.`,
+    content: `✅ Restored **${result.game.name}**, **${result.characterCount}** game-deleted character(s), and **${result.entityCount}** game-deleted NPC(s)/creature(s). Restored records are private. Players can rejoin or switch back to the game.`,
     components: [],
   });
 }
