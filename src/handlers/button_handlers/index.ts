@@ -114,7 +114,7 @@ function isInventoryButton(customId: string): boolean {
 }
 
 function isGameEntityButton(customId: string): boolean {
-  return /^(?:editGameEntity|toggleGameEntityVisibility|setGameEntityVisibility|viewGameEntityInventory|addGameEntityInventory|equipGameEntityInventory|deleteGameEntityInventory|geInvEquip|geInvDelete|deleteGameEntity|confirmDeleteGameEntity|backToGameEntity):/.test(
+  return /^(?:editGameEntity|toggleGameEntityVisibility|setGameEntityVisibility|viewGameEntityInventory|addGameEntityInventory|equipGameEntityInventory|deleteGameEntityInventory|geInvEquip|geInvDelete|geInvDeleteOk|geInvDeleteCancel|deleteGameEntity|confirmDeleteGameEntity|backToGameEntity):/.test(
     customId,
   );
 }

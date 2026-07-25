@@ -17,6 +17,7 @@ import {
   deleteGameEntity,
   deleteGameEntityInventoryItem,
   getGameEntity,
+  getGameEntityInventory,
   setGameEntityInventoryEquipped,
   updateGameEntityMeta,
 } from '../../services/game_entity.service';
@@ -121,6 +122,36 @@ export async function handle(
     }
 
     if (action === 'deleteGameEntityInventory' || action === 'geInvDelete') {
+      await assertManager(entityId, interaction.user.id);
+      const item = (await getGameEntityInventory(entityId)).find((entry) => entry.id === itemId);
+      if (!item) return missing(responder);
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`geInvDeleteOk:${entityId}:${itemId}`)
+          .setLabel('Confirm Delete')
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`geInvDeleteCancel:${entityId}:${itemId}`)
+          .setLabel('Cancel')
+          .setStyle(ButtonStyle.Secondary),
+      );
+      await responder.respond({
+        content: `🗑️ Permanently delete **${item.name}** from this entity's inventory?`,
+        embeds: [],
+        components: [row],
+      });
+      return;
+    }
+
+    if (action === 'geInvDeleteCancel') {
+      await assertManager(entityId, interaction.user.id);
+      const item = (await getGameEntityInventory(entityId)).find((entry) => entry.id === itemId);
+      if (!item) return missing(responder);
+      await responder.respond({ ...buildInventoryItemActions(entityId, item), content: null });
+      return;
+    }
+
+    if (action === 'geInvDeleteOk') {
       await deleteGameEntityInventoryItem(entityId, interaction.user.id, itemId);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
