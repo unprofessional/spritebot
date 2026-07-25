@@ -200,13 +200,13 @@ CREATE TABLE game_entity_inventory_field (
 
 ### Phase 1: Schema, types, and DAOs
 
-- [ ] Add the five tables to `011_game_entities.sql` and `src/db/tables/tables.sql`.
-- [ ] Add all five names to the tracked-table inventory in `src/db/db.ts` so incomplete fresh schemas are reported correctly.
-- [ ] Add `GameEntityKind`, `GameEntity`, hydrated stat/custom-field, and inventory types.
-- [ ] Add `GameEntityDAO` by following `CharacterDAO` patterns for create, get, list-by-game, update metadata, soft delete, restore, and permanent cleanup.
-- [ ] Add entity stat-field, custom-field, inventory, and inventory-field DAOs by following their character equivalents.
-- [ ] Reject creation for deleted or nonexistent games.
-- [ ] Add PGlite integration tests for constraints, cascades, CRUD, soft deletion, restoration, and child-table uniqueness.
+- [x] Add the five tables to `011_game_entities.sql` and `src/db/tables/tables.sql`.
+- [x] Add all five names to the tracked-table inventory in `src/db/db.ts` so incomplete fresh schemas are reported correctly.
+- [x] Add `GameEntityKind`, `GameEntity`, hydrated stat/custom-field, and inventory types.
+- [x] Add `GameEntityDAO` by following `CharacterDAO` patterns for create, get, list-by-game, update metadata, soft delete, restore, and permanent cleanup.
+- [x] Add entity stat-field, custom-field, inventory, and inventory-field DAOs by following their character equivalents.
+- [x] Reject creation for deleted or nonexistent games.
+- [x] Add PGlite integration tests for constraints, cascades, CRUD, soft deletion, restoration, and child-table uniqueness.
 
 ### Phase 2: Services and authorization
 
