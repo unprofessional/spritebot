@@ -129,9 +129,9 @@ export async function handle(
     }
 
     if (action === 'deleteGameEntity') {
+      await assertManager(entityId, interaction.user.id);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
-      await assertManager(entityId, interaction.user.id);
       const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
         new ButtonBuilder()
           .setCustomId(`confirmDeleteGameEntity:${entityId}`)
@@ -177,9 +177,9 @@ async function showEntity(
   requesterId: string,
   responder: DiscordInteractionResponder,
 ) {
+  await assertManager(entityId, requesterId);
   const entity = await getGameEntity(entityId);
   if (!entity) return missing(responder);
-  await assertManager(entityId, requesterId);
   await responder.respond({ ...buildEntityCard(entity, true), content: null });
 }
 

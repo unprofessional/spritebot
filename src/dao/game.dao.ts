@@ -18,12 +18,14 @@ interface UpdateGameParams {
 export interface GameCascadeMutation {
   game: Game;
   characterCount: number;
+  entityCount: number;
   playerCount: number;
   rpModeCount: number;
 }
 
 type GameCascadeRow = Game & {
   character_count: string | number;
+  entity_count: string | number;
   player_count: string | number;
   rp_mode_count: string | number;
 };
@@ -210,6 +212,17 @@ export class GameDAO {
             AND c.deleted_at IS NULL
           RETURNING c.id
         ),
+        deleted_entities AS (
+          UPDATE game_entity ge
+          SET deleted_at = dg.deleted_at,
+              deleted_by_game = TRUE,
+              visibility = 'private',
+              last_updated_at = dg.deleted_at
+          FROM deleted_game dg
+          WHERE ge.game_id = dg.id
+            AND ge.deleted_at IS NULL
+          RETURNING ge.id
+        ),
         cleared_players AS (
           UPDATE player_server_link psl
           SET current_game_id = CASE
@@ -249,6 +262,7 @@ export class GameDAO {
         )
         SELECT dg.*,
                (SELECT COUNT(*) FROM deleted_characters) AS character_count,
+               (SELECT COUNT(*) FROM deleted_entities) AS entity_count,
                (SELECT COUNT(*) FROM cleared_players) AS player_count,
                (SELECT COUNT(*) FROM cleared_rp_modes) AS rp_mode_count
         FROM deleted_game dg
@@ -285,9 +299,22 @@ export class GameDAO {
             AND c.deleted_at IS NOT NULL
             AND c.deleted_by_game = TRUE
           RETURNING c.id
+        ),
+        restored_entities AS (
+          UPDATE game_entity ge
+          SET deleted_at = NULL,
+              deleted_by_game = FALSE,
+              visibility = 'private',
+              last_updated_at = CURRENT_TIMESTAMP
+          FROM restored_game rg
+          WHERE ge.game_id = rg.id
+            AND ge.deleted_at IS NOT NULL
+            AND ge.deleted_by_game = TRUE
+          RETURNING ge.id
         )
         SELECT rg.*,
                (SELECT COUNT(*) FROM restored_characters) AS character_count,
+               (SELECT COUNT(*) FROM restored_entities) AS entity_count,
                0 AS player_count,
                0 AS rp_mode_count
         FROM restored_game rg
@@ -323,10 +350,11 @@ export class GameDAO {
 
 function mapCascadeMutation(row?: GameCascadeRow): GameCascadeMutation | null {
   if (!row) return null;
-  const { character_count, player_count, rp_mode_count, ...game } = row;
+  const { character_count, entity_count, player_count, rp_mode_count, ...game } = row;
   return {
     game,
     characterCount: Number(character_count),
+    entityCount: Number(entity_count),
     playerCount: Number(player_count),
     rpModeCount: Number(rp_mode_count),
   };
