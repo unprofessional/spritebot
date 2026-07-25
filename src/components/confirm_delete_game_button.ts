@@ -38,6 +38,7 @@ async function handle(
       content: [
         `🗑️ Deleted **${result.game.name}**.`,
         `Characters affected: **${result.characterCount}**`,
+        `NPCs and creatures affected: **${result.entityCount}**`,
         `Players removed from the game: **${result.playerCount}**`,
         `In-character channel modes cleared: **${result.rpModeCount}**`,
         '⚠️ You have **30 days** to restore it before it is permanently removed. Use `/restore-game` to recover it.',

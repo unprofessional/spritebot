@@ -240,11 +240,11 @@ The view card supplies edit, visibility, inventory, and delete controls for auth
 
 ### Phase 4: Lifecycle and regression validation
 
-- [ ] Extend game soft-delete/restore accounting to include game entities.
-- [ ] Ensure game deletion marks or removes entities consistently with characters and restores them safely within the same 30-day window.
-- [ ] Add command/component tests for GM access, non-GM denial, visibility, delete confirmation, and restore.
-- [ ] Add regression tests proving existing character creation, selection, roleplay proxying, deletion, and restoration are unchanged.
-- [ ] Run formatting, lint, full tests, build, and Discord boundary/policy checks.
+- [x] Extend game soft-delete/restore accounting to include game entities.
+- [x] Ensure game deletion marks or removes entities consistently with characters and restores them safely within the same 30-day window.
+- [x] Add command/component tests for GM access, non-GM denial, visibility, delete confirmation, and restore.
+- [x] Add regression tests proving existing character creation, selection, roleplay proxying, deletion, and restoration are unchanged.
+- [x] Run formatting, lint, full tests, build, and Discord boundary/policy checks.
 - [ ] Validate the feature in a real game before beginning TaleSpire linking.
 
 ## Follow-Up: TaleSpire Linking

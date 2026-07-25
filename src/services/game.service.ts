@@ -11,6 +11,7 @@ export type GameMutationResult =
       ok: true;
       game: Game;
       characterCount: number;
+      entityCount: number;
       playerCount: number;
       rpModeCount: number;
     }
