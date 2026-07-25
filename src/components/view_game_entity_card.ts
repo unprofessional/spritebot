@@ -127,13 +127,11 @@ export function buildInventoryItemActions(entityId: string, item: HydratedGameEn
     );
   const actions = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(
-        `equipGameEntityInventory:${entityId}:${item.id}:${item.equipped ? 'off' : 'on'}`,
-      )
+      .setCustomId(`geInvEquip:${entityId}:${item.id}:${item.equipped ? 'off' : 'on'}`)
       .setLabel(item.equipped ? '▫️ Unequip' : '✅ Equip')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`deleteGameEntityInventory:${entityId}:${item.id}`)
+      .setCustomId(`geInvDelete:${entityId}:${item.id}`)
       .setLabel('🗑️ Delete Item')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
