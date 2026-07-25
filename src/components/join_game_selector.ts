@@ -1,6 +1,6 @@
-// src/components/join_game_selector.ts
-
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/join_game_selector.ts
 
 import { getGamesByGuild } from '../services/game.service';
 import { getCharactersByUser } from '../services/character.service';
@@ -49,7 +49,7 @@ export async function build(
   }
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Select a game to join')
     .addOptions(
       eligibleGames.slice(0, 25).map((game: Game) => ({

@@ -1,5 +1,6 @@
-// src/components/switch_character_selector.ts
 import { ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuInteraction } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/switch_character_selector.ts
 
 import {
   getCharactersByUser,
@@ -116,7 +117,7 @@ export async function build(
   eligibleOptions.sort((a, b) => (b.isActive ? 1 : 0) - (a.isActive ? 1 : 0));
 
   const menu = new StringSelectMenuBuilder()
-    .setCustomId(id)
+    .setCustomId(discordCustomId(id))
     .setPlaceholder('Choose your character')
     .addOptions(
       eligibleOptions.map((opt) => ({

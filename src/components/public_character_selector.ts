@@ -1,11 +1,11 @@
-// src/components/public_character_selector.ts
-
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
   StringSelectMenuInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/public_character_selector.ts
 
 import { getCharacterWithStats } from '../services/character.service';
 import { isActiveCharacter } from '../utils/is_active_character';
@@ -40,7 +40,7 @@ function build(
   );
 
   const select = new StringSelectMenuBuilder()
-    .setCustomId(`${id}:${page}`)
+    .setCustomId(discordCustomId(`${id}:${page}`))
     .setPlaceholder('Select a character to view...')
     .addOptions(options);
 

@@ -7,6 +7,7 @@ import {
   type ButtonInteraction,
   type ModalSubmitInteraction,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import type { InteractionDispatchPolicy } from './interaction_dispatch';
 import { logDiscordModalFlow } from './logging';
@@ -89,7 +90,7 @@ export async function presentPreparedModal({
   });
   const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
-      .setCustomId(`${PREPARED_MODAL_PREFIX}${token}`)
+      .setCustomId(discordCustomId(`${PREPARED_MODAL_PREFIX}${token}`))
       .setLabel('Open editor')
       .setStyle(ButtonStyle.Primary),
   );

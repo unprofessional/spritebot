@@ -1,6 +1,6 @@
-// src/components/toggle_character_visibility_button.ts
-
 import { ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/toggle_character_visibility_button.ts
 
 import { getCharacterWithStats, updateCharacterMeta } from '../services/character.service';
 import { getCurrentCharacter } from '../services/player.service';
@@ -18,7 +18,7 @@ function build(characterId: string, currentVisibility = 'private'): ButtonBuilde
   const isPublic = (currentVisibility || '').toLowerCase() === 'public';
 
   return new ButtonBuilder()
-    .setCustomId(`${id}:${characterId}`)
+    .setCustomId(discordCustomId(`${id}:${characterId}`))
     .setLabel(isPublic ? '🔒 Unpublish Character' : '🌐 Publish Character')
     .setStyle(ButtonStyle.Secondary);
 }

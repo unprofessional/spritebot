@@ -1,6 +1,6 @@
-// src/components/confirm_delete_character_button.ts
-
 import { ButtonBuilder, ButtonStyle, ButtonInteraction } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/confirm_delete_character_button.ts
 
 import { getCharacterWithStats, deleteCharacter } from '../services/character.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -14,7 +14,7 @@ const interactionPolicy = {
 
 function build(characterId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${characterId}`)
+    .setCustomId(discordCustomId(`${id}:${characterId}`))
     .setLabel('✅ Confirm Delete')
     .setStyle(ButtonStyle.Danger);
 }

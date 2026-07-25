@@ -1,4 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonInteraction, ButtonStyle } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
 
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
@@ -13,7 +14,7 @@ const interactionPolicy = {
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setLabel('🗑️ Delete Game')
     .setStyle(ButtonStyle.Danger);
 }
@@ -37,7 +38,7 @@ async function handle(
     const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
       buildConfirmDeleteGameButton(gameId),
       new ButtonBuilder()
-        .setCustomId(`goBackToGame:${gameId}`)
+        .setCustomId(discordCustomId(`goBackToGame:${gameId}`))
         .setLabel('↩️ Cancel')
         .setStyle(ButtonStyle.Secondary),
     );

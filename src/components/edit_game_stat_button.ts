@@ -1,5 +1,3 @@
-// src/components/edit_game_stat_button.ts
-
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -8,6 +6,8 @@ import {
   type ButtonInteraction,
   type MessageActionRowComponentBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/edit_game_stat_button.ts
 
 import { getGame, getStatTemplates } from '../services/game.service';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
@@ -25,7 +25,7 @@ const interactionPolicy = {
 
 function build(gameId: string): ButtonBuilder {
   return new ButtonBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setLabel('🎲 Edit Stat')
     .setStyle(ButtonStyle.Secondary);
 }

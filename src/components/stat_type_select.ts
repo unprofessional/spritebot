@@ -1,16 +1,16 @@
-// src/components/stat_type_select.ts
-
 import {
   ActionRowBuilder,
   StringSelectMenuBuilder,
   StringSelectMenuOptionBuilder,
 } from 'discord.js';
+import { discordCustomId } from '../utils/discord_custom_id';
+// src/components/stat_type_select.ts
 
 const id = 'selectStatType';
 
 function buildStatTypeDropdown(gameId: string): ActionRowBuilder<StringSelectMenuBuilder> {
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`${id}:${gameId}`)
+    .setCustomId(discordCustomId(`${id}:${gameId}`))
     .setPlaceholder('➕ Add a new stat field...')
     .addOptions([
       new StringSelectMenuOptionBuilder()
