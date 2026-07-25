@@ -8,7 +8,9 @@ import {
 } from 'discord.js';
 import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { canManageGameEntity, getGameEntity } from '../services/game_entity.service';
 import type { HydratedGameEntity } from '../types/game_entity';
+import { formatCharacterStatValue } from '../utils/character_stat_display';
 
 export const id = 'editGameEntityField';
 export const interactionPolicy = gatedImmediateModalInteractionPolicy;
@@ -40,7 +42,7 @@ export function build(entity: HydratedGameEntity) {
     ...entity.stats.map((stat) => ({
       label: stat.label,
       value: `stat|${stat.template_id}|${stat.field_type}`,
-      description: stat.value || 'Not set',
+      description: formatCharacterStatValue(stat) || 'Not set',
     })),
     ...entity.customFields.map((customField) => ({
       label: `[CUSTOM] ${customField.name}`,
@@ -96,16 +98,75 @@ export async function handle(
     await responder.showModal(modal);
     return;
   }
-  const input = new TextInputBuilder()
-    .setCustomId('value')
-    .setLabel(truncate(`New value for ${field}`, 45))
-    .setStyle(fieldType === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
-    .setRequired(scope === 'core' && field === 'name');
+
+  const entity = await getManagedEntity(entityId, interaction.user.id);
+  if (!entity) {
+    await responder.respond({
+      content: '❌ You cannot manage that NPC or creature.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const stat = scope === 'stat' ? entity.stats.find((entry) => entry.template_id === field) : null;
+  const customField =
+    scope === 'custom' ? entity.customFields.find((entry) => entry.id === field) : null;
+  const label =
+    stat?.label ??
+    customField?.name ??
+    {
+      name: 'Name',
+      bio: 'Biography',
+      avatar_url: 'Avatar URL',
+      rp_display_name: 'RP Display Name',
+      rp_display_avatar_url: 'RP Display Avatar URL',
+    }[field] ??
+    field;
+
   const modal = new ModalBuilder()
     .setCustomId(`editGameEntityModal:${entityId}:${scope}:${field}`)
-    .setTitle('Edit NPC / Creature')
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    .setTitle(truncate(scope === 'stat' ? `Edit Stat: ${label}` : `Edit ${label}`, 45));
+
+  if (scope === 'stat' && (fieldType === 'count' || stat?.meta.max !== undefined)) {
+    const max = stat?.meta.max ?? '';
+    const current = stat?.meta.current ?? max;
+    modal.addComponents(
+      inputRow(`${field}:max`, `Max value for ${label}`, true, String(max)),
+      inputRow(`${field}:current`, `Current value for ${label}`, false, String(current)),
+    );
+    await responder.showModal(modal);
+    return;
+  }
+
+  const input = new TextInputBuilder()
+    .setCustomId('value')
+    .setLabel(truncate(`New value for ${label}`, 45))
+    .setStyle(fieldType === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short)
+    .setRequired(scope === 'core' && field === 'name');
+  const existingValue =
+    scope === 'stat'
+      ? stat?.value
+      : scope === 'custom'
+        ? customField?.value
+        : entity[field as keyof HydratedGameEntity];
+  if (typeof existingValue === 'string' && existingValue) input.setValue(existingValue);
+  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
   await responder.showModal(modal);
+}
+
+async function getManagedEntity(entityId: string, requesterId: string) {
+  if (!(await canManageGameEntity(entityId, requesterId))) return null;
+  return getGameEntity(entityId);
+}
+
+function inputRow(id: string, label: string, required: boolean, value: string) {
+  const input = new TextInputBuilder()
+    .setCustomId(id)
+    .setLabel(truncate(label, 45))
+    .setStyle(TextInputStyle.Short)
+    .setRequired(required);
+  if (value) input.setValue(value);
+  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
 }
 
 function truncate(value: string, max: number): string {
