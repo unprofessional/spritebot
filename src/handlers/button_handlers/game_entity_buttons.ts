@@ -105,7 +105,7 @@ export async function handle(
       return;
     }
 
-    if (action === 'equipGameEntityInventory') {
+    if (action === 'equipGameEntityInventory' || action === 'geInvEquip') {
       const updated = await setGameEntityInventoryEquipped(
         entityId,
         interaction.user.id,
@@ -120,7 +120,7 @@ export async function handle(
       return;
     }
 
-    if (action === 'deleteGameEntityInventory') {
+    if (action === 'deleteGameEntityInventory' || action === 'geInvDelete') {
       await deleteGameEntityInventoryItem(entityId, interaction.user.id, itemId);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
