@@ -210,12 +210,12 @@ CREATE TABLE game_entity_inventory_field (
 
 ### Phase 2: Services and authorization
 
-- [ ] Add a `game_entity.service.ts` orchestration layer matching character hydration behavior.
-- [ ] Reuse the current game-management authorization path; do not invent entity-specific roles or ownership.
-- [ ] Enforce that the entity, stat template, and inventory operations all belong to the same active game.
-- [ ] Implement create, edit, list, view, soft delete, restore, stat/custom-field updates, and inventory operations.
-- [ ] Restore entities as `private`, matching character restore safety behavior.
-- [ ] Add service tests for authorization, cross-game rejection, deleted-game rejection, and hydration.
+- [x] Add a `game_entity.service.ts` orchestration layer matching character hydration behavior.
+- [x] Reuse the current game-management authorization path; do not invent entity-specific roles or ownership.
+- [x] Enforce that the entity, stat template, and inventory operations all belong to the same active game.
+- [x] Implement create, edit, list, view, soft delete, restore, stat/custom-field updates, and inventory operations.
+- [x] Restore entities as `private`, matching character restore safety behavior.
+- [x] Add service tests for authorization, cross-game rejection, deleted-game rejection, and hydration.
 
 ### Phase 3: Discord UX
 

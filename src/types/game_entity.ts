@@ -27,7 +27,8 @@ export interface GameEntityStatField {
   meta: JsonObject;
 }
 
-export interface HydratedGameEntityStatField extends GameEntityStatField {
+export interface HydratedGameEntityStatField extends Omit<GameEntityStatField, 'id'> {
+  id?: string;
   label: string;
   field_type: string;
   sort_order: number;
