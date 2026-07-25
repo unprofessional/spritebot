@@ -5,6 +5,7 @@ const importPlugin = require('eslint-plugin-import');
 const jsdocPlugin = require('eslint-plugin-jsdoc');
 const prettierConfig = require('eslint-config-prettier');
 const discordBoundaryRule = require('./eslint-rules/discord-boundary.cjs');
+const discordCustomIdLengthRule = require('./eslint-rules/discord-custom-id-length.cjs');
 
 /** @type {import("eslint").Linter.FlatConfig[]} */
 module.exports = [
@@ -29,6 +30,7 @@ module.exports = [
       local: {
         rules: {
           'discord-boundary': discordBoundaryRule,
+          'discord-custom-id-length': discordCustomIdLengthRule,
         },
       },
     },
@@ -55,6 +57,7 @@ module.exports = [
           allowlist: ['src/discord/**'],
         },
       ],
+      'local/discord-custom-id-length': 'error',
 
       // JSDoc
       'jsdoc/check-param-names': 'warn',
