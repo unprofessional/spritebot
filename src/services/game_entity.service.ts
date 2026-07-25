@@ -145,6 +145,16 @@ export async function getGameEntities(
   return entityDAO.findByGame(gameId, kind);
 }
 
+export async function canManageGameEntity(
+  gameEntityId: string,
+  requesterId: string,
+): Promise<boolean> {
+  const entity = await entityDAO.findActiveById(gameEntityId);
+  if (!entity) return false;
+  const game = await gameDAO.findById(entity.game_id);
+  return game?.created_by === requesterId;
+}
+
 export async function updateGameEntityMeta(
   gameEntityId: string,
   requesterId: string,
