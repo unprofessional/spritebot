@@ -64,8 +64,7 @@ describe('game entity Discord UI', () => {
       managerCard.components[0].components.map((component) => component.data.custom_id),
     ).toEqual([
       `editGameEntity:${entity.id}`,
-      `setGameEntityVisibility:${entity.id}:link-only`,
-      `setGameEntityVisibility:${entity.id}:private`,
+      `toggleGameEntityVisibility:${entity.id}`,
       `viewGameEntityInventory:${entity.id}`,
       `deleteGameEntity:${entity.id}`,
     ]);
@@ -118,22 +117,17 @@ describe('game entity Discord UI', () => {
     expect(respond.mock.calls[0][0].components).toEqual([]);
   });
 
-  test('offers explicit visibility choices and publishes directly from private', async () => {
+  test('offers publish or unpublish only and publishes directly from non-public states', async () => {
     const { entity } = await setupEntity('private');
     const privateCard = buildEntityCard(entity, true);
     expect(
       privateCard.components[0].components.map((component) => component.data.custom_id),
-    ).toEqual(
-      expect.arrayContaining([
-        `setGameEntityVisibility:${entity.id}:public`,
-        `setGameEntityVisibility:${entity.id}:link-only`,
-      ]),
-    );
+    ).toContain(`toggleGameEntityVisibility:${entity.id}`);
 
     const respond = jest.fn().mockResolvedValue(undefined);
     await handleEntityButtons(
       {
-        customId: `setGameEntityVisibility:${entity.id}:public`,
+        customId: `toggleGameEntityVisibility:${entity.id}`,
         user: { id: 'gm-1' },
       } as never,
       { respond } as unknown as DiscordInteractionResponder,
@@ -143,6 +137,24 @@ describe('game entity Discord UI', () => {
     expect(respond.mock.calls[0][0]).toEqual(
       expect.objectContaining({ content: '✅ Visibility set to **public**.' }),
     );
+
+    await updateGameEntityMeta(entity.id, 'gm-1', { visibility: 'link-only' });
+    const linkOnlyEntity = await getGameEntity(entity.id);
+    const linkOnlyCard = buildEntityCard(linkOnlyEntity!, true);
+    expect(linkOnlyCard.embeds[0].toJSON().footer?.text).toContain('Not Published');
+    expect(
+      linkOnlyCard.components[0].components.map((component) => component.data.custom_id),
+    ).toContain(`toggleGameEntityVisibility:${entity.id}`);
+
+    respond.mockClear();
+    await handleEntityButtons(
+      {
+        customId: `toggleGameEntityVisibility:${entity.id}`,
+        user: { id: 'gm-1' },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    await expect(getGameEntity(entity.id)).resolves.toMatchObject({ visibility: 'public' });
   });
 
   test('blocks a crafted edit interaction before rendering a private entity', async () => {

@@ -14,7 +14,9 @@ export function build(entity: HydratedGameEntity, canManage: boolean) {
     .setTitle(entity.name)
     .setAuthor({ name: entity.kind === 'npc' ? 'NPC' : 'Creature' })
     .setDescription(entity.bio ? `_${entity.bio}_` : null)
-    .setFooter({ text: `Visibility: ${entity.visibility} • ${labelForKind(entity.kind)}` });
+    .setFooter({
+      text: `${entity.visibility === 'public' ? 'Published' : 'Not Published'} • ${labelForKind(entity.kind)}`,
+    });
 
   if (entity.avatar_url) embed.setImage(entity.avatar_url);
 
@@ -57,7 +59,7 @@ export function build(entity: HydratedGameEntity, canManage: boolean) {
       .setCustomId(discordCustomId(`editGameEntity:${entity.id}`))
       .setLabel('✏️ Edit')
       .setStyle(ButtonStyle.Primary),
-    ...visibilityButtons(entity),
+    buildVisibilityButton(entity),
     new ButtonBuilder()
       .setCustomId(discordCustomId(`viewGameEntityInventory:${entity.id}`))
       .setLabel('🎒 Inventory')
@@ -150,21 +152,12 @@ function formatInventoryLine(item: HydratedGameEntityInventoryItem): string {
   return `${item.equipped ? '✅' : '▫️'} **${item.name}**${quantity}`;
 }
 
-function visibilityButtons(entity: HydratedGameEntity): ButtonBuilder[] {
-  const choices = (
-    [
-      ['public', '🌐 Publish'],
-      ['link-only', '🔗 Link-only'],
-      ['private', '🔒 Make Private'],
-    ] as const
-  ).filter(([visibility]) => visibility !== entity.visibility);
-
-  return choices.map(([visibility, label]) =>
-    new ButtonBuilder()
-      .setCustomId(discordCustomId(`setGameEntityVisibility:${entity.id}:${visibility}`))
-      .setLabel(label)
-      .setStyle(ButtonStyle.Secondary),
-  );
+function buildVisibilityButton(entity: HydratedGameEntity): ButtonBuilder {
+  const isPublic = entity.visibility === 'public';
+  return new ButtonBuilder()
+    .setCustomId(discordCustomId(`toggleGameEntityVisibility:${entity.id}`))
+    .setLabel(isPublic ? '🔒 Unpublish' : '🌐 Publish')
+    .setStyle(ButtonStyle.Secondary);
 }
 
 function labelForKind(kind: string): string {
