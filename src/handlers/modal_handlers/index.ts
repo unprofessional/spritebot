@@ -31,6 +31,7 @@ export function getModalInteractionPolicy(
     (customId.startsWith('addInventoryModal:') ||
       customId.startsWith('editInventoryModal:') ||
       customId.startsWith('editGameEntityModal:') ||
+      customId.startsWith('editGameEntityCustomModal:') ||
       customId.startsWith('addGameEntityInventoryModal:')) &&
     !interaction.message
   ) {
@@ -49,6 +50,7 @@ export function getModalInteractionPolicy(
     customId.startsWith('addInventoryModal:') ||
     customId.startsWith('editInventoryModal:') ||
     customId.startsWith('editGameEntityModal:') ||
+    customId.startsWith('editGameEntityCustomModal:') ||
     customId.startsWith('addGameEntityInventoryModal:')
   ) {
     return componentUpdateInteractionPolicy;
@@ -91,6 +93,7 @@ export async function handleModal(
 
   if (
     customId.startsWith('editGameEntityModal:') ||
+    customId.startsWith('editGameEntityCustomModal:') ||
     customId.startsWith('addGameEntityInventoryModal:')
   ) {
     return gameEntityModals.handle(interaction, responder);

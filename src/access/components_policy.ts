@@ -32,6 +32,7 @@ export const ComponentPolicy: Array<[prefix: string, policy: FeaturePolicy]> = [
   ['editGameEntity:', 'rpg:game-admin'],
   ['editGameEntityField:', 'rpg:game-admin'],
   ['editGameEntityModal:', 'rpg:game-admin'],
+  ['editGameEntityCustomModal:', 'rpg:game-admin'],
   ['toggleGameEntityVisibility:', 'rpg:game-admin'],
   ['viewGameEntityInventory:', 'rpg:game-admin'],
   ['manageGameEntityInventory:', 'rpg:game-admin'],

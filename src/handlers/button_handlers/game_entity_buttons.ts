@@ -52,6 +52,7 @@ export async function handle(
     }
 
     if (action === 'editGameEntity') {
+      await assertManager(entityId, interaction.user.id);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
       await responder.respond({
@@ -63,6 +64,7 @@ export async function handle(
     }
 
     if (action === 'toggleGameEntityVisibility') {
+      await assertManager(entityId, interaction.user.id);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
       const visibility =
@@ -81,14 +83,15 @@ export async function handle(
     }
 
     if (action === 'viewGameEntityInventory') {
+      await assertManager(entityId, interaction.user.id);
       const entity = await getGameEntity(entityId);
       if (!entity) return missing(responder);
-      await assertManager(entityId, interaction.user.id);
       await responder.respond({ ...buildInventory(entity), content: null });
       return;
     }
 
     if (action === 'addGameEntityInventory') {
+      await assertManager(entityId, interaction.user.id);
       const modal = new ModalBuilder()
         .setCustomId(`addGameEntityInventoryModal:${entityId}`)
         .setTitle('Add Entity Inventory Item')
