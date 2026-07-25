@@ -230,13 +230,13 @@ Proposed command surface:
 
 The view card supplies edit, visibility, inventory, and delete controls for authorized game managers.
 
-- [ ] Register the commands and feature-policy mappings.
-- [ ] Add autocomplete/select menus scoped to the current game and optional entity kind.
-- [ ] Copy character draft/edit/stat/inventory interaction patterns where useful.
-- [ ] Display `NPC` or `Creature` clearly on cards and selection options.
-- [ ] Hide deleted entities from normal lists and autocomplete.
-- [ ] Keep private/link-only entities off public surfaces using the same rules as characters.
-- [ ] Add `/help` entries and concise GM onboarding copy.
+- [x] Register the commands and feature-policy mappings.
+- [x] Add autocomplete/select menus scoped to the current game and optional entity kind.
+- [x] Copy character draft/edit/stat/inventory interaction patterns where useful.
+- [x] Display `NPC` or `Creature` clearly on cards and selection options.
+- [x] Hide deleted entities from normal lists and autocomplete.
+- [x] Keep private/link-only entities off public surfaces using the same rules as characters.
+- [x] Add `/help` entries and concise GM onboarding copy.
 
 ### Phase 4: Lifecycle and regression validation
 

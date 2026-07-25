@@ -38,6 +38,8 @@ export const CommandPolicy: Record<string, FeaturePolicy> = {
   // === Free (core) ===
   'view-character': 'core',
   'list-characters': 'core',
+  'view-entity': 'core',
+  'list-entities': 'core',
   'switch-character': 'core',
   'view-game': 'core',
   'list-games': 'core',
@@ -64,6 +66,8 @@ export const CommandPolicy: Record<string, FeaturePolicy> = {
   'Delete IC Message': 'rpg:characters',
   'create-game': 'rpg:game-admin',
   'restore-game': 'rpg:game-admin',
+  'create-entity': 'rpg:game-admin',
+  'restore-entity': 'rpg:game-admin',
   'bot-announcements': 'rpg:game-admin',
   inventory: 'rpg:inventory',
   'bump-thread': 'automation:thread-bump',

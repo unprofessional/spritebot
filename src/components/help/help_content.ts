@@ -185,6 +185,15 @@ const gameManagement: HelpCategory = {
     command('/view-game', 'View and manage your active game.', 'core'),
     command('/list-games', 'See games in this server.', 'core'),
     command('/switch-game', 'Change your active game.', 'core'),
+    command('/create-entity', 'Create an NPC or creature.', 'rpg:game-admin'),
+    command('/view-entity', 'View an NPC or creature.', 'core'),
+    command('/list-entities', 'Browse NPCs and creatures.', 'core'),
+    command(
+      '/restore-entity',
+      'Recover a recently deleted NPC or creature.',
+      'rpg:game-admin',
+      'Available for 30 days after deletion.',
+    ),
     command(
       '/restore-game',
       'Recover a recently deleted game.',
