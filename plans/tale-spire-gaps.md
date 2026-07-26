@@ -5,34 +5,36 @@
 > **Engineering:** Codex
 > **Review:** Moldy
 > **Related repos:** `spritebot`, `spritebot-integrations`, `spriteweb`
-> **Last updated:** 2026-07-24
+> **Last updated:** 2026-07-25
 
 ## Purpose
 
 Track the remaining core-product, onboarding, distribution, and commercial work required before the TaleSpire integration can be marketed as a clean self-service SPRITE feature.
 
-NPC and creature modeling belongs to **SPRITEbot-prime**, not to the TaleSpire bridge. It is the first priority because it increases the base app's value independently and gives TaleSpire a stable SPRITE record to link later. The focused implementation plan lives in [`game-entities.md`](game-entities.md). The remaining gaps cover selling the right plan, installing a second Discord app cleanly, and safely delivering the Symbiote.
+NPC and creature modeling belongs to **SPRITEbot-prime**, not to the TaleSpire bridge. That base feature is now shipped and gives TaleSpire a stable SPRITE record to link. Its implementation record lives in [`done/game-entities.md`](done/game-entities.md); the focused follow-up bridge plan lives in [`spritebot-integrations/plans/talespire-game-entity-bridge.md`](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md). The remaining gaps cover that explicit bridge, selling the right plan, installing a second Discord app cleanly, and safely delivering the Symbiote.
 
 ## Current State
 
 - TaleSpire access is bundled into the existing Premium SKU through `integrations:talespire`.
-- SPRITE-Integrations can enforce SPRITE entitlements through its read-only connection to the SPRITE database.
+- SPRITE-Integrations can enforce SPRITE entitlements through its direct SPRITE database bridge. That connection also supports existing character/stat lookups and write-through, so it is not read-only.
 - The Symbiote source exists under `spritebot-integrations/symbiote/` and can be installed manually.
-- SPRITEbot-prime does not yet have the additive `game_entity` sibling model defined in [`game-entities.md`](game-entities.md).
-- SPRITE-Integrations already caches observed TaleSpire creatures in `campaign_creatures`; those rows remain integration-local until a GM explicitly links or promotes one after the base feature ships.
+- SPRITEbot-prime's additive `game_entity` sibling model is shipped through merge `882e93a`, including NPC/creature CRUD, stats, custom fields, inventory, visibility, deletion, restoration, automated gates, and real Discord lifecycle validation.
+- SPRITE-Integrations already caches observed TaleSpire creatures in `campaign_creatures`; those rows remain integration-local until a GM explicitly links or promotes one through the planned bridge.
 - Public onboarding still assumes that an operator can hand the GM an integration-bot invite, a Symbiote folder, a webhook URL, a shared webhook secret, and setup instructions.
 
 That operator-assisted path is acceptable for testers, but not for a marketed product.
 
 ---
 
-## Gap 1 — SPRITEbot-prime Game-Owned NPCs and Creatures
+## Gap 1 — TaleSpire-to-SPRITE Game-Entity Bridge
 
-NPCs and creatures are a base SPRITE capability, not a TaleSpire-specific abstraction. The approved direction is an additive `game_entity` sibling model that copies the useful character schema and DAO/service/UI patterns while leaving existing player characters untouched.
+> **Base feature status:** Complete through merge `882e93a` and real Discord lifecycle validation.
 
-The implementation-ready scope, ERD, exact five-table migration, phases, exclusions, and acceptance criteria live in [`game-entities.md`](game-entities.md).
+NPCs and creatures are shipped as a base SPRITE capability using the additive `game_entity` sibling model. Existing player characters remain untouched.
 
-TaleSpire linking is intentionally excluded from that base feature. After game entities ship, SPRITE-Integrations may add a nullable logical reference from an explicitly promoted cached creature to `game_entity.id`.
+The remaining gap is deliberately integration-side: a GM must be able to explicitly promote or link a cached TaleSpire creature to `game_entity.id`, then write mapped TaleSpire stats into `game_entity_stat_field`. Unlinked roster rows must stay integration-local; nothing is imported automatically.
+
+The schema, command UX, target-conflict rules, write-through behavior, status codes, phases, and acceptance criteria live in the focused [`TaleSpire game-entity bridge plan`](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md).
 
 ---
 
@@ -179,24 +181,24 @@ Before public delivery, replace it with a revocable credential scoped to one gui
 
 ## Recommended Sequencing
 
-### Track 1 — SPRITEbot-prime game entities
+### Track 1 — SPRITEbot-prime game entities — complete
 
-1. Implement the additive sibling schema and application work in [`game-entities.md`](game-entities.md).
-2. Ship game-owned NPC/creature CRUD, stats, custom fields, inventory, visibility, deletion, and restoration.
-3. Validate the base feature in a real game without TaleSpire.
+1. [x] Implement the additive sibling schema and application work in [`done/game-entities.md`](done/game-entities.md).
+2. [x] Ship game-owned NPC/creature CRUD, stats, custom fields, inventory, visibility, deletion, and restoration.
+3. [x] Validate the base feature through automated gates and a real Discord lifecycle smoke test.
 
-This track does not migrate or generalize player characters. It is the first product track and a prerequisite for TaleSpire entity linking.
+The shipped feature does not migrate or generalize player characters. It is now the stable prerequisite for TaleSpire entity linking.
 
 ### Track 2 — TaleSpire linking and public onboarding
 
-1. Add explicit TaleSpire cached-creature promotion/linking to the shipped `game_entity` model.
+1. Implement the focused [TaleSpire game-entity bridge plan](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md), including explicit cached-creature promotion/linking and mapped stat write-through.
 2. Decide the second-app setup flow and public product name.
 3. Replace the shared webhook secret with scoped campaign provisioning.
 4. Build SPRITE's guided `/talespire setup` and status handoff.
 5. Package and publish the versioned Symbiote artifact.
 6. Validate the complete clean-guild/clean-machine journey.
 
-Provisioning and packaging research may proceed while Track 1 is underway, but TaleSpire linking remains a separate implementation after the base feature ships.
+Provisioning and packaging research may proceed in parallel. TaleSpire linking remains a separate integration implementation even though its base SPRITE prerequisite is now complete.
 
 ### Track 3 — Pro commercialization
 
@@ -212,7 +214,7 @@ This track is independent of TaleSpire while TaleSpire remains a Premium feature
 
 ### mads
 
-1. [ ] Review and approve [`game-entities.md`](game-entities.md) before assigning it to Codex.
+1. [ ] Review and approve the focused [TaleSpire game-entity bridge plan](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md).
 2. [ ] Confirm TaleSpire stays in Premium and define what Pro adds.
 3. [ ] Confirm SPRITE-Integrations remains a separate public Discord app and choose its public name.
 4. [ ] Choose the Symbiote distribution channel and update policy.
@@ -220,8 +222,8 @@ This track is independent of TaleSpire while TaleSpire remains a Premium feature
 
 ### Codex — first assignment
 
-1. [ ] Implement [`game-entities.md`](game-entities.md) after mads approves the proposed schema and command surface.
-2. [ ] Keep TaleSpire linking out of the base feature branch.
+1. [ ] Implement the approved TaleSpire game-entity bridge in `spritebot-integrations` as independently reviewable Phase 6K passes.
+2. [ ] Keep the bridge explicit: no automatic roster import and no SPRITE entity deletion from the integration app.
 
 ### Codex — safe parallel research
 
@@ -231,7 +233,7 @@ This track is independent of TaleSpire while TaleSpire remains a Premium feature
 
 ### Moldy
 
-1. [ ] Review each game-entity implementation phase before merge and keep both plans current.
+1. [ ] Review each TaleSpire game-entity bridge phase before merge and keep both plans current.
 2. [ ] Draft TaleSpire community launch material only after the clean install path is validated.
 
 ---
@@ -244,5 +246,5 @@ TaleSpire marketing can move from private testers to public acquisition when:
 - [ ] The Symbiote has an official versioned download.
 - [ ] No deployment-wide secret is distributed to users.
 - [ ] Setup is resumable and status is diagnosable.
-- [ ] SPRITEbot-prime game entities are shipped and TaleSpire can explicitly link promoted cached creatures to them.
+- [ ] SPRITEbot-prime game entities are shipped; complete the explicit TaleSpire promotion/link bridge.
 - [ ] The complete journey has been tested in a clean guild with a clean TaleSpire installation.
