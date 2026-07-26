@@ -4,11 +4,10 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Active
 
-| Plan                                           | Status                            |
-| ---------------------------------------------- | --------------------------------- |
-| [game-entities.md](game-entities.md)           | Ready for review — NPCs/creatures |
-| [ux-bdd-stories.md](ux-bdd-stories.md)         | TODO — UX behavior specs          |
-| [discord-ui-testing.md](discord-ui-testing.md) | TODO — browser-driven UI tests    |
+| Plan                                           | Status                         |
+| ---------------------------------------------- | ------------------------------ |
+| [ux-bdd-stories.md](ux-bdd-stories.md)         | TODO — UX behavior specs       |
+| [discord-ui-testing.md](discord-ui-testing.md) | TODO — browser-driven UI tests |
 
 ## Future
 
@@ -23,6 +22,7 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 | Plan                                                                                   | Summary                                                                   |
 | -------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| [done/game-entities.md](done/game-entities.md)                                         | Shipped NPC/creature sibling model; TaleSpire bridge tracked separately   |
 | [done/discord-boundary-reliability.md](done/discord-boundary-reliability.md)           | Interaction responder, operation executor, full migration, CI enforcement |
 | [done/deployment-drain-readiness.md](done/deployment-drain-readiness.md)               | Graceful shutdown, drain, runtime lease, blue-green slots                 |
 | [done/transcription-reliability.md](done/transcription-reliability.md)                 | Bounded queue, disk spool, partial dumps, progress UI                     |

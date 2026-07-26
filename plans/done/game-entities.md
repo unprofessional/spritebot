@@ -1,10 +1,12 @@
 # Plan: Game-Owned NPCs and Creatures
 
-> **Status:** Ready for product review
+> **Status:** Implemented and validated through merge `882e93a`
 > **Owner:** mads
 > **Engineering:** Codex
 > **Review:** Moldy
-> **Related plan:** [TaleSpire product and delivery gaps](tale-spire-gaps.md)
+> **Related plan:** [TaleSpire product and delivery gaps](../tale-spire-gaps.md)
+> **Integration follow-up:** [TaleSpire game-entity bridge](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md)
+> **Validation record:** All automated gates passed and the complete entity lifecycle passed a real Discord smoke test on 2026-07-25.
 
 ## Goal
 
@@ -245,7 +247,7 @@ The view card supplies edit, visibility, inventory, and delete controls for auth
 - [x] Add command/component tests for GM access, non-GM denial, visibility, delete confirmation, and restore.
 - [x] Add regression tests proving existing character creation, selection, roleplay proxying, deletion, and restoration are unchanged.
 - [x] Run formatting, lint, full tests, build, and Discord boundary/policy checks.
-- [ ] Validate the feature in a real game before beginning TaleSpire linking.
+- [x] Validate the feature in a real game before beginning TaleSpire linking.
 
 ## Follow-Up: TaleSpire Linking
 
