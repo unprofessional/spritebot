@@ -4,6 +4,7 @@ import { GameEntityInventoryDAO } from '../../../src/dao/game_entity_inventory.d
 import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import { query } from '../../../src/db/client';
 import {
+  canManageGameEntity,
   createGameEntity,
   createGameEntityInventoryItem,
   deleteGameEntity,
@@ -150,6 +151,33 @@ describe('game_entity.service', () => {
     await expect(deleteGameEntity(entity.id, 'player-1')).rejects.toThrow('Only the game creator');
     await expect(getRestorableGameEntities(game.id, 'player-1')).rejects.toThrow(
       'Only the game creator',
+    );
+  });
+
+  test('allows the configured bot owner to manage entities without publishing them', async () => {
+    const game = await createGame();
+    const entity = await createGameEntity({
+      requesterId: 'gm-1',
+      gameId: game.id,
+      kind: 'npc',
+      name: 'Owner Managed',
+      visibility: 'private',
+    });
+    const ownerId = process.env.OWNER_DISCORD_ID!;
+
+    await expect(canManageGameEntity(entity.id, ownerId)).resolves.toBe(true);
+    await expect(
+      updateGameEntityMeta(entity.id, ownerId, { bio: 'Reviewed by owner.' }),
+    ).resolves.toMatchObject({
+      bio: 'Reviewed by owner.',
+      visibility: 'private',
+    });
+    await expect(deleteGameEntity(entity.id, ownerId)).resolves.toBe(true);
+    await expect(restoreGameEntity(entity.id, ownerId)).resolves.toEqual(
+      expect.objectContaining({
+        ok: true,
+        entity: expect.objectContaining({ id: entity.id, visibility: 'private' }),
+      }),
     );
   });
 
