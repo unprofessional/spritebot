@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import {
+  ApplicationCommandOptionChoiceData,
+  AutocompleteInteraction,
   BaseInteraction,
   ChatInputCommandInteraction,
   Client,
@@ -67,6 +69,11 @@ const presencePolicy = defineDiscordOperationPolicy({
   timeoutMs: 5_000,
   totalBudgetMs: 5_000,
 });
+const autocompleteResponsePolicy = defineDiscordOperationPolicy({
+  operation: 'interaction.autocomplete-respond',
+  timeoutMs: 2_000,
+  totalBudgetMs: 2_500,
+});
 const defaultCommandInteractionPolicy: InteractionDispatchPolicy = {
   mode: { kind: 'reply', visibility: 'ephemeral' },
   acknowledgement: 'auto-defer',
@@ -75,6 +82,9 @@ const defaultCommandInteractionPolicy: InteractionDispatchPolicy = {
 // --- Types ---
 type CommandModule = {
   data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  autocomplete?: (
+    interaction: AutocompleteInteraction,
+  ) => Promise<ApplicationCommandOptionChoiceData<string>[]>;
   interactionPolicy?: InteractionDispatchPolicySource<
     ChatInputCommandInteraction | MessageContextMenuCommandInteraction
   >;
@@ -234,6 +244,18 @@ function logInteractionFailure(
 }
 
 export async function dispatchInteraction(client: Client, interaction: BaseInteraction) {
+  if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) {
+    const command = client.commands.get(interaction.commandName);
+    const choices = command?.autocomplete
+      ? await command.autocomplete(interaction).catch((error) => {
+          logInteractionFailure('interaction-error', interaction, error);
+          return [];
+        })
+      : [];
+    await executeDiscordSdkMethod(autocompleteResponsePolicy, interaction, 'respond', choices);
+    return;
+  }
+
   if (isDraining()) {
     await drainFallback(interaction);
     return;
