@@ -252,6 +252,59 @@ describe('game entity Discord UI', () => {
     }
   });
 
+  test('keeps link-only entities undiscoverable but directly viewable by their internal value', async () => {
+    const game = await gameDAO.create({
+      name: 'Link-only Game',
+      description: '',
+      created_by: 'link-gm',
+      guild_id: 'link-guild',
+    });
+    const linkOnlyEntity = await createGameEntity({
+      requesterId: 'link-gm',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Hidden Goblin',
+      visibility: 'link-only',
+    });
+    const privateEntity = await createGameEntity({
+      requesterId: 'link-gm',
+      gameId: game.id,
+      kind: 'npc',
+      name: 'Private Goblin',
+      visibility: 'private',
+    });
+    await getOrCreatePlayer('link-player', 'link-guild');
+    await setCurrentGame('link-player', 'link-guild', game.id);
+
+    const autocompleteChoices = await viewEntityCommand.autocomplete({
+      guildId: 'link-guild',
+      user: { id: 'link-player' },
+      options: { getFocused: () => 'goblin' },
+    });
+    expect(autocompleteChoices).toEqual([]);
+
+    const respond = jest.fn().mockResolvedValue(undefined);
+    const execute = (entityId: string) =>
+      viewEntityCommand.execute(
+        {
+          guildId: 'link-guild',
+          user: { id: 'link-player' },
+          options: { getString: () => entityId },
+        },
+        { responder: { respond } as unknown as DiscordInteractionResponder },
+      );
+
+    await execute(linkOnlyEntity.id);
+    expect(respond.mock.calls.at(-1)?.[0].embeds[0].toJSON().title).toBe('Hidden Goblin');
+    expect(respond.mock.calls.at(-1)?.[0].components).toEqual([]);
+
+    await execute(privateEntity.id);
+    expect(respond.mock.calls.at(-1)?.[0]).toEqual({
+      content: '⚠️ That entity is not available in your current game.',
+      ephemeral: true,
+    });
+  });
+
   test('execution revalidates stale, foreign-game, and newly unauthorized selections', async () => {
     const { game, entity } = await setupEntity('public');
     await getOrCreatePlayer('selection-player', 'guild-1');

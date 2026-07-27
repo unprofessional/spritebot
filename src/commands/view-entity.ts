@@ -77,7 +77,7 @@ module.exports = {
         if (
           !entity ||
           entity.game_id !== gameId ||
-          (!canManage && entity.visibility !== 'public')
+          (!canManage && entity.visibility === 'private')
         ) {
           return responder.respond({
             content: '⚠️ That entity is not available in your current game.',
