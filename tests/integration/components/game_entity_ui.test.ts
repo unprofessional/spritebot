@@ -25,6 +25,12 @@ const viewEntityCommand = require('../../../src/commands/view-entity') as {
     context: { responder: DiscordInteractionResponder },
   ): Promise<unknown>;
 };
+const listEntitiesCommand = require('../../../src/commands/list-entities') as {
+  execute(
+    interaction: unknown,
+    context: { responder: DiscordInteractionResponder },
+  ): Promise<unknown>;
+};
 
 describe('game entity Discord UI', () => {
   const gameDAO = new GameDAO();
@@ -115,6 +121,71 @@ describe('game entity Discord UI', () => {
       { respond } as unknown as DiscordInteractionResponder,
     );
     expect(respond.mock.calls[0][0].components).toEqual([]);
+  });
+
+  test('lets the configured bot owner discover and manage a private entity', async () => {
+    const { game, entity } = await setupEntity('private');
+    const ownerId = process.env.OWNER_DISCORD_ID!;
+    await getOrCreatePlayer(ownerId, 'guild-1');
+    await setCurrentGame(ownerId, 'guild-1', game.id);
+    const respond = jest.fn().mockResolvedValue(undefined);
+
+    await listEntitiesCommand.execute(
+      {
+        guildId: 'guild-1',
+        user: { id: ownerId },
+        options: { getString: () => null },
+      },
+      { responder: { respond } as unknown as DiscordInteractionResponder },
+    );
+
+    expect(respond.mock.calls[0][0].content).toContain(
+      'Private and link-only entries are visible because you manage this game.',
+    );
+    expect(respond.mock.calls[0][0].components[0].toJSON().components[0].options).toContainEqual(
+      expect.objectContaining({ value: entity.id }),
+    );
+
+    respond.mockClear();
+    await handleEntitySelector(
+      {
+        customId: 'selectGameEntity',
+        values: [entity.id],
+        user: { id: ownerId },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    expect(respond.mock.calls[0][0].components).toHaveLength(1);
+
+    respond.mockClear();
+    await handleEntityButtons(
+      {
+        customId: `toggleGameEntityVisibility:${entity.id}`,
+        user: { id: ownerId },
+      } as never,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+    await expect(getGameEntity(entity.id)).resolves.toMatchObject({ visibility: 'public' });
+  });
+
+  test('lets the configured bot owner view a private entity by ID with management controls', async () => {
+    const { game, entity } = await setupEntity('private');
+    const ownerId = process.env.OWNER_DISCORD_ID!;
+    await getOrCreatePlayer(ownerId, 'guild-1');
+    await setCurrentGame(ownerId, 'guild-1', game.id);
+    const respond = jest.fn().mockResolvedValue(undefined);
+
+    await viewEntityCommand.execute(
+      {
+        guildId: 'guild-1',
+        user: { id: ownerId },
+        options: { getString: () => entity.id },
+      },
+      { responder: { respond } as unknown as DiscordInteractionResponder },
+    );
+
+    expect(respond.mock.calls[0][0].embeds[0].toJSON().title).toBe('Mooncalf');
+    expect(respond.mock.calls[0][0].components).toHaveLength(1);
   });
 
   test('offers publish or unpublish only and publishes directly from non-public states', async () => {

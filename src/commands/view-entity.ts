@@ -5,8 +5,11 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../discord/interaction_dispatch';
-import { getGame } from '../services/game.service';
-import { getGameEntities, getGameEntity } from '../services/game_entity.service';
+import {
+  canManageGameEntities,
+  getGameEntities,
+  getGameEntity,
+} from '../services/game_entity.service';
 import { getCurrentGame } from '../services/player.service';
 import { isUuid } from '../utils/uuid';
 
@@ -42,8 +45,7 @@ module.exports = {
           ephemeral: true,
         });
       }
-      const game = await getGame({ id: gameId });
-      const canManage = game?.created_by === interaction.user.id;
+      const canManage = await canManageGameEntities(gameId, interaction.user.id);
       const entityId = interaction.options.getString('entity_id');
       if (entityId) {
         if (!isUuid(entityId)) {
