@@ -6,8 +6,7 @@ import {
 import { discordCustomId } from '../utils/discord_custom_id';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
-import { getGame } from '../services/game.service';
-import { getGameEntity } from '../services/game_entity.service';
+import { canManageGameEntities, getGameEntity } from '../services/game_entity.service';
 import type { GameEntity } from '../types/game_entity';
 import { build as buildEntityCard } from './view_game_entity_card';
 
@@ -43,8 +42,7 @@ export async function handle(
     return;
   }
 
-  const game = await getGame({ id: entity.game_id });
-  const canManage = game?.created_by === interaction.user.id;
+  const canManage = await canManageGameEntities(entity.game_id, interaction.user.id);
   if (!canManage && entity.visibility !== 'public') {
     await responder.respond({
       content: '❌ That entity is not publicly discoverable.',

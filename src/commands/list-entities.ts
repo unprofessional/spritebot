@@ -4,8 +4,7 @@ import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
 } from '../discord/interaction_dispatch';
-import { getGame } from '../services/game.service';
-import { getGameEntities } from '../services/game_entity.service';
+import { canManageGameEntities, getGameEntities } from '../services/game_entity.service';
 import { getCurrentGame } from '../services/player.service';
 import type { GameEntityKind } from '../types/game_entity';
 
@@ -42,14 +41,13 @@ module.exports = {
           ephemeral: true,
         });
       }
-      const [game, entities] = await Promise.all([
-        getGame({ id: gameId }),
+      const [canManage, entities] = await Promise.all([
+        canManageGameEntities(gameId, interaction.user.id),
         getGameEntities(
           gameId,
           (interaction.options.getString('kind') || undefined) as GameEntityKind | undefined,
         ),
       ]);
-      const canManage = game?.created_by === interaction.user.id;
       const visible = canManage
         ? entities
         : entities.filter((entity) => entity.visibility === 'public');
