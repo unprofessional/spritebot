@@ -11,7 +11,7 @@
 
 Track the remaining core-product, onboarding, distribution, and commercial work required before the TaleSpire integration can be marketed as a clean self-service SPRITE feature.
 
-NPC and creature modeling belongs to **SPRITEbot-prime**, not to the TaleSpire bridge. The base feature and the explicit SPRITE-Integrations bridge are now shipped and deployed. The base implementation record lives in [`done/game-entities.md`](done/game-entities.md); the bridge implementation record lives in [`spritebot-integrations/plans/talespire-game-entity-bridge.md`](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md). The remaining gaps cover selling the right plan, installing the second Discord app cleanly, replacing shared credentials, and safely delivering the Symbiote.
+NPC and creature modeling belongs to **SPRITEbot-prime**, not to the TaleSpire bridge. The base feature and the explicit SPRITE-Integrations bridge are now shipped and deployed. The base implementation record lives in [`done/game-entities.md`](done/game-entities.md); the bridge implementation record lives in [`spritebot-integrations/plans/done/talespire-game-entity-bridge.md`](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/done/talespire-game-entity-bridge.md). The remaining gaps cover selling the right plan, installing the second Discord app cleanly, replacing shared credentials, and safely delivering the Symbiote.
 
 ## Current State
 
@@ -35,7 +35,7 @@ NPCs and creatures are shipped as a base SPRITE capability using the additive `g
 
 The separate Integrations implementation now lets a GM explicitly promote or link a cached TaleSpire creature to a SPRITE game entity and writes mapped TaleSpire stats into `game_entity_stat_field`. Unlinked roster rows stay integration-local; nothing is imported automatically.
 
-The deployed bridge preserves IDs only as internal autocomplete and persistence values. Users select entities by human-readable names and context, and `/entity list` does not print either the TaleSpire source UUID or SPRITE target UUID. The schema, command UX, target-conflict rules, write-through behavior, status codes, phases, and acceptance criteria live in the focused [`TaleSpire game-entity bridge plan`](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md).
+The deployed bridge preserves IDs only as internal autocomplete and persistence values. Users select entities by human-readable names and context, and `/entity list` does not print either the TaleSpire source UUID or SPRITE target UUID. The schema, command UX, target-conflict rules, write-through behavior, status codes, phases, and acceptance criteria live in the focused [`TaleSpire game-entity bridge plan`](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/done/talespire-game-entity-bridge.md).
 
 ---
 
@@ -192,7 +192,7 @@ The shipped feature does not migrate or generalize player characters. It is now 
 
 ### Track 2 — TaleSpire linking and public onboarding
 
-1. [x] Implement and deploy the focused [TaleSpire game-entity bridge plan](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md), including explicit cached-creature promotion/linking and mapped stat write-through.
+1. [x] Implement and deploy the focused [TaleSpire game-entity bridge plan](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/done/talespire-game-entity-bridge.md), including explicit cached-creature promotion/linking and mapped stat write-through.
 2. Decide the second-app setup flow and public product name.
 3. Replace the shared webhook secret with scoped campaign provisioning.
 4. Build SPRITE's guided `/talespire setup` and status handoff.
