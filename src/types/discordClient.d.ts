@@ -3,6 +3,8 @@
 import 'discord.js';
 import type { Collection } from 'discord.js';
 import type {
+  ApplicationCommandOptionChoiceData,
+  AutocompleteInteraction,
   ChatInputCommandInteraction,
   ContextMenuCommandBuilder,
   MessageContextMenuCommandInteraction,
@@ -15,6 +17,9 @@ import type {
 
 type CommandModule = {
   data: SlashCommandBuilder | ContextMenuCommandBuilder;
+  autocomplete?: (
+    interaction: AutocompleteInteraction,
+  ) => Promise<ApplicationCommandOptionChoiceData<string>[]>;
   interactionPolicy?: InteractionDispatchPolicySource<
     ChatInputCommandInteraction | MessageContextMenuCommandInteraction
   >;
