@@ -177,6 +177,47 @@ describe('command registration', () => {
     expect(interaction.deferReply).not.toHaveBeenCalled();
   });
 
+  test('routes autocomplete choices through the command hook without executing the command', async () => {
+    jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
+    const { initializeCommands } = require('../../../src/client/initial_commands') as {
+      initializeCommands(client: {
+        commands?: Map<string, unknown>;
+        on: jest.Mock;
+        once: jest.Mock;
+      }): Promise<unknown>;
+    };
+    const client = { on: jest.fn(), once: jest.fn() };
+    await initializeCommands(client);
+
+    const command = client.commands?.get('view-entity') as {
+      autocomplete: jest.Mock;
+      execute: jest.Mock;
+    };
+    command.autocomplete = jest
+      .fn()
+      .mockResolvedValue([{ name: 'Goblin — Creature • Public', value: 'entity-1' }]);
+    command.execute = jest.fn();
+
+    const interactionListener = client.on.mock.calls.find(
+      ([event]) => event === Events.InteractionCreate,
+    )?.[1] as ((interaction: unknown) => void) | undefined;
+    const interaction = {
+      type: 4,
+      commandName: 'view-entity',
+      isAutocomplete: () => true,
+      respond: jest.fn().mockResolvedValue(undefined),
+    };
+
+    interactionListener?.(interaction);
+    await flushPromises();
+
+    expect(command.autocomplete).toHaveBeenCalledWith(interaction);
+    expect(interaction.respond).toHaveBeenCalledWith([
+      { name: 'Goblin — Creature • Public', value: 'entity-1' },
+    ]);
+    expect(command.execute).not.toHaveBeenCalled();
+  });
+
   test('defers modal command authorization to the gated modal submission', async () => {
     jest.spyOn(REST.prototype, 'put').mockResolvedValue([] as any);
     const { guardCommand } = require('../../../src/access/guards') as {
