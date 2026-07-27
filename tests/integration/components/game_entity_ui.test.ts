@@ -20,6 +20,8 @@ import { handle as handleEntityInventorySelector } from '../../../src/handlers/s
 import { getOrCreatePlayer, setCurrentGame } from '../../../src/services/player.service';
 
 const viewEntityCommand = require('../../../src/commands/view-entity') as {
+  data: { toJSON(): { options?: Array<Record<string, unknown>> } };
+  autocomplete(interaction: unknown): Promise<Array<{ name: string; value: string }>>;
   execute(
     interaction: unknown,
     context: { responder: DiscordInteractionResponder },
@@ -52,6 +54,17 @@ describe('game entity Discord UI', () => {
     });
     return { game, entity };
   }
+
+  test('registers a name-oriented autocomplete option without exposing entity IDs', () => {
+    expect(viewEntityCommand.data.toJSON().options).toEqual([
+      expect.objectContaining({
+        name: 'entity',
+        description: 'NPC or creature name',
+        autocomplete: true,
+        required: false,
+      }),
+    ]);
+  });
 
   test('labels entity kind and only renders management controls for the game creator', async () => {
     const { entity } = await setupEntity('public');
@@ -186,6 +199,149 @@ describe('game entity Discord UI', () => {
 
     expect(respond.mock.calls[0][0].embeds[0].toJSON().title).toBe('Mooncalf');
     expect(respond.mock.calls[0][0].components).toHaveLength(1);
+  });
+
+  test('autocomplete filters visibility for players while GM and owner can search all states', async () => {
+    const game = await gameDAO.create({
+      name: 'Autocomplete Game',
+      description: '',
+      created_by: 'gm-autocomplete',
+      guild_id: 'guild-autocomplete',
+    });
+    const publicEntity = await createGameEntity({
+      requesterId: 'gm-autocomplete',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Goblin Public',
+      visibility: 'public',
+    });
+    const privateEntity = await createGameEntity({
+      requesterId: 'gm-autocomplete',
+      gameId: game.id,
+      kind: 'npc',
+      name: 'Goblin Private',
+      visibility: 'private',
+    });
+    const linkOnlyEntity = await createGameEntity({
+      requesterId: 'gm-autocomplete',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Goblin Linked',
+      visibility: 'link-only',
+    });
+    const ownerId = process.env.OWNER_DISCORD_ID!;
+    for (const userId of ['player-autocomplete', 'gm-autocomplete', ownerId]) {
+      await getOrCreatePlayer(userId, 'guild-autocomplete');
+      await setCurrentGame(userId, 'guild-autocomplete', game.id);
+    }
+
+    const interaction = (userId: string, focused = 'gob') => ({
+      guildId: 'guild-autocomplete',
+      user: { id: userId },
+      options: { getFocused: () => focused },
+    });
+    const playerChoices = await viewEntityCommand.autocomplete(interaction('player-autocomplete'));
+    expect(playerChoices.map((choice) => choice.value)).toEqual([publicEntity.id]);
+
+    for (const userId of ['gm-autocomplete', ownerId]) {
+      const choices = await viewEntityCommand.autocomplete(interaction(userId));
+      expect(choices.map((choice) => choice.value)).toEqual(
+        expect.arrayContaining([publicEntity.id, privateEntity.id, linkOnlyEntity.id]),
+      );
+      expect(choices.map((choice) => choice.name).join(' ')).not.toContain(game.id);
+    }
+  });
+
+  test('keeps link-only entities undiscoverable but directly viewable by their internal value', async () => {
+    const game = await gameDAO.create({
+      name: 'Link-only Game',
+      description: '',
+      created_by: 'link-gm',
+      guild_id: 'link-guild',
+    });
+    const linkOnlyEntity = await createGameEntity({
+      requesterId: 'link-gm',
+      gameId: game.id,
+      kind: 'creature',
+      name: 'Hidden Goblin',
+      visibility: 'link-only',
+    });
+    const privateEntity = await createGameEntity({
+      requesterId: 'link-gm',
+      gameId: game.id,
+      kind: 'npc',
+      name: 'Private Goblin',
+      visibility: 'private',
+    });
+    await getOrCreatePlayer('link-player', 'link-guild');
+    await setCurrentGame('link-player', 'link-guild', game.id);
+
+    const autocompleteChoices = await viewEntityCommand.autocomplete({
+      guildId: 'link-guild',
+      user: { id: 'link-player' },
+      options: { getFocused: () => 'goblin' },
+    });
+    expect(autocompleteChoices).toEqual([]);
+
+    const respond = jest.fn().mockResolvedValue(undefined);
+    const execute = (entityId: string) =>
+      viewEntityCommand.execute(
+        {
+          guildId: 'link-guild',
+          user: { id: 'link-player' },
+          options: { getString: () => entityId },
+        },
+        { responder: { respond } as unknown as DiscordInteractionResponder },
+      );
+
+    await execute(linkOnlyEntity.id);
+    expect(respond.mock.calls.at(-1)?.[0].embeds[0].toJSON().title).toBe('Hidden Goblin');
+    expect(respond.mock.calls.at(-1)?.[0].components).toEqual([]);
+
+    await execute(privateEntity.id);
+    expect(respond.mock.calls.at(-1)?.[0]).toEqual({
+      content: '⚠️ That entity is not available in your current game.',
+      ephemeral: true,
+    });
+  });
+
+  test('execution revalidates stale, foreign-game, and newly unauthorized selections', async () => {
+    const { game, entity } = await setupEntity('public');
+    await getOrCreatePlayer('selection-player', 'guild-1');
+    await setCurrentGame('selection-player', 'guild-1', game.id);
+    const otherGame = await gameDAO.create({
+      name: 'Other Game',
+      description: '',
+      created_by: 'other-gm',
+      guild_id: 'guild-1',
+    });
+    const foreignEntity = await createGameEntity({
+      requesterId: 'other-gm',
+      gameId: otherGame.id,
+      kind: 'npc',
+      name: 'Foreign Goblin',
+      visibility: 'public',
+    });
+    const respond = jest.fn().mockResolvedValue(undefined);
+    const execute = (entityId: string) =>
+      viewEntityCommand.execute(
+        {
+          guildId: 'guild-1',
+          user: { id: 'selection-player' },
+          options: { getString: () => entityId },
+        },
+        { responder: { respond } as unknown as DiscordInteractionResponder },
+      );
+
+    await execute('00000000-0000-4000-8000-000000000000');
+    expect(respond.mock.calls.at(-1)?.[0].content).toContain('not available');
+
+    await execute(foreignEntity.id);
+    expect(respond.mock.calls.at(-1)?.[0].content).toContain('not available');
+
+    await updateGameEntityMeta(entity.id, 'gm-1', { visibility: 'private' });
+    await execute(entity.id);
+    expect(respond.mock.calls.at(-1)?.[0].content).toContain('not available');
   });
 
   test('offers publish or unpublish only and publishes directly from non-public states', async () => {
@@ -394,7 +550,7 @@ describe('game entity Discord UI', () => {
     );
 
     expect(respond).toHaveBeenCalledWith({
-      content: '⚠️ Entity ID must be a valid UUID.',
+      content: '⚠️ Select an NPC or creature from the suggestions.',
       ephemeral: true,
     });
   });
