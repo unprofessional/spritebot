@@ -1,4 +1,9 @@
-import { CacheType, ChatInputCommandInteraction, SlashCommandBuilder } from 'discord.js';
+import {
+  AutocompleteInteraction,
+  CacheType,
+  ChatInputCommandInteraction,
+  SlashCommandBuilder,
+} from 'discord.js';
 import { build as buildEntitySelector } from '../components/game_entity_selector';
 import { build as buildEntityCard } from '../components/view_game_entity_card';
 import type {
@@ -11,6 +16,7 @@ import {
   getGameEntity,
 } from '../services/game_entity.service';
 import { getCurrentGame } from '../services/player.service';
+import { buildGameEntityAutocompleteChoices } from '../utils/game_entity_autocomplete';
 import { isUuid } from '../utils/uuid';
 
 module.exports = {
@@ -19,14 +25,27 @@ module.exports = {
     .setDescription('View an NPC or creature in your current game.')
     .addStringOption((option) =>
       option
-        .setName('entity_id')
-        .setDescription('Direct entity ID, including link-only entities')
+        .setName('entity')
+        .setDescription('NPC or creature name')
+        .setAutocomplete(true)
         .setRequired(false),
     ),
   interactionPolicy: {
     mode: { kind: 'reply', visibility: 'ephemeral' },
     acknowledgement: 'auto-defer',
   } satisfies InteractionDispatchPolicy,
+  async autocomplete(interaction: AutocompleteInteraction) {
+    if (!interaction.guildId) return [];
+    const gameId = await getCurrentGame(interaction.user.id, interaction.guildId);
+    if (!gameId) return [];
+
+    const canManage = await canManageGameEntities(gameId, interaction.user.id);
+    const entities = await getGameEntities(gameId);
+    const accessible = canManage
+      ? entities
+      : entities.filter((entity) => entity.visibility === 'public');
+    return buildGameEntityAutocompleteChoices(accessible, interaction.options.getFocused());
+  },
   async execute(
     interaction: ChatInputCommandInteraction<CacheType>,
     { responder }: InteractionCommandContext,
@@ -46,11 +65,11 @@ module.exports = {
         });
       }
       const canManage = await canManageGameEntities(gameId, interaction.user.id);
-      const entityId = interaction.options.getString('entity_id');
+      const entityId = interaction.options.getString('entity');
       if (entityId) {
         if (!isUuid(entityId)) {
           return responder.respond({
-            content: '⚠️ Entity ID must be a valid UUID.',
+            content: '⚠️ Select an NPC or creature from the suggestions.',
             ephemeral: true,
           });
         }
@@ -58,7 +77,7 @@ module.exports = {
         if (
           !entity ||
           entity.game_id !== gameId ||
-          (!canManage && entity.visibility === 'private')
+          (!canManage && entity.visibility !== 'public')
         ) {
           return responder.respond({
             content: '⚠️ That entity is not available in your current game.',
