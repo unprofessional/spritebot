@@ -5,6 +5,7 @@ import { GameEntityInventoryDAO } from '../dao/game_entity_inventory.dao';
 import { GameEntityInventoryFieldDAO } from '../dao/game_entity_inventory_field.dao';
 import { GameEntityStatFieldDAO } from '../dao/game_entity_stat_field.dao';
 import { StatTemplateDAO } from '../dao/stat_template.dao';
+import { isBotOwner } from '../access/bot_owner';
 import type { FieldInput } from '../types/field_input';
 import type {
   GameEntity,
@@ -152,7 +153,12 @@ export async function canManageGameEntity(
   const entity = await entityDAO.findActiveById(gameEntityId);
   if (!entity) return false;
   const game = await gameDAO.findById(entity.game_id);
-  return game?.created_by === requesterId;
+  return Boolean(game && canManageGame(game.created_by, requesterId));
+}
+
+export async function canManageGameEntities(gameId: string, requesterId: string): Promise<boolean> {
+  const game = await gameDAO.findById(gameId);
+  return Boolean(game && canManageGame(game.created_by, requesterId));
 }
 
 export async function updateGameEntityMeta(
@@ -199,7 +205,9 @@ export async function restoreGameEntity(
 
   const game = await gameDAO.findById(entity.game_id);
   if (!game) return { ok: false, reason: 'game_inactive' };
-  if (game.created_by !== requesterId) return { ok: false, reason: 'not_owner' };
+  if (!canManageGame(game.created_by, requesterId)) {
+    return { ok: false, reason: 'not_owner' };
+  }
   if (!entity.deleted_at) return { ok: false, reason: 'not_deleted' };
   if (restoreWindowExpired(entity.deleted_at)) return { ok: false, reason: 'expired' };
 
@@ -364,9 +372,13 @@ export async function deleteGameEntityInventoryItem(
 async function requireManagedGame(gameId: string, requesterId: string) {
   const game = await gameDAO.findById(gameId);
   if (!game) throw new Error('Game not found or inactive.');
-  if (game.created_by !== requesterId)
+  if (!canManageGame(game.created_by, requesterId))
     throw new Error('Only the game creator can manage entities.');
   return game;
+}
+
+function canManageGame(gameCreatorId: string, requesterId: string): boolean {
+  return gameCreatorId === requesterId || isBotOwner(requesterId);
 }
 
 async function requireManagedEntity(
