@@ -5,7 +5,7 @@
 > **Engineering:** Codex
 > **Review:** Moldy
 > **Related plan:** [TaleSpire product and delivery gaps](../tale-spire-gaps.md)
-> **Integration follow-up:** [TaleSpire game-entity bridge](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md)
+> **Integration follow-up:** [TaleSpire game-entity bridge](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/done/talespire-game-entity-bridge.md)
 > **Validation record:** All automated gates passed and the complete entity lifecycle passed a real Discord smoke test on 2026-07-25.
 
 ## Goal
