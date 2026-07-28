@@ -2,12 +2,14 @@
 
 import { query } from '../db/client';
 import type { CreateStatTemplateParams, StatTemplate } from '../types/stat_template';
+import { isValidCustomStatKey, normalizeCustomStatKey } from '../utils/custom_stat_key';
 
-type StatTemplateUpdate = Partial<Omit<CreateStatTemplateParams, 'game_id'>>;
+type StatTemplateUpdate = Partial<Omit<CreateStatTemplateParams, 'game_id' | 'stat_key'>>;
 
 export class StatTemplateDAO {
   async create({
     game_id,
+    stat_key,
     label,
     field_type = 'short',
     default_value = null,
@@ -15,11 +17,17 @@ export class StatTemplateDAO {
     sort_order = 0,
     meta = {},
   }: CreateStatTemplateParams): Promise<StatTemplate> {
+    const resolvedStatKey = stat_key?.trim() || normalizeCustomStatKey(label);
+    if (!isValidCustomStatKey(resolvedStatKey)) {
+      throw new Error(
+        'Stat key must start with a lowercase letter and contain only lowercase letters, numbers, or underscores (64 characters maximum).',
+      );
+    }
     const sql = `
     INSERT INTO stat_template (
-      game_id, label, field_type, default_value, is_required, sort_order, meta
+      game_id, stat_key, label, field_type, default_value, is_required, sort_order, meta
     )
-    SELECT g.id, $2, $3, $4, $5, $6, $7
+    SELECT g.id, $2, $3, $4, $5, $6, $7, $8
     FROM game g
     WHERE g.id = $1
       AND g.deleted_at IS NULL
@@ -27,6 +35,7 @@ export class StatTemplateDAO {
   `;
     const result = await query<StatTemplate>(sql, [
       game_id,
+      resolvedStatKey,
       label,
       field_type,
       default_value,
@@ -71,6 +80,21 @@ export class StatTemplateDAO {
     `;
     const result = await query<StatTemplate>(sql, [gameId]);
     return result.rows;
+  }
+
+  async findByGameAndKey(gameId: string, statKey: string): Promise<StatTemplate | null> {
+    const result = await query<StatTemplate>(
+      `
+        SELECT st.*
+        FROM stat_template st
+        JOIN game g ON g.id = st.game_id AND g.deleted_at IS NULL
+        WHERE st.game_id = $1
+          AND lower(st.stat_key) = lower($2)
+        LIMIT 1
+      `,
+      [gameId, statKey],
+    );
+    return result.rows[0] || null;
   }
 
   async updateById(templateId: string, updates: StatTemplateUpdate): Promise<StatTemplate | null> {

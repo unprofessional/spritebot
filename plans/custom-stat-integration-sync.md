@@ -1,6 +1,6 @@
 # Custom Stat Definitions and Integration Sync
 
-> **Status:** Proposed
+> **Status:** Phase 1 implemented; Phase 2 pending
 > **Primary owner:** SPRITEbot-prime
 > **Integration consumer:** SPRITE-Integrations
 > **Initial adapter:** TaleSpire Symbiote
