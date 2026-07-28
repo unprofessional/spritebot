@@ -4,7 +4,11 @@ import { query } from '../db/client';
 import type { CreateStatTemplateParams, StatTemplate } from '../types/stat_template';
 import { isValidCustomStatKey, normalizeCustomStatKey } from '../utils/custom_stat_key';
 
-type StatTemplateUpdate = Partial<Omit<CreateStatTemplateParams, 'game_id' | 'stat_key'>>;
+type StatTemplateUpdate = Partial<
+  Pick<CreateStatTemplateParams, 'label' | 'default_value' | 'is_required' | 'sort_order' | 'meta'>
+>;
+
+const EDITABLE_COLUMNS = new Set(['label', 'default_value', 'is_required', 'sort_order', 'meta']);
 
 export class StatTemplateDAO {
   async create({
@@ -98,6 +102,11 @@ export class StatTemplateDAO {
   }
 
   async updateById(templateId: string, updates: StatTemplateUpdate): Promise<StatTemplate | null> {
+    const invalidFields = Object.keys(updates).filter((key) => !EDITABLE_COLUMNS.has(key));
+    if (invalidFields.length) {
+      throw new Error(`Unsupported stat template update field(s): ${invalidFields.join(', ')}`);
+    }
+
     const fields: string[] = [];
     const values: unknown[] = [];
     let idx = 1;

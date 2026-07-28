@@ -45,9 +45,6 @@ CREATE TABLE stat_template (
   CONSTRAINT stat_template_game_stat_key_unique UNIQUE (game_id, stat_key)
 );
 
-CREATE UNIQUE INDEX stat_template_game_stat_key_uidx
-  ON stat_template (game_id, lower(stat_key));
-
 CREATE OR REPLACE FUNCTION prevent_stat_template_key_change()
 RETURNS TRIGGER AS $$
 BEGIN

@@ -8,7 +8,10 @@ import {
 import { discordCustomId } from '../utils/discord_custom_id';
 import type { InteractionDispatchPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
-import { applyCustomStatPreset } from '../services/custom_stat_definition.service';
+import {
+  applyCustomStatPreset,
+  CustomStatPresetConflictError,
+} from '../services/custom_stat_definition.service';
 import { getGame, getStatTemplates } from '../services/game.service';
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
@@ -41,7 +44,16 @@ async function handle(
     return;
   }
 
-  const result = await applyCustomStatPreset(gameId, presetKey);
+  let result: Awaited<ReturnType<typeof applyCustomStatPreset>>;
+  try {
+    result = await applyCustomStatPreset(gameId, presetKey);
+  } catch (error) {
+    if (error instanceof CustomStatPresetConflictError) {
+      await responder.respond({ content: `⚠️ ${error.message}`, ephemeral: true });
+      return;
+    }
+    throw error;
+  }
   const [updatedGame, stats] = await Promise.all([
     getGame({ id: gameId }) as Promise<Game>,
     getStatTemplates(gameId) as Promise<StatTemplate[]>,
