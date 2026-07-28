@@ -29,13 +29,6 @@ module.exports = {
         .setName('description')
         .setDescription('A short description of the game')
         .setRequired(false),
-    )
-    .addStringOption((option) =>
-      option
-        .setName('preset')
-        .setDescription('Optionally add ordinary custom stats for a game system')
-        .addChoices({ name: 'FFRP (HP and FP)', value: 'ffrp' })
-        .setRequired(false),
     ),
 
   interactionPolicy: {
@@ -49,7 +42,6 @@ module.exports = {
   ) {
     const name = interaction.options.getString('name')?.trim();
     const description = interaction.options.getString('description')?.trim() ?? '';
-    const presetKey = interaction.options.getString('preset');
     const guildId = interaction.guild?.id;
     const userId = interaction.user.id;
 
@@ -67,7 +59,6 @@ module.exports = {
         description,
         createdBy: userId,
         guildId,
-        presetKey,
       });
 
       await getOrCreatePlayer(userId, guildId, 'gm');
@@ -91,12 +82,9 @@ module.exports = {
         ` - 🟨 **Custom Stats** (you define these)`,
         `  - Ex: HP, Strength, Skills, etc.`,
         ``,
-        presetKey ? `✅ Applied the **FFRP** custom-stat preset (HP and FP).` : '',
         `Use the buttons below to define custom stats or to publish the game.`,
         `_You do **not** need to redefine system fields._`,
-      ]
-        .filter(Boolean)
-        .join('\n');
+      ].join('\n');
       const nudge = buildNudge(
         {
           userId,
@@ -104,7 +92,7 @@ module.exports = {
           gameId: game.id,
           isGM: true,
           gameIsPublished: game.is_public,
-          hasStatTemplates: !!presetKey,
+          hasStatTemplates: false,
         },
         'create-game',
       );

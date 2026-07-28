@@ -15,7 +15,6 @@ import type { Game } from '../types/game';
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { build as buildCancelButton } from './finish_stat_setup_button';
 import { build as buildStatTypeDropdown } from './stat_type_selector';
-import { build as buildApplyPresetButton } from './apply_stat_preset_button';
 
 const id = 'defineStats';
 const interactionPolicy = {
@@ -47,10 +46,7 @@ async function handle(
 
   const dropdownRow = buildStatTypeDropdown(gameId);
   const cancelBtn = new ButtonBuilder(buildCancelButton(gameId));
-  const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    buildApplyPresetButton(gameId),
-    cancelBtn,
-  );
+  const cancelRow = new ActionRowBuilder<ButtonBuilder>().addComponents(cancelBtn);
   const nudge = buildNudge(
     {
       userId: interaction.user.id,
@@ -71,7 +67,7 @@ async function handle(
         `⚠️ **Once created, the stat type CANNOT be changed.**`,
         `If you make a mistake, you must delete the stat and recreate it with the correct type.`,
         ``,
-        `Every named game stat is a custom stat. You can define one manually or apply the optional FFRP preset.`,
+        `Every named game stat is a custom stat defined by the GM.`,
         ``,
         `### Custom Stat Types & Examples:`,
         ``,

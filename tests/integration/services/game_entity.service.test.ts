@@ -43,6 +43,7 @@ describe('game_entity.service', () => {
     const game = await createGame();
     const hp = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'vitality',
       label: 'HP',
       field_type: 'count',
       default_value: '12',
@@ -51,6 +52,7 @@ describe('game_entity.service', () => {
     });
     const armor = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'armor',
       label: 'Armor',
       field_type: 'number',
       default_value: '2',
@@ -123,6 +125,7 @@ describe('game_entity.service', () => {
     });
     const template = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'health',
       label: 'HP',
       field_type: 'number',
     });
@@ -198,6 +201,7 @@ describe('game_entity.service', () => {
     });
     const otherTemplate = await templateDAO.create({
       game_id: otherGame.id,
+      stat_key: 'lore',
       label: 'Lore',
       field_type: 'short',
     });
@@ -382,6 +386,7 @@ describe('game_entity.service', () => {
     const game = await createGame();
     const template = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'threat',
       label: 'Threat',
       field_type: 'short',
     });
