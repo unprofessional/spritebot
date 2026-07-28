@@ -27,6 +27,13 @@ export interface CustomStatPreset {
   stats: readonly CustomStatPresetDefinition[];
 }
 
+export class CustomStatPresetConflictError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CustomStatPresetConflictError';
+  }
+}
+
 export const FFRP_V1_PRESET: CustomStatPreset = {
   key: 'ffrp',
   version: 1,
@@ -83,11 +90,36 @@ export async function applyCustomStatPreset(
 
   const game = await gameDAO.findById(gameId);
   if (!game) throw new Error(`Cannot apply a preset to inactive game ${gameId}`);
+  if (game.preset_key && game.preset_key !== preset.key) {
+    throw new CustomStatPresetConflictError(
+      `This game already records the "${game.preset_key}" preset. Remove or explicitly replace that preset before applying "${preset.key}".`,
+    );
+  }
+
+  const preflight = await Promise.all(
+    preset.stats.map(async (stat) => ({
+      stat,
+      current: await statTemplateDAO.findByGameAndKey(gameId, stat.stat_key),
+    })),
+  );
+  const conflicts = preflight.filter(
+    ({ stat, current }) => current && current.field_type !== stat.field_type,
+  );
+  if (conflicts.length) {
+    const details = conflicts
+      .map(
+        ({ stat, current }) =>
+          `\`${stat.stat_key}\` is ${current!.field_type}, but ${preset.label} requires ${stat.field_type}`,
+      )
+      .join('; ');
+    throw new CustomStatPresetConflictError(
+      `Cannot apply ${preset.label} v${preset.version}: ${details}. No preset stats were created or changed.`,
+    );
+  }
 
   const created: CustomStatDefinition[] = [];
   const existing: CustomStatDefinition[] = [];
-  for (const stat of preset.stats) {
-    const current = await statTemplateDAO.findByGameAndKey(gameId, stat.stat_key);
+  for (const { stat, current } of preflight) {
     if (current) {
       existing.push(current);
       continue;
@@ -98,6 +130,11 @@ export async function applyCustomStatPreset(
       if (!isUniqueViolation(error)) throw error;
       const concurrent = await statTemplateDAO.findByGameAndKey(gameId, stat.stat_key);
       if (!concurrent) throw error;
+      if (concurrent.field_type !== stat.field_type) {
+        throw new CustomStatPresetConflictError(
+          `Cannot apply ${preset.label} v${preset.version}: \`${stat.stat_key}\` became ${concurrent.field_type}, but the preset requires ${stat.field_type}.`,
+        );
+      }
       existing.push(concurrent);
     }
   }

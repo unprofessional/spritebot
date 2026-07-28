@@ -3,6 +3,7 @@ import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 import {
   applyCustomStatPreset,
   createCustomStatDefinition,
+  CustomStatPresetConflictError,
 } from '../../../src/services/custom_stat_definition.service';
 
 describe('custom-stat definitions and presets', () => {
@@ -71,6 +72,44 @@ describe('custom-stat definitions and presets', () => {
       'hp',
       'fp',
     ]);
+  });
+
+  test.each([
+    ['hp', 'short'],
+    ['fp', 'number'],
+  ] as const)(
+    'rejects incompatible %s collisions without creating partial preset stats',
+    async (statKey, fieldType) => {
+      const game = await createGame();
+      await createCustomStatDefinition({
+        game_id: game.id,
+        stat_key: statKey,
+        label: statKey.toUpperCase(),
+        field_type: fieldType,
+      });
+
+      await expect(applyCustomStatPreset(game.id, 'ffrp')).rejects.toThrow(
+        CustomStatPresetConflictError,
+      );
+
+      expect((await statTemplateDAO.findByGame(game.id)).map((stat) => stat.stat_key)).toEqual([
+        statKey,
+      ]);
+      expect(await gameDAO.findById(game.id)).toMatchObject({
+        preset_key: null,
+        preset_version: null,
+      });
+    },
+  );
+
+  test('rejects applying a different preset over recorded preset metadata', async () => {
+    const game = await createGame();
+    await gameDAO.setPreset(game.id, 'other_system', 1);
+
+    await expect(applyCustomStatPreset(game.id, 'ffrp')).rejects.toThrow(
+      'already records the "other_system" preset',
+    );
+    await expect(statTemplateDAO.findByGame(game.id)).resolves.toEqual([]);
   });
 
   test('requires valid stable keys for the Prime-owned creation contract', async () => {

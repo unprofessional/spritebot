@@ -89,8 +89,7 @@ BEGIN
 END
 $$;
 
-CREATE UNIQUE INDEX IF NOT EXISTS stat_template_game_stat_key_uidx
-  ON stat_template (game_id, lower(stat_key));
+DROP INDEX IF EXISTS stat_template_game_stat_key_uidx;
 
 CREATE OR REPLACE FUNCTION prevent_stat_template_key_change()
 RETURNS TRIGGER AS $$

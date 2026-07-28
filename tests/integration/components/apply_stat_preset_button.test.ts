@@ -58,4 +58,41 @@ describe('apply custom-stat preset button', () => {
       ephemeral: true,
     });
   });
+
+  test('shows an actionable conflict without partially applying the preset', async () => {
+    const game = await new GameDAO().create({
+      name: 'Collision Game',
+      description: '',
+      created_by: 'gm-1',
+      guild_id: 'guild-1',
+    });
+    const dao = new StatTemplateDAO();
+    await dao.create({
+      game_id: game.id,
+      stat_key: 'hp',
+      label: 'HP Notes',
+      field_type: 'paragraph',
+    });
+    const respond = jest.fn().mockResolvedValue(undefined);
+
+    await handle(
+      {
+        customId: `applyStatPreset:${game.id}:ffrp`,
+        user: { id: 'gm-1' },
+      } as unknown as ButtonInteraction,
+      { respond } as unknown as DiscordInteractionResponder,
+    );
+
+    expect((await dao.findByGame(game.id)).map((stat) => stat.stat_key)).toEqual(['hp']);
+    expect(await new GameDAO().findById(game.id)).toMatchObject({
+      preset_key: null,
+      preset_version: null,
+    });
+    expect(respond).toHaveBeenCalledWith({
+      content: expect.stringContaining(
+        '⚠️ Cannot apply FFRP v1: `hp` is paragraph, but FFRP requires count.',
+      ),
+      ephemeral: true,
+    });
+  });
 });

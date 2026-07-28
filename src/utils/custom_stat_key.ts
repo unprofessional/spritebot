@@ -6,8 +6,6 @@ export function isValidCustomStatKey(value: string): boolean {
 
 export function normalizeCustomStatKey(value: string): string {
   let normalized = value
-    .normalize('NFKD')
-    .replace(/\p{M}/gu, '')
     .toLocaleLowerCase('en-US')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
