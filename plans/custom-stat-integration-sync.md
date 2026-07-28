@@ -8,6 +8,10 @@
 > **Engineering:** Codex
 > **Review:** Moldy
 > **Last updated:** 2026-07-28
+>
+> **Naming note:** "Prime" and "Integrations" are internal shorthands to disambiguate the two
+> repos (`spritebot` and `spritebot-integrations`). These terms must never appear in user-facing
+> copy, Discord UI strings, documentation, or error messages.
 
 ## Purpose
 
@@ -348,23 +352,26 @@ non-deleted game, including stable ID/key, label, field type, defaults/options, 
 order, and presentation metadata. A missing/deleted game returns `target_missing`; it never falls back
 to another game or returns deployment-wide definitions.
 
-`register_custom_stat_definition(...)` accepts only:
+`register_custom_stat_definition(...)` accepts only Prime-domain inputs:
 
 - linked Prime `game_id`
 - explicit immutable `stat_key`
 - display label
 - supported Prime field type and type-compatible defaults/options
-- acting Discord user ID
-- integration campaign/guild context for audit
-- caller-generated idempotency key scoped to the campaign and pending registration flow
+- acting Discord user ID (audit — not authorization; authorization is enforced by the caller)
+- caller-generated opaque idempotency key
 
 Its SQL inputs are `p_game_id uuid`, `p_stat_key text`, `p_label text`, `p_field_type text`,
 `p_default_value text`, `p_is_required boolean`, `p_sort_order integer`, `p_meta jsonb`,
-`p_actor_discord_user_id text`, `p_integration_key text`, `p_campaign_id uuid`, `p_guild_id text`, and
-`p_idempotency_key text`. It returns one of: `created`, `existing_equivalent`, `conflict`,
-`unauthorized`, `invalid`, or `target_missing`, plus the stable Prime definition ID/key when
-successful. Idempotency is scoped by `(integration_key, campaign_id, idempotency_key)`. Do not make
-callers infer an outcome from a generic database error.
+`p_actor_discord_user_id text`, and `p_idempotency_key text`. It returns one of: `created`,
+`existing_equivalent`, `conflict`, `unauthorized`, `invalid`, or `target_missing`, plus the stable
+Prime definition ID/key when successful. Idempotency is scoped by `(game_id, idempotency_key)`. Do
+not make callers infer an outcome from a generic database error.
+
+Integration-domain context (integration key, campaign ID, guild ID) is **not** a Prime function
+parameter. Integrations records its own campaign/integration audit context in
+`stat_template_mapping_audit` when it maps the newly created definition. Prime records only who
+asked, what was created, and whether it was a replay.
 
 **Authorization and sequencing invariants:**
 
@@ -375,8 +382,8 @@ callers infer an outcome from a generic database error.
 - Integrations is the policy-enforcement point for Discord `ManageGuild` and campaign-to-game scope:
   it passes only the active campaign's stored linked game ID. The Prime function validates that the
   game still exists and is not deleted, treats the database caller as the trusted service identity,
-  and records the human actor plus campaign/guild context. Actor metadata is not itself authorization,
-  and no public caller may invoke the function with an arbitrary game ID.
+  and records the human actor. Actor metadata is not itself authorization, and no public caller may
+  invoke the function with an arbitrary game ID.
 - Prime applies the same key, label, type, default, metadata, and uniqueness validation used by its
   native creation path.
 - Definition creation and mapping are two explicit confirmations. The first confirmation shows the
@@ -387,11 +394,23 @@ callers infer an outcome from a generic database error.
 
 **Idempotency and transaction behavior:**
 
-- Replaying the same idempotency key and equivalent payload returns the same definition without a
-  duplicate row or duplicate audit event.
-- Reusing an idempotency key with a different payload fails as `conflict`.
-- A concurrent request for the same `(game_id, stat_key)` may return `existing_equivalent` only when
-  all immutable/type-defining inputs are compatible; otherwise it fails visibly as `conflict`.
+- **Replay** (same idempotency key + equivalent payload): returns the same definition as `created` or
+  `existing_equivalent` without a duplicate row or duplicate audit event. This is the timeout/retry
+  case.
+- **Replayed key, changed payload** (same idempotency key + different inputs): fails as `conflict`.
+  The caller must generate a new idempotency key to submit a genuinely different definition.
+- **Convergent creation** (same `(game_id, stat_key)` from a different idempotency key with
+  compatible immutable/type-defining inputs): returns `existing_equivalent` and the existing
+  definition. This is the "someone else already made it" case. The caller may proceed directly to
+  mapping without re-creating.
+- **Conflicting creation** (same `(game_id, stat_key)` from a different idempotency key with
+  incompatible inputs): fails visibly as `conflict` with the existing key, so the caller can present
+  the collision and let the GM rename or select the existing definition.
+
+Integrations UX must distinguish replay from convergent creation: replay may silently continue the
+pending flow; convergent creation should confirm that the GM wants to map to the pre-existing
+definition rather than assuming their intent.
+
 - Prime definition creation and its registration audit record commit atomically.
 - Mapping creation and its mapping audit record commit atomically in Integrations.
 - Do not pretend the two databases share one transaction. If Prime creation succeeds and mapping
@@ -402,11 +421,14 @@ callers infer an outcome from a generic database error.
 **Prime deliverables (`spritebot`):**
 
 - The Prime-owned list function and registration function with the exact scope and result semantics
-  above. The registration function is the canonical mutation operation for both native and
-  integration-driven creation. Prime UI/service callers may prevalidate for better UX but must use
-  the same function; Integrations must not duplicate label/key/type rules in handwritten SQL.
-- Durable idempotency and registration audit storage with actor, caller/integration context, request
-  fingerprint, outcome, definition ID, and timestamps.
+  above. In this phase the registration function is created for Integrations consumption; Prime's
+  existing native DAO creation path (`StatTemplateDAO.create()`) continues to operate unchanged.
+  Consolidating Prime's native Discord modals to use the same function is desirable for consistency
+  but is **not** a Phase 3 deliverable — it may be done as a follow-up once the function proves
+  stable. Integrations must not duplicate label/key/type rules in handwritten SQL.
+- Durable idempotency and registration audit storage with actor, request fingerprint, outcome,
+  definition ID, and timestamps. This storage is Prime-domain only; integration/campaign context
+  belongs in Integrations' own audit tables.
 - Function-level validation that can create only one definition in the supplied existing game and
   cannot update arbitrary Prime rows. Do not broaden the existing Integrations database role as part
   of this work; document its current privileges as operational debt if function-only grants cannot
@@ -418,6 +440,9 @@ callers infer an outcome from a generic database error.
 
 - List Prime definitions for mapping selection through `list_custom_stat_definitions`, always using
   the active campaign's stored linked game ID. Never query or list cross-game definitions.
+- The existing `listSpritebotStatTemplatesByGame` raw-query DAO continues to serve established code
+  paths (write-through, review, status). New Phase 3 UI flows must use the function. Migrating
+  existing read paths to the function is deferred and not a Phase 3 deliverable.
 - Add `Create custom stat and map` to the existing paginated mapping flow.
 - Collect explicit key, label, field type, defaults/options, authority, and initial enabled/local-only
   choice without deriving key from the observed label.
@@ -602,6 +627,10 @@ only descriptors, compatible shapes, stable grouping, and non-authoritative name
 - Phase 2 already supplies stable descriptors, grouping, mappings, pagination, and basic review.
 - Phase 4 supplies final target compatibility and authority semantics if implemented first; suggestion
   generation must not weaken either contract.
+- Phases 4 and 5 may ship in either order. The write path (Phase 4) and the suggestion path (Phase 5)
+  are logically independent: the write path does not call suggestion helpers, and suggestions do not
+  call write/notification code. Each phase's tests must pass independently of whether the other has
+  shipped.
 
 **Invariants:**
 
@@ -682,8 +711,10 @@ path and explicit GM confirmation boundary.
 - Phase 2 descriptor/mapping status is the minimum dependency.
 - Phase 3 registration and Phase 5 suggestions may be displayed only after their server contracts are
   complete; their mutation rules do not move into the client.
-- Existing authenticated campaign status/roster route patterns and TaleSpire Manifest/API constraints
-  are the starting point, not assumed proof of secure mutation support.
+- The Symbiote already has live authenticated routes for roster sync and campaign status. This phase's
+  feasibility question is specifically about **mapping management** in the Symbiote, not the Symbiote
+  platform itself. Existing routes and their authentication/scoping patterns are the starting point,
+  not assumed proof of secure mutation support.
 
 **Feasibility deliverable (required before UI implementation):**
 
