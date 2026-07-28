@@ -4,11 +4,11 @@ Active and future plans live here. Completed plans are archived in `done/`.
 
 ## Active
 
-| Plan                                                             | Status                                    |
-| ---------------------------------------------------------------- | ----------------------------------------- |
-| [game-field-integration-sync.md](game-field-integration-sync.md) | Proposed — game fields and sync authority |
-| [ux-bdd-stories.md](ux-bdd-stories.md)                           | TODO — UX behavior specs                  |
-| [discord-ui-testing.md](discord-ui-testing.md)                   | TODO — browser-driven UI tests            |
+| Plan                                                               | Status                                     |
+| ------------------------------------------------------------------ | ------------------------------------------ |
+| [custom-stat-integration-sync.md](custom-stat-integration-sync.md) | Proposed — custom stats and sync authority |
+| [ux-bdd-stories.md](ux-bdd-stories.md)                             | TODO — UX behavior specs                   |
+| [discord-ui-testing.md](discord-ui-testing.md)                     | TODO — browser-driven UI tests             |
 
 ## Future
 
