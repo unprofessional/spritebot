@@ -61,13 +61,15 @@ async function handle(
   await responder.respond({
     content: appendNudge(
       [
-        `## Define a new GAME stat field`,
+        `## Define a new custom stat`,
         ``,
         `### Choose the *type* of stat you want to define.`,
         `⚠️ **Once created, the stat type CANNOT be changed.**`,
         `If you make a mistake, you must delete the stat and recreate it with the correct type.`,
         ``,
-        `### Stat Types & Examples:`,
+        `Every named game stat is a custom stat defined by the GM.`,
+        ``,
+        `### Custom Stat Types & Examples:`,
         ``,
         `🔢 **Number** — a single value (no max/current):`,
         `• Level, Gold, XP, Strength, Agility, Reputation, Kills, Karma`,

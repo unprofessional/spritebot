@@ -167,6 +167,16 @@ export async function query<T extends QueryResultRow = QueryResultRow>(
   });
 }
 
+export async function executeSqlScript(text: string): Promise<void> {
+  if (process.env.NODE_ENV !== 'test') {
+    throw new Error('executeSqlScript is test-only');
+  }
+  await initDb();
+  const pgLite = getTestDbState().pgLite;
+  if (!pgLite) throw new Error('Test DB not initialized');
+  await pgLite.exec(text);
+}
+
 export function getPoolStats(): {
   totalCount: number;
   idleCount: number;

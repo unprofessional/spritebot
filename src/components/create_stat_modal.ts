@@ -16,6 +16,7 @@ import type { DiscordInteractionResponder } from '../discord/interaction_respond
 import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { parseCountDefault, withDefaultCurrent } from '../utils/count_stat_defaults';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
+import { isValidCustomStatKey } from '../utils/custom_stat_key';
 
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
@@ -32,6 +33,14 @@ function build(gameId: string, statType: string): ModalBuilder {
   const labelInput = new TextInputBuilder()
     .setCustomId(discordCustomId('label'))
     .setLabel("Field Label: What's it called?")
+    .setStyle(TextInputStyle.Short)
+    .setRequired(true);
+
+  const keyInput = new TextInputBuilder()
+    .setCustomId(discordCustomId('stat_key'))
+    .setLabel('Stable Key (e.g. hp, stress, ammo)')
+    .setPlaceholder('lowercase_letters_numbers_only')
+    .setMaxLength(64)
     .setStyle(TextInputStyle.Short)
     .setRequired(true);
 
@@ -63,6 +72,7 @@ function build(gameId: string, statType: string): ModalBuilder {
     .setTitle(`Add ${statType.replace('-', ' ')} stat`)
     .addComponents(
       new ActionRowBuilder<TextInputBuilder>().addComponents(labelInput),
+      new ActionRowBuilder<TextInputBuilder>().addComponents(keyInput),
       new ActionRowBuilder<TextInputBuilder>().addComponents(defaultInput),
       ...(defaultCurrentInput ? [defaultCurrentInput] : []),
       new ActionRowBuilder<TextInputBuilder>().addComponents(sortInput),
@@ -77,6 +87,7 @@ async function handle(
   const statType = statTypeRaw as 'number' | 'count' | 'short' | 'paragraph';
 
   const label = interaction.fields.getTextInputValue('label')?.trim().toUpperCase();
+  const statKey = interaction.fields.getTextInputValue('stat_key')?.trim();
   let defaultValue = interaction.fields.getTextInputValue('default_value')?.trim() || null;
   const defaultCurrentRaw =
     statType === 'count'
@@ -85,9 +96,24 @@ async function handle(
   const sortIndexRaw = interaction.fields.getTextInputValue('sort_index')?.trim();
   const sort_order = sortIndexRaw ? parseInt(sortIndexRaw, 10) : 0;
 
-  if (!label || !['number', 'count', 'short', 'paragraph'].includes(statType)) {
+  if (
+    !label ||
+    !statKey ||
+    !isValidCustomStatKey(statKey) ||
+    !['number', 'count', 'short', 'paragraph'].includes(statType)
+  ) {
     await responder.respond({
-      content: '⚠️ Invalid input or stat type.',
+      content:
+        '⚠️ Invalid input. The stable key must start with a lowercase letter and use only lowercase letters, numbers, or underscores.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const game = (await getGame({ id: gameId })) as Game | null;
+  if (!game || game.created_by !== interaction.user.id) {
+    await responder.respond({
+      content: '⚠️ Only the GM can create custom-stat definitions for this game.',
       ephemeral: true,
     });
     return;
@@ -116,20 +142,34 @@ async function handle(
     meta = withDefaultCurrent({}, defaultCurrentRaw ? defaultCurrent : null);
   }
 
-  await addStatTemplates(gameId, [
-    {
-      label,
-      field_type: statType,
-      default_value: defaultValue,
-      sort_order,
-      meta,
-    },
-  ]);
+  try {
+    await addStatTemplates(gameId, [
+      {
+        stat_key: statKey,
+        label,
+        field_type: statType,
+        default_value: defaultValue,
+        sort_order,
+        meta,
+      },
+    ]);
+  } catch (error) {
+    if (
+      error &&
+      typeof error === 'object' &&
+      'code' in error &&
+      (error as { code?: unknown }).code === '23505'
+    ) {
+      await responder.respond({
+        content: `⚠️ This game already has a custom stat with the stable key \`${statKey}\`. Choose a different key.`,
+        ephemeral: true,
+      });
+      return;
+    }
+    throw error;
+  }
 
-  const [game, statTemplates] = await Promise.all([
-    getGame({ id: gameId }) as Promise<Game>,
-    getStatTemplates(gameId) as Promise<StatTemplate[]>,
-  ]);
+  const statTemplates = (await getStatTemplates(gameId)) as StatTemplate[];
 
   const response = rebuildCreateGameResponse(game, statTemplates, label);
   const nudge = buildNudge(
