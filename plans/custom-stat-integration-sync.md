@@ -91,7 +91,8 @@ Extend `stat_template` with:
 
 - `stat_key TEXT NOT NULL`
 - format constraint `^[a-z][a-z0-9_]{0,63}$`
-- one case-safe unique index on `(game_id, lower(stat_key))`
+- one per-game unique constraint on `(game_id, stat_key)`; the lowercase format constraint makes
+  this case-safe
 - an immutable-key database trigger
 
 Existing rows receive deterministic collision-safe keys derived from labels in migration 012.
@@ -286,7 +287,8 @@ stat assumptions.
 - Existing mapping rows migrate enabled/source-authoritative only to preserve current behavior,
   then appear for GM review.
 - Existing HP-specific notification configuration migrates only when the target mapping is
-  unambiguous; otherwise retain a compatibility fallback and request explicit selection.
+  unambiguous; otherwise preserve it as unresolved and disabled, surface the required GM action,
+  and do not execute an HP-specific runtime fallback.
 - Never infer a game system or mapping from labels.
 - Preserve freeform custom fields untouched.
 - Roll out additive schemas before dependent application code.
