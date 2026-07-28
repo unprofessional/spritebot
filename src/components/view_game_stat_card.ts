@@ -42,16 +42,19 @@ function buildEmbed(
     const icon = f.field_type === 'paragraph' ? '📝' : '🔹';
     const formattedDefault = formatStatTemplateDefault(f);
     const defaultStr = formattedDefault ? ` _(default: ${formattedDefault})_` : '';
-    const labelWithType = `${f.label} \`${f.field_type}\``;
+    const labelWithType = `${f.label} \`${f.stat_key}\` \`${f.field_type}\``;
 
     return `${icon} ${isNew ? '**🆕 ' : '**'}${labelWithType}**${defaultStr}`;
   });
 
   return new EmbedBuilder()
-    .setTitle('📋 GAME Character Stats')
+    .setTitle('📋 GAME Custom Stats')
     .setDescription(
       [
         fieldLines.length ? fieldLines.join('\n') : '*No stats defined yet.*',
+        game.preset_key
+          ? `\n**Preset:** \`${game.preset_key}\` v${game.preset_version ?? '?'}`
+          : '',
         '',
         '**Game Visibility**',
         game.is_public

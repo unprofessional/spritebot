@@ -61,6 +61,22 @@ export class GameDAO {
     return result.rows[0] || null;
   }
 
+  async setPreset(gameId: string, presetKey: string, presetVersion: number): Promise<Game | null> {
+    const result = await query<Game>(
+      `
+        UPDATE game
+        SET preset_key = $2,
+            preset_version = $3,
+            updated_at = NOW()
+        WHERE id = $1
+          AND deleted_at IS NULL
+        RETURNING *
+      `,
+      [gameId, presetKey, presetVersion],
+    );
+    return result.rows[0] || null;
+  }
+
   async findById(gameId: string): Promise<Game | null> {
     const result = await query<Game>(`SELECT * FROM game WHERE id = $1 AND deleted_at IS NULL`, [
       gameId,

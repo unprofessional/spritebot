@@ -29,6 +29,13 @@ module.exports = {
         .setName('description')
         .setDescription('A short description of the game')
         .setRequired(false),
+    )
+    .addStringOption((option) =>
+      option
+        .setName('preset')
+        .setDescription('Optionally add ordinary custom stats for a game system')
+        .addChoices({ name: 'FFRP (HP and FP)', value: 'ffrp' })
+        .setRequired(false),
     ),
 
   interactionPolicy: {
@@ -42,6 +49,7 @@ module.exports = {
   ) {
     const name = interaction.options.getString('name')?.trim();
     const description = interaction.options.getString('description')?.trim() ?? '';
+    const presetKey = interaction.options.getString('preset');
     const guildId = interaction.guild?.id;
     const userId = interaction.user.id;
 
@@ -59,6 +67,7 @@ module.exports = {
         description,
         createdBy: userId,
         guildId,
+        presetKey,
       });
 
       await getOrCreatePlayer(userId, guildId, 'gm');
@@ -73,18 +82,21 @@ module.exports = {
         `# **${game.name}**`,
         `✅ Created game and set it as your active campaign.`,
         ``,
-        `**Character Stat Fields:**`,
+        `**Custom Stat Definitions:**`,
         ` - 🟦 **System Fields** (always included):`,
         `  - Name`,
         `  - Avatar URL`,
         `  - Bio`,
         ``,
-        ` - 🟨 **Game Fields** (you define these)`,
+        ` - 🟨 **Custom Stats** (you define these)`,
         `  - Ex: HP, Strength, Skills, etc.`,
         ``,
-        `Use the buttons below to define your required game-specific stat fields or to publish the game.`,
+        presetKey ? `✅ Applied the **FFRP** custom-stat preset (HP and FP).` : '',
+        `Use the buttons below to define custom stats or to publish the game.`,
         `_You do **not** need to redefine system fields._`,
-      ].join('\n');
+      ]
+        .filter(Boolean)
+        .join('\n');
       const nudge = buildNudge(
         {
           userId,
@@ -92,7 +104,7 @@ module.exports = {
           gameId: game.id,
           isGM: true,
           gameIsPublished: game.is_public,
-          hasStatTemplates: false,
+          hasStatTemplates: !!presetKey,
         },
         'create-game',
       );

@@ -7,19 +7,11 @@ export interface Game {
   created_by: string;
   guild_id?: string | null;
   is_public: boolean;
+  preset_key?: string | null;
+  preset_version?: number | null;
   deleted_at?: string | null;
   created_at?: string;
   updated_at?: string;
 }
 
-export interface StatTemplate {
-  id: string;
-  game_id: string;
-  label: string;
-  field_type: 'number' | 'text_short' | 'text_paragraph' | 'count';
-  default_value?: string | null;
-  sort_index?: number;
-  is_required?: boolean;
-  created_at?: string;
-  updated_at?: string;
-}
+export type { CustomStatDefinition, CustomStatDefinition as StatTemplate } from './stat_template';

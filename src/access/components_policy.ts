@@ -15,6 +15,7 @@ import type { FeaturePolicy } from './features';
 export const ComponentPolicy: Array<[prefix: string, policy: FeaturePolicy]> = [
   // ===== GAME / STAT TEMPLATE ADMIN (gated) =====
   ['defineStats:', 'rpg:game-admin'],
+  ['applyStatPreset:', 'rpg:game-admin'],
   ['editGameStats:', 'rpg:game-admin'],
   ['deleteStats:', 'rpg:game-admin'],
   ['finishStatSetup:', 'rpg:game-admin'],

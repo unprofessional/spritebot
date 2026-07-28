@@ -3,12 +3,16 @@ const createGameCommand = require('../../../src/commands/create-game') as {
 };
 import { GameDAO } from '../../../src/dao/game.dao';
 import { PlayerDAO } from '../../../src/dao/player.dao';
+import { StatTemplateDAO } from '../../../src/dao/stat_template.dao';
 
-function createInteraction(overrides: { name?: string | null; guildId?: string | null } = {}) {
+function createInteraction(
+  overrides: { name?: string | null; guildId?: string | null; preset?: string | null } = {},
+) {
   const reply = jest.fn().mockResolvedValue(undefined);
   const getString = jest.fn((name: string) => {
     if (name === 'name') return overrides.name ?? 'Lanternfall';
     if (name === 'description') return 'A cozy dungeon crawl';
+    if (name === 'preset') return overrides.preset ?? null;
     return null;
   });
 
@@ -65,5 +69,33 @@ describe('/create-game', () => {
       content: '⚠️ This command must be used within a server and include a name.',
       ephemeral: true,
     });
+  });
+
+  test('optionally applies the FFRP preset as ordinary custom stats', async () => {
+    const { interaction, reply, responderContext } = createInteraction({ preset: 'ffrp' });
+
+    await createGameCommand.execute(interaction, responderContext);
+
+    const game = (await new GameDAO().findByGuild('guild-1'))[0]!;
+    const stats = await new StatTemplateDAO().findByGame(game.id);
+
+    expect(game).toMatchObject({ preset_key: 'ffrp', preset_version: 1 });
+    expect(stats).toEqual([
+      expect.objectContaining({
+        stat_key: 'hp',
+        label: 'HP',
+        field_type: 'count',
+        default_value: '0',
+      }),
+      expect.objectContaining({
+        stat_key: 'fp',
+        label: 'FP',
+        field_type: 'count',
+        default_value: '0',
+      }),
+    ]);
+    expect(reply).toHaveBeenCalledWith(
+      expect.objectContaining({ content: expect.stringContaining('Applied the **FFRP**') }),
+    );
   });
 });
