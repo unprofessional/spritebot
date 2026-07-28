@@ -22,14 +22,33 @@ CREATE TABLE game (
 CREATE TABLE stat_template (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   game_id UUID NOT NULL REFERENCES game(id) ON DELETE CASCADE,
+  stat_key TEXT NOT NULL
+    CONSTRAINT stat_template_stat_key_format_check
+    CHECK (stat_key ~ '^[a-z][a-z0-9_]{0,63}$'),
   label TEXT NOT NULL,
   field_type TEXT NOT NULL DEFAULT 'short'
     CHECK (field_type IN ('short', 'paragraph', 'number', 'count')),
   default_value TEXT,
   is_required BOOLEAN DEFAULT TRUE,
   sort_order INTEGER DEFAULT 0,
-  meta JSONB DEFAULT '{}'
+  meta JSONB DEFAULT '{}',
+  CONSTRAINT stat_template_game_stat_key_unique UNIQUE (game_id, stat_key)
 );
+
+CREATE OR REPLACE FUNCTION prevent_stat_template_key_change()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.stat_key IS DISTINCT FROM OLD.stat_key THEN
+    RAISE EXCEPTION 'stat_template.stat_key is immutable';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER stat_template_key_immutable
+BEFORE UPDATE OF stat_key ON stat_template
+FOR EACH ROW
+EXECUTE FUNCTION prevent_stat_template_key_change();
 
 -- === CHARACTERS ===
 CREATE TABLE character (

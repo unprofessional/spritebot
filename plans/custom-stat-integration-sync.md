@@ -1,6 +1,6 @@
 # Custom Stat Definitions and Integration Sync
 
-> **Status:** Proposed
+> **Status:** Phase 1 implemented and under review; Phase 2 pending
 > **Primary owner:** SPRITEbot-prime
 > **Integration consumer:** SPRITE-Integrations
 > **Initial adapter:** TaleSpire Symbiote
@@ -11,428 +11,336 @@
 
 ## Purpose
 
-Treat every named game stat as a game-defined custom stat and make every custom stat independently configurable for integration sync.
+Treat every named game stat as a game-defined custom stat and make each custom stat
+independently configurable for integration sync.
 
-SPRITE core does not define HP, FP, MP, Stress, Ammo, or any other named stat. Core defines only generic stat machinery: identity, value shape/type, validation, values, and integration-sync contracts. HP and FP are ordinary FFRP custom stats. An optional FFRP preset may create them for convenience, but they receive no special core storage, type, identity, or sync privilege.
+Prime defines generic stat machinery: immutable identity, value shape, validation, values, and
+integration contracts. It must not contain compiled-in knowledge of a game system, named stat
+set, alias set, notification meaning, or setup default. Names such as HP, FP, MP, Stress, and Ammo
+are representative user-defined data only.
 
-This plan owns the custom-stat abstraction in SPRITEbot-prime because Prime owns games, custom-stat definitions, characters, entities, and canonical values. SPRITE-Integrations owns external-stat discovery, opt-in source-to-stat mappings, per-mapping sync configuration, and adapter-specific behavior. The TaleSpire Symbiote is a client of that generic contract. TaleSpire's native HP pair is merely one external source shape that can map to any compatible custom count stat.
+Prime owns games, definitions, characters, entities, and canonical values. Integrations owns
+external-stat discovery, opt-in mappings, authority, and adapter behavior. TaleSpire native HP is
+an external current/max source pair; it has no assumed Prime target.
 
 ## Current State
 
-Prime already has most of the storage primitives:
+Prime already stores game-level definitions in `stat_template`, with canonical values in
+`character_stat_field` and `game_entity_stat_field`. The legacy `character_custom_field` and
+`game_entity_custom_field` tables contain freeform per-record metadata and are not stat
+definitions.
 
-- `stat_template` is the existing game-level custom-stat definition table shared by characters and game entities.
-- `character_stat_field` and `game_entity_stat_field` hold canonical custom-stat values.
-- `character_custom_field` and `game_entity_custom_field` hold freeform per-record metadata; despite their legacy names, they are not game stat definitions.
-- Prime's Discord UI lets a GM create and edit custom stats through stat templates.
-
-Integrations already has most of the TaleSpire bridge:
-
-- The Symbiote reports native HP as `hp_current` and `hp_max` and reports arbitrary TaleSpire stats by name.
-- `stat_template_mapping` maps observed TaleSpire names to Prime `stat_template` rows.
-- Integrations can write mapped values into character and game-entity stat fields.
-- The mapping review UI suggests HP pairs and name/alias matches, including FP aliases.
-
-The missing pieces are stable custom-stat identity, explicit per-integration sync enablement and authority, integration-assisted custom-stat registration, reusable convenience presets, and provenance/conflict rules. Today the system can map TaleSpire stats only after the target Prime custom stat already exists, and HP-specific behavior still leaks into adapter code and notifications.
-
-Known HP-privileged debt in Integrations includes `campaigns.hp_change_threshold`, `collectHpNotificationEvents`, the `character_down` event, `suggestHpMapping`, `isHpCurrent`/`isHpMax`/`isHpTemplate`, and HP/FP entries in `statAliases`. Implementation must convert these from stat-name-specific control flow into generic mapping, suggestion-profile, and notification-rule data.
+Integrations already observes TaleSpire native and arbitrary stats, maps them through
+`stat_template_mapping`, and writes mapped character/entity values. Its current implementation
+still contains HP-specific discovery, alias, notification, and event behavior. This plan replaces
+that behavior with generic source descriptors, mappings, rules, and explicit GM choices.
 
 ## Terminology
 
 ### Custom stat definition
 
-Every named stat used by a game is a custom stat. Examples include FFRP `hp` and `fp`, another game's `stress`, or a GM-created `meat_integrity`. This is the conceptual role already served by `stat_template`; no named stat exists above or outside this model.
-
-A definition has:
-
-- stable machine key
-- display label
-- value shape/type
-- default value
-- required/optional state
-- sort order
-- validation and presentation metadata
+The game-level schema for a named stat: immutable stable key, editable display label, value type,
+defaults, required state, sort order, validation, and presentation metadata. This is the
+application role of `stat_template`.
 
 ### Custom stat value
 
-The canonical value of one custom stat on one character or game entity. Existing `character_stat_field` and `game_entity_stat_field` remain the storage model.
+The canonical value of one definition on a character or game entity.
 
 ### Freeform custom field
 
-Per-record metadata stored in the legacy `character_custom_field` and `game_entity_custom_field` tables. These may contain notes or one-off attributes, but they are not stats. A value intended to participate in stat display, validation, defaults, or sync must use a game-level custom-stat definition.
+Legacy per-record metadata that does not participate in game-level stat validation, defaults, or
+integration mapping.
 
-### External source stat
+### External source descriptor
 
-A stat exposed by an integration, identified by adapter and stable external key. Examples include TaleSpire `hp_current`, `hp_max`, `FP`, and `FP Max`. Native and user-created source stats have equal standing as mapping inputs.
+An integration-observed value identified by adapter and stable external key, with a display name,
+shape/type, and optional grouping such as current/max pair membership. Native and user-created
+sources have equal standing.
 
 ### Sync mapping
 
-A campaign- and integration-scoped rule connecting one or more external source stats to one Prime custom stat definition. The mapping is the opt-in sync configuration: if no enabled mapping exists for an integration, that custom stat is local-only for that integration.
+A campaign- and integration-scoped opt-in rule connecting one or more source descriptors to one
+Prime custom stat definition. No enabled mapping means local-only for that integration.
 
 ### Authority policy
 
-The per-mapping rule deciding which side may overwrite a canonical value. Authority is never an intrinsic property of HP, FP, or any other custom stat.
+The mapping-owned rule that decides which side may overwrite the canonical value. Authority is
+never inferred from a stat name or game system.
 
 ## Core Decisions
 
-1. **SPRITE has no named core stats.** HP, FP, MP, Stress, Ammo, and every other named stat are game-defined custom stats.
-2. **Prime remains canonical.** Custom-stat definitions and canonical values live in SPRITEbot-prime.
-3. **`stat_template` is the custom-stat definition model.** Evolve it rather than creating a parallel custom-stat-definition system or an HP/FP-specific model.
-4. **Every custom stat is independently sync-configurable per integration.** An enabled mapping opts that stat into sync for that integration; no mapping or a disabled mapping means local-only.
-5. **Freeform per-record fields are not stats.** The legacy custom-field tables remain separate metadata storage and are not automatic sync targets.
-6. **Stable keys replace label identity.** Integrations map to immutable custom-stat keys/IDs, never mutable display labels.
-7. **Presets are convenience only.** FFRP may seed ordinary HP and FP custom stats. They remain editable and removable under the same rules as every other custom stat, and games without that preset receive no HP/FP assumptions.
-8. **Authority is explicit per mapping.** It is not a property or privilege of a particular stat name. Initial FFRP TaleSpire mapping suggestions may default HP and FP to source-authoritative, subject to GM confirmation.
-9. **Discovery is not registration or sync consent.** Observing a TaleSpire stat may suggest a custom stat and mapping, but it must not silently mutate Prime or enable sync.
-10. **The first release remains inbound-only.** Do not claim bidirectional sync until a real Prime-to-adapter delivery path, loop prevention, and conflict tests exist.
+1. **Prime has no named core stats or game-system branches.**
+2. **Prime remains canonical** for definitions and canonical values.
+3. **`stat_template` is the definition model;** no parallel HP or integration-only stat model.
+4. **Stable identity is explicit.** New definitions require an immutable `stat_key`; labels are
+   editable and never serve as integration identity.
+5. **Legacy label normalization is migration-only.** Runtime creation never derives a key.
+6. **Sync is independently opt-in per mapping.** Discovery never creates, maps, or enables.
+7. **Authority belongs to the mapping,** not to a source name, target name, or adapter.
+8. **Initial sync remains inbound-only.** Outbound behavior requires a separately approved,
+   loop-safe delivery contract.
+9. **Reusable templates are deferred.** A future template feature must be a generic,
+   data-driven/user-defined catalog without compiled-in game branches.
 
-## Proposed Data Model
+## Data Model
 
-### Prime: stable custom-stat identity
+### Prime custom-stat identity
 
 Extend `stat_template` with:
 
-- `stat_key TEXT`
-- a case-insensitive uniqueness constraint per active game, for example `UNIQUE (game_id, lower(stat_key))`
-- optional structured validation/presentation data in the existing `meta` JSONB initially
+- `stat_key TEXT NOT NULL`
+- format constraint `^[a-z][a-z0-9_]{0,63}$`
+- one per-game unique constraint on `(game_id, stat_key)`; the lowercase format constraint makes
+  this case-safe
+- an immutable-key database trigger
 
-Rules:
+Existing rows receive deterministic collision-safe keys derived from labels in migration 012.
+The migration preserves template IDs, labels, character values, entity values, and metadata.
+Empty or punctuation-only labels fall back to `stat`; leading digits gain `stat_`; long keys are
+truncated; collisions gain numeric suffixes. New definitions must supply their key explicitly.
 
-- `stat_key` is immutable after creation.
-- Keys use a conservative normalized format such as `^[a-z][a-z0-9_]{0,63}$`.
-- Labels remain editable and user-facing.
-- New custom stats require a key; existing rows are backfilled deterministically from their labels with collision suffixes.
-- API and integration contracts expose both the immutable stat ID and stat key.
+Application types use `CustomStatDefinition` while preserving `StatTemplate` as a compatibility
+alias and retaining existing table names.
 
-Do not rename the table in the first implementation. A table rename adds migration risk without changing the product model. Application types and docs should use `CustomStatDefinition` while maintaining compatibility with `stat_template` storage.
+### Integrations source registry
 
-The legacy `character_custom_field` and `game_entity_custom_field` tables are unrelated to this model. Do not add sync mappings, authority, or stat-definition behavior to them. They remain freeform per-record metadata; `stat_template` and its value tables are the custom-stat system.
-
-### Prime: presets
-
-Define versioned game-system presets in application code first, not as mutable global database rows.
-
-Example FFRP preset:
-
-```ts
-{
-  key: 'ffrp',
-  version: 1,
-  stats: [
-    {
-      statKey: 'hp',
-      label: 'HP',
-      fieldType: 'count',
-      required: true,
-      defaultValue: '0/0'
-    },
-    {
-      statKey: 'fp',
-      label: 'FP',
-      fieldType: 'count',
-      required: true,
-      defaultValue: '0/0'
-    }
-  ]
-}
-```
-
-Persist the selected preset key/version on `game` so setup is reproducible and future migrations can distinguish seeded custom stats from hand-created custom stats. Applying a preset is additive and idempotent by `stat_key`; it never deletes or overwrites a GM-customized stat without confirmation. After creation, preset-seeded and hand-created stats use the same model and capabilities.
-
-### Integrations: external source-stat registry
-
-Add a campaign-scoped registry of observed external source stats. A source descriptor should include:
-
-- integration key, initially `talespire`
-- stable source key
-- display label
-- observed value shape/type
-- optional grouping metadata such as current/max pair membership
-- first/last observed timestamps
-- adapter metadata
-
-For TaleSpire, use stable normalized source keys while retaining the raw display name. TaleSpire's native HP source should remain an explicit count pair (`hp_current`, `hp_max`), described through the same source-shape metadata used for any other current/max pair. User-created TaleSpire stats should receive deterministic normalized keys and retain their original names for display and troubleshooting.
-
-### Integrations: generalized mapping
-
-Evolve `stat_template_mapping` rather than creating a second TaleSpire-only mapping system. Add or clarify:
-
-- `integration_key`
-- target Prime custom-stat key/ID
-- external source-stat key(s)
-- transformation type and options
-- authority policy
-- enabled/disabled state
-- optional generic notification rules, such as change threshold or minimum-value event
-- creation/update actor and timestamps
-
-Initial authority policies:
-
-- `source_authoritative`: accepted external updates overwrite the canonical Prime value.
-- `prime_authoritative`: inbound updates are observed but do not overwrite Prime.
-- `manual`: no automatic write until the mapping is reviewed/enabled.
-
-Do not add a global `syncable` flag to `stat_template`: sync configuration is per custom stat, campaign, and integration. One custom stat may be local-only for TaleSpire while mapped to another future integration. An enabled mapping is the opt-in; disabling or deleting that mapping returns the stat to local-only for that integration.
-
-Reserve bidirectional behavior for a later phase. Do not add a nominal `bidirectional` option that cannot actually deliver outbound changes.
-
-### Prime values: provenance
-
-Record enough provenance on successful integration writes to explain the current value and reject stale updates:
+Persist campaign-scoped descriptors containing:
 
 - integration key
-- source campaign and external stat key
-- source observation timestamp or monotonic revision when available
-- mapping ID/version
-- last writer
+- stable source key and display label
+- observed value shape/type
+- optional current/max grouping metadata
+- first/last observation timestamps
+- adapter metadata
 
-The existing value-row `meta` JSONB can hold provenance initially. Add a real `updated_at` column to both canonical value tables if needed for deterministic ordering and diagnostics.
+TaleSpire native HP is described as a current/max pair through the same descriptor shape available
+to other paired sources. Arbitrary source stats retain their original display names.
 
-The write contract must reject or no-op:
+### Integrations mapping
 
-- a source write against a Prime-authoritative/manual mapping
-- a stale observation older than the accepted source revision/timestamp
-- a mapping whose target custom stat no longer belongs to the linked game
-- a value that fails the target custom stat's validation
+Evolve `stat_template_mapping` with:
+
+- integration key
+- stable source descriptor key(s)
+- target Prime definition ID/key
+- transformation and options
+- authority policy
+- enabled state
+- optional generic notification rules
+- audit actor and timestamps
+
+Initial authority policies are `source_authoritative`, `prime_authoritative`, and `manual`.
+Do not add a global `syncable` flag or an unimplemented `bidirectional` option.
+
+### Provenance
+
+Successful integration writes record integration, source campaign/key, source timestamp or
+revision, mapping ID/version, and last writer. The write path rejects unauthorized authority,
+stale observations, foreign/deleted targets, and values incompatible with the target definition.
 
 ## Registration and Mapping UX
 
 ### Prime Discord UI
 
-Extend the existing stat-template UI and present it consistently as custom-stat setup.
+- Create a definition with explicit stable key, label, type, and defaults.
+- Show the immutable key as read-only context during later editing.
+- Preserve edit/delete parity for every definition.
+- Eventually show mapping state and authority per integration.
+- Prevent deletion while active mappings exist, or require mapping removal first.
 
-Required flows:
-
-- create any custom stat manually with stable key, label, type, and defaults
-- optionally select and preview a game-system preset when creating or editing a game
-- show per integration whether each custom stat is local-only, mapped/enabled, or mapped/disabled
-- show the source mapping and authority for every synced custom stat
-- enable, disable, remap, or remove sync independently for each custom stat
-- prevent destructive stat deletion while active mappings exist, or require mappings to be removed first
-- optionally convert a legacy freeform field into a custom stat, with explicit value migration choices
+Prime exposes no game-system selector or built-in stat bundle.
 
 ### Integrations Discord UI
 
-Extend the existing mapping review UI:
+- Show all accessible Prime definitions and observed source descriptors.
+- Map compatible source descriptors to an existing definition.
+- Offer `Create custom stat and map` with explicit GM confirmation.
+- Choose enabled state and authority independently.
+- Show local-only, disabled, stale, invalid, and target-missing states.
 
-- show every Prime custom stat and whether it is sync-enabled for TaleSpire
-- show observed native and user-created TaleSpire source stats without treating native HP as canonical
-- map one or more compatible source stats to an existing custom stat
-- offer `Create custom stat and map` when no target exists
-- require explicit confirmation before creating the Prime custom stat or enabling sync
-- enable/disable sync and choose authority independently per mapping
-- default newly accepted mappings to `source_authoritative`, while making the choice visible
-- show local-only, stale, invalid, disabled, or target-missing mappings
+Creation initiated by Integrations must use Prime-owned validation and idempotency rules. A
+service API is preferred long-term; any interim direct database contract must remain narrowly
+scoped and tested against Prime schema.
 
-Custom-stat creation initiated from Integrations must use the same Prime-owned validation and idempotency rules as Prime UI. While the direct database bridge remains, implement one narrowly scoped Prime custom-stat registration DAO/service contract and test it against Prime schema. Longer term, route this through a service API rather than unrestricted cross-database writes.
+### Generic mapping assistance
+
+Suggestions may use only:
+
+- generic source descriptors and grouping metadata
+- compatible target value shapes
+- lightweight name similarity as a non-authoritative hint
+- explicit GM selection and confirmation
+
+A TaleSpire current/max source pair may be suggested for any compatible Prime count definition.
+No particular target key, label, alias, game identity, notification meaning, or authority default
+may be assumed. Ambiguous candidates require GM choice. Suggestions never create or enable.
 
 ### Symbiote UI
 
-Treat Symbiote-side registration as a later convenience layer, not a prerequisite for the model.
-
-Feasibility/design phase:
-
-- expose observed TaleSpire source descriptors in the Symbiote
-- fetch the campaign's Prime custom-stat definitions and current mappings through the scoped campaign API
-- let a GM propose or select mappings
-- send mapping requests to Integrations for validation and persistence
-- never expose direct Prime database access or service-wide credentials
-
-If the Symbiote API/UI constraints make safe schema editing awkward, keep schema creation in Discord and use the Symbiote for discovery/status only. The core contract must not depend on Symbiote UI support.
-
-## FFRP and TaleSpire Defaults
-
-When an Integrations campaign links to a Prime game using the optional FFRP preset:
-
-1. The preset creates ordinary `hp` and `fp` custom-stat definitions using the same storage and rules as GM-created stats.
-2. If TaleSpire native HP stats are observed and no conflicting mapping exists, suggest:
-   - `hp_current` + `hp_max` -> FFRP's `hp` custom stat
-   - transformation: `count_pair`
-   - authority: `source_authoritative`
-3. If TaleSpire `FP` and `FP Max` (or an unambiguous equivalent pair) are observed, suggest:
-   - current + max source pair -> FFRP's `fp` custom stat
-   - transformation: `count_pair`
-   - authority: `source_authoritative`
-4. Require GM confirmation before enabling either mapping. The preset may supply suggestions and defaults, not silent sync consent.
-5. Do not guess ambiguous FP aliases such as `focus` versus `fatigue` without confirmation unless the selected preset explicitly defines the alias.
-6. Never create or map HP/FP for non-FFRP games merely because similarly named TaleSpire stats exist. Offer them through the same generic discovery/mapping UI as every other source stat.
-
-HP and FP receive no special runtime treatment after setup. They are ordinary custom count stats with ordinary mappings. TaleSpire's native HP shape may improve the mapping suggestion, but it does not make `hp` a Prime core stat or grant it unique sync behavior.
+The Symbiote may later display discovery and mapping status or submit mapping proposals through
+campaign-scoped endpoints. Discord remains the complete fallback. The Symbiote never receives
+direct Prime database access or deployment-wide credentials.
 
 ## Write Path and Enforcement
 
-Centralize mapped writes through one integration-write service in SPRITE-Integrations. Both player characters and game entities must use the same resolution, transformation, validation, authority, provenance, and stale-update logic.
+One Integrations service handles character and entity writes:
 
-The service flow:
+1. Resolve campaign, linked Prime game, and target record.
+2. Load enabled mappings.
+3. Resolve the target definition by immutable identity and revalidate game ownership.
+4. Transform source values into the target shape.
+5. Enforce authority and stale-update rules.
+6. Validate and atomically upsert value plus provenance.
+7. Return per-stat written/skipped/error diagnostics.
 
-1. Resolve campaign, linked Prime game, and target character/entity.
-2. Load enabled mappings for the integration campaign.
-3. Resolve the target custom stat by immutable ID/key and verify game ownership.
-4. Confirm that this exact mapping is enabled; otherwise leave the stat local-only.
-5. Transform source values into the target shape.
-6. Enforce authority and stale-update policy.
-7. Validate the result against the Prime custom-stat definition.
-8. Upsert the canonical value and provenance atomically.
-9. Return per-stat written/skipped/error diagnostics.
-
-Any notification feature must resolve its configured custom stat through the generic mapping contract rather than assuming a Prime `hp` stat exists. An FFRP HP-change notification can default to the preset's `hp` key, but the notification engine must accept any compatible custom stat and remain disabled when none is configured.
+Notifications are optional generic mapping rules such as change threshold or minimum-value event.
+They may target any compatible mapped definition and remain disabled until explicitly configured.
 
 ## Delivery Phases
 
-### Phase 1: Prime custom-stat identity and optional presets
+### Phase 1: Prime custom-stat identity
 
 **Repo:** `spritebot`
 
-- Establish in code and UI that `stat_template` is the custom-stat definition model and that Prime has no named core stats.
-- Add/backfill immutable `stat_key` on `stat_template`.
-- Add uniqueness and validation constraints.
-- Introduce application-level `CustomStatDefinition` terminology/types without a risky table rename.
-- Add selected preset key/version to games.
-- Implement an idempotent convenience-preset service and FFRP v1 with ordinary HP/FP count stats.
-- Add Prime UI for stable-key manual stat creation and optional preset application.
-- Keep seeded stats editable/removable under the same rules as manually created custom stats.
-- Add migration, DAO/service, UI, and regression tests.
+- Add and backfill immutable `stat_key`.
+- Add format validation and one case-safe per-game uniqueness mechanism.
+- Introduce `CustomStatDefinition` application terminology.
+- Require explicit keys for all runtime creation paths.
+- Revalidate owner access during manual creation.
+- Show immutable keys as read-only edit/card context.
+- Preserve generic edit/delete behavior.
+- Add migration, DAO, UI, and regression tests.
 
-**Gate:** Existing games and templates retain all values; every named stat uses the same custom-stat model; an FFRP preset can add HP/FP once without making either a core or privileged stat.
+**Gate:** Existing IDs and values survive; all new definitions require valid explicit keys; no
+production branch contains a built-in game system, stat set, or alias.
 
-### Phase 2: External-stat registry and opt-in mapping contract
+### Phase 2: External registry and opt-in mapping
 
 **Repo:** `spritebot-integrations`
 
-- Persist normalized descriptors for both native and user-created TaleSpire source stats.
-- Generalize mappings with integration key, stable source keys, target custom-stat identity, transformation, authority, enabled state, and audit metadata.
-- Make mapping presence plus enabled state the only way a custom stat becomes syncable for an integration.
-- Migrate existing mapping rows without changing current write behavior.
-- Update mapping review/status output to show local-only, mapped/enabled, and mapped/disabled states.
-- Add tests proving arbitrary custom stats receive the same sync options as HP/FP.
+- Before other work, update Integrations test schema, types, and queries for Prime `stat_key`.
+- Persist normalized native and user-created source descriptors.
+- Generalize mappings with integration, sources, target identity, transformation, authority,
+  enabled state, and audit metadata.
+- Make enabled mappings the only sync opt-in.
+- Migrate current mappings without changing write behavior.
+- Show local-only, enabled, and disabled states.
 
-**Gate:** Existing TaleSpire campaigns continue syncing; every observed source stat has stable identity; every Prime custom stat can independently opt into or out of TaleSpire sync.
+**Gate:** Existing campaigns continue syncing and arbitrary definitions have equal mapping options.
 
 ### Phase 3: Integration-assisted registration
 
-**Repos:** `spritebot` contract first, then `spritebot-integrations` consumer
+**Repos:** Prime contract, then Integrations consumer
 
-- Define Prime-owned create/list custom-stat operations and validation rules.
-- Add `Create custom stat and map` to Integrations mapping review.
-- Require explicit confirmation for both custom-stat creation and sync enablement.
-- Make creation plus mapping idempotent and transactional where possible.
-- Prevent cross-game targets and unauthorized schema changes.
-- Add contract tests in both repos.
+- Define Prime-owned list/create operations.
+- Add `Create custom stat and map`.
+- Confirm creation and mapping separately.
+- Make retries idempotent and transactions atomic where possible.
+- Reject unauthorized or cross-game schema changes.
 
-**Gate:** A GM can map any compatible TaleSpire source stat even when no Prime custom stat exists, without leaving setup, and can leave any Prime custom stat local-only.
-
-### Phase 4: Authority and provenance enforcement
+### Phase 4: Authority, provenance, and generic notifications
 
 **Repo:** `spritebot-integrations`, with Prime schema support
 
 - Centralize character/entity write-through.
-- Enforce source-authoritative, Prime-authoritative, and manual policies.
-- Persist provenance and reject stale source observations.
-- Replace `collectHpNotificationEvents` with a generic mapped-stat notification evaluator.
-- Move `campaigns.hp_change_threshold` behavior into optional per-mapping notification rules so any compatible custom stat can drive change/minimum alerts.
-- Replace the internal HP-only `character_down` assumption with a generic minimum-value event; FFRP presentation may still render that configured event as “character down.”
-- Add parity tests across HP, FP, renamed stats, and arbitrary custom stat names.
-- Add replay, out-of-order, disabled mapping, deleted target, validation, and conflict tests.
+- Enforce authority and stale-observation rules.
+- Persist provenance.
+- Replace HP-specific notification/event code with generic per-mapping rules.
+- Prove identical behavior for renamed and unrelated compatible stats.
 
-**Gate:** Source-authoritative custom stats update deterministically; Prime/manual/local-only stats cannot be overwritten by inbound sync; diagnostics explain every skipped write without stat-name-specific logic.
-
-### Phase 5: FFRP TaleSpire defaults
+### Phase 5: Generic mapping assistance
 
 **Repo:** `spritebot-integrations`
 
-- Detect the linked Prime game's optional FFRP preset/version.
-- Replace `suggestHpMapping`, `isHpCurrent`/`isHpMax`/`isHpTemplate`, and hard-coded `statAliases` branching with generic source-shape matching plus data-driven preset/adapter suggestion profiles.
-- Represent HP and FP aliases as suggestion data, not runtime control flow.
-- Suggest HP and FP count-pair mappings through the same generic mapper used by every custom stat.
-- Present TaleSpire/source authority as the visible default for those suggestions.
-- Require GM confirmation before enabling sync.
-- Preserve explicit GM mappings and never overwrite them during reseeding.
-- Add FFRP, non-FFRP, renamed-stat, deleted-stat, and arbitrary-stat acceptance tests.
+- Replace source-name-specific suggestion helpers and alias branches.
+- Rank suggestions from descriptor shape, compatible targets, and name similarity.
+- Treat TaleSpire native current/max data as one ordinary paired source.
+- Require explicit GM target and authority selection.
+- Preserve existing mappings during reseeding.
 
-**Gate:** A fresh FFRP setup can confirm intended HP/FP mappings quickly, while HP/FP remain ordinary custom stats and non-FFRP games receive no hidden schema, mappings, or authority decisions.
+**Gate:** Useful suggestions work for arbitrary and renamed stats without game identity or named
+stat assumptions.
 
-### Phase 6: Symbiote mapping UI feasibility and optional implementation
+### Phase 6: Symbiote feasibility and optional UI
 
 **Repo:** `spritebot-integrations/symbiote`
 
-- Verify TaleSpire Symbiote API/UI constraints.
-- Add source discovery and mapping status.
-- If safe and usable, add mapping proposal/registration through scoped Integrations endpoints.
-- Keep Discord as the complete fallback path.
-
-**Gate:** Symbiote UI can improve setup but is not required to define stats, recover mappings, or administer authority.
+- Verify API/UI constraints.
+- Add discovery and mapping status.
+- Optionally add scoped mapping proposals.
+- Keep Discord complete.
 
 ### Phase 7: Outbound/bidirectional research
 
-**Repos:** cross-repo design only until approved
+**Repos:** cross-repo design only
 
-- Inventory TaleSpire APIs/events that can accept writes.
-- Specify revisions, loop prevention, retries, and conflict resolution.
-- Decide whether any stat truly needs bidirectional behavior.
-- Do not implement or expose bidirectional authority until the design is proven.
+- Inventory writable adapter APIs/events.
+- Specify revisions, retries, loop prevention, and conflict resolution.
+- Do not expose bidirectional authority before the design is proven.
 
 ## Migration and Compatibility
 
-- Backfill stable keys without changing template IDs, labels, or stat values.
-- Migrate all existing Integrations mapping rows with `enabled = true` and `authority = 'source_authoritative'`, exactly matching today's write-through behavior, then flag them for authority review in setup status.
-- Treat existing unmapped custom stats as local-only; do not auto-enable sync based on their names.
-- Migrate each existing `hp_change_threshold` to a generic notification rule only when its target mapping is unambiguous; otherwise retain a compatibility fallback and prompt the GM to choose a custom stat rather than guessing.
-- Do not automatically classify existing games as FFRP based only on HP/FP labels.
-- Offer an explicit `Apply FFRP preset` action that reuses matching unambiguous custom stats or asks before collisions.
-- Preserve existing freeform custom fields untouched and continue treating them as non-stat metadata.
-- Keep current TaleSpire raw-stat caches for diagnostics and replay while canonical writes move to the generalized contract.
-- Roll out schema changes additively before application code depends on them.
+- Migration 012 is `012_custom_stat_identity.sql`; it has not been applied remotely.
+- Backfill keys without changing template IDs, labels, values, or metadata.
+- Existing unmapped definitions remain local-only.
+- Existing mapping rows migrate enabled/source-authoritative only to preserve current behavior,
+  then appear for GM review.
+- Existing HP-specific notification configuration migrates only when the target mapping is
+  unambiguous; otherwise preserve it as unresolved and disabled, surface the required GM action,
+  and do not execute an HP-specific runtime fallback.
+- Never infer a game system or mapping from labels.
+- Preserve freeform custom fields untouched.
+- Roll out additive schemas before dependent application code.
 
 ## Security and Permissions
 
-- Only the Prime game owner or an explicitly authorized GM/admin may create definitions or change authority.
-- Symbiote requests use campaign-scoped credentials, not the deployment-wide webhook secret targeted for replacement in the TaleSpire launch plan.
-- All registration and authority changes record actor, timestamp, and old/new state.
-- Integration source metadata is untrusted input: normalize keys, cap lengths, validate types, and never use source labels as SQL identifiers.
-- A campaign cannot map to a custom stat outside its linked Prime game.
+- Only the Prime owner or explicitly authorized GM/admin may create definitions or change mapping
+  authority.
+- Registration and authority changes record actor, timestamp, and old/new state.
+- External metadata is untrusted: normalize keys, cap lengths, validate types, and never use labels
+  as SQL identifiers.
+- A campaign cannot map outside its linked Prime game.
+- Autocomplete/discovery is not authorization; execution revalidates current ownership and scope.
 
 ## Test Matrix
 
-At minimum, cover:
+At minimum:
 
-- stable-key backfill with duplicate/case-colliding labels
-- preset application, reapplication, versioning, and partial pre-existing stats
-- seeded versus manually created stat parity
-- FFRP versus non-FFRP default behavior
-- arbitrary native and user-created TaleSpire source-stat discovery
-- arbitrary Prime custom-stat registration and mapping
-- independent enable/disable and authority settings for every custom stat
-- local-only custom stats remaining untouched by sync
-- generic notification rules on HP, renamed HP, FP, and unrelated count stats
-- migration of `hp_change_threshold` and `character_down` behavior without retaining HP-only control flow
-- HP and FP current/max pair transformation with no privileged runtime path
-- renamed HP/FP and unrelated count stats behaving identically
-- ambiguous aliases requiring confirmation
-- character and game-entity parity
-- source-authoritative, Prime-authoritative, and manual writes
-- stale/replayed/out-of-order updates
-- custom-stat deletion/rename after mapping
-- linked game changes and cross-game mapping rejection
-- migration of existing campaigns and mappings
-- complete Discord-only setup without Symbiote schema editing
+- legacy backfill for empty, punctuation-only, leading-digit, duplicate/case-colliding, truncated,
+  and non-ASCII labels
+- preservation of template IDs and character/entity values
+- explicit-key validation and immutable updates
+- case-safe per-game uniqueness
+- runtime DAO update allowlist rejecting identity and unknown columns
+- arbitrary/renamed definition parity using representative HP, FP, MP, Stress, and Ammo fixtures
+- native and user-created source discovery
+- independent mapping enablement and authority
+- local-only values untouched
+- generic current/max transformations and notifications on unrelated count stats
+- character/entity parity
+- stale, replayed, disabled, deleted-target, validation, and cross-game failures
+- complete Discord-only setup
 
 ## Out of Scope
 
-- Defining any named stat, including HP or FP, in SPRITE core
-- Treating legacy freeform custom fields as game stats or automatic sync targets
-- Replacing all existing table names in the first pass
-- Automatic schema mutation or sync enablement merely because a source stat was observed
-- Bidirectional sync before an outbound adapter contract exists
-- A universal public marketplace for game-system presets
+- Any named stat or game-system behavior in Prime core
+- Built-in presets, selected-preset persistence, or compiled alias catalogs
+- A template marketplace in this implementation
+- Treating freeform custom fields as stat definitions
+- Automatic creation or sync enablement from discovery
+- Bidirectional sync before an outbound contract exists
+
+A future reusable-template feature must be a separate generic, data-driven/user-defined catalog.
 
 ## Definition of Done
 
-- Prime has one stable game-defined custom-stat model and no named core stats.
-- Every custom stat can independently be local-only or mapped per integration, with explicit enabled state and authority.
-- FFRP HP/FP are ordinary optional preset-created custom stats, not core assumptions or privileged sync cases.
-- Integrations can discover arbitrary source stats and map them to any compatible existing or newly registered Prime custom stat.
-- Native TaleSpire HP uses the same mapping, transformation, authority, provenance, and write path as every other source stat.
-- Authority and provenance are explicit and enforced for character and game-entity writes.
-- Fresh FFRP TaleSpire campaigns can confirm convenient HP/FP suggestions without affecting other game systems.
-- Discord provides a complete management path; Symbiote UI support is optional convenience.
-- Existing games, custom stats, mappings, and synced values migrate without silent loss or behavior changes.
+- Prime has one stable game-defined custom-stat model and no named/game-specific production logic.
+- Runtime creation requires explicit immutable keys.
+- Every definition can independently remain local-only or be mapped with explicit authority.
+- Integrations discovers arbitrary sources and maps them to compatible existing or newly confirmed
+  definitions.
+- Current/max sources use the same transformation and write path regardless of names.
+- Discovery and suggestions never create or enable.
+- Character/entity writes enforce authority, provenance, validation, and staleness identically.
+- Existing definitions, mappings, and values migrate without silent loss.
