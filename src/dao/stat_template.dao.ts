@@ -2,7 +2,7 @@
 
 import { query } from '../db/client';
 import type { CreateStatTemplateParams, StatTemplate } from '../types/stat_template';
-import { isValidCustomStatKey, normalizeCustomStatKey } from '../utils/custom_stat_key';
+import { isValidCustomStatKey } from '../utils/custom_stat_key';
 
 type StatTemplateUpdate = Partial<
   Pick<CreateStatTemplateParams, 'label' | 'default_value' | 'is_required' | 'sort_order' | 'meta'>
@@ -21,8 +21,7 @@ export class StatTemplateDAO {
     sort_order = 0,
     meta = {},
   }: CreateStatTemplateParams): Promise<StatTemplate> {
-    const resolvedStatKey = stat_key?.trim() || normalizeCustomStatKey(label);
-    if (!isValidCustomStatKey(resolvedStatKey)) {
+    if (!isValidCustomStatKey(stat_key)) {
       throw new Error(
         'Stat key must start with a lowercase letter and contain only lowercase letters, numbers, or underscores (64 characters maximum).',
       );
@@ -39,7 +38,7 @@ export class StatTemplateDAO {
   `;
     const result = await query<StatTemplate>(sql, [
       game_id,
-      resolvedStatKey,
+      stat_key,
       label,
       field_type,
       default_value,

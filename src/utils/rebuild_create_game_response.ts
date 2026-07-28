@@ -42,9 +42,7 @@ function buildGameSetupMessage(
 
   lines.push('');
   if (context === 'create') {
-    lines.push(
-      `Use the buttons below to define custom stats, optionally apply a preset, or publish the game.`,
-    );
+    lines.push(`Use the buttons below to define custom stats or publish the game.`);
     lines.push(`_You do **not** need to redefine system fields._`);
   } else {
     lines.push(`Use the buttons below to manage custom stats or update game info.`);

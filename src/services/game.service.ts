@@ -1,7 +1,6 @@
 import type { Game } from 'types/game';
 import { GameDAO } from '../dao/game.dao';
 import { StatTemplateDAO } from '../dao/stat_template.dao';
-import { applyCustomStatPreset } from './custom_stat_definition.service';
 
 const gameDAO = new GameDAO();
 const statTemplateDAO = new StatTemplateDAO();
@@ -30,7 +29,7 @@ interface StatTemplateUpdateInput {
 }
 
 interface StatTemplateCreateInput extends StatTemplateUpdateInput {
-  stat_key?: string;
+  stat_key: string;
   field_type?: 'short' | 'paragraph' | 'number' | 'count';
 }
 
@@ -39,23 +38,18 @@ export async function createGame({
   description,
   createdBy,
   guildId,
-  presetKey,
 }: {
   name: string;
   description: string;
   createdBy: string;
   guildId: string | null;
-  presetKey?: string | null;
 }): Promise<Game> {
-  const game = await gameDAO.create({
+  return gameDAO.create({
     name,
     description,
     created_by: createdBy,
     guild_id: guildId,
-  });
-  if (!presetKey) return game as Game;
-  await applyCustomStatPreset(game.id, presetKey);
-  return (await gameDAO.findById(game.id)) as Game;
+  }) as Promise<Game>;
 }
 
 export async function updateGame(

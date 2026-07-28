@@ -13,19 +13,9 @@ CREATE TABLE game (
   description TEXT,
   is_public BOOLEAN DEFAULT FALSE,
   created_by TEXT NOT NULL,
-  preset_key TEXT,
-  preset_version INTEGER,
   deleted_at TIMESTAMP DEFAULT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  CONSTRAINT game_preset_selection_check CHECK (
-    (preset_key IS NULL AND preset_version IS NULL)
-    OR (
-      preset_key ~ '^[a-z][a-z0-9_]{0,63}$'
-      AND preset_version IS NOT NULL
-      AND preset_version > 0
-    )
-  )
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- === GAME-DEFINED STAT FIELD TEMPLATES ===
@@ -41,9 +31,11 @@ CREATE TABLE stat_template (
   default_value TEXT,
   is_required BOOLEAN DEFAULT TRUE,
   sort_order INTEGER DEFAULT 0,
-  meta JSONB DEFAULT '{}',
-  CONSTRAINT stat_template_game_stat_key_unique UNIQUE (game_id, stat_key)
+  meta JSONB DEFAULT '{}'
 );
+
+CREATE UNIQUE INDEX stat_template_game_stat_key_uidx
+  ON stat_template (game_id, lower(stat_key));
 
 CREATE OR REPLACE FUNCTION prevent_stat_template_key_change()
 RETURNS TRIGGER AS $$

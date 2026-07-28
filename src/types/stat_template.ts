@@ -20,7 +20,7 @@ export type StatTemplate = CustomStatDefinition;
 
 export interface CreateStatTemplateParams {
   game_id: string;
-  stat_key?: string;
+  stat_key: string;
   label: string;
   field_type?: CustomStatFieldType;
   default_value?: string | null;
@@ -29,7 +29,4 @@ export interface CreateStatTemplateParams {
   meta?: Record<string, unknown>;
 }
 
-export interface CreateCustomStatDefinitionParams
-  extends Omit<CreateStatTemplateParams, 'stat_key'> {
-  stat_key: string;
-}
+export type CreateCustomStatDefinitionParams = CreateStatTemplateParams;

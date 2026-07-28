@@ -40,6 +40,7 @@ describe('character.service', () => {
     const game = await createGame();
     const level = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'level',
       label: 'LEVEL',
       field_type: 'number',
       default_value: '1',
@@ -58,6 +59,7 @@ describe('character.service', () => {
 
     await templateDAO.create({
       game_id: game.id,
+      stat_key: 'improvement_points',
       label: 'IMPROVEMENT POINTS',
       field_type: 'number',
       default_value: '0',
@@ -65,6 +67,7 @@ describe('character.service', () => {
     });
     await templateDAO.create({
       game_id: game.id,
+      stat_key: 'talents',
       label: 'TALENTS',
       field_type: 'short',
       sort_order: 30,
@@ -101,6 +104,7 @@ describe('character.service', () => {
     const game = await createGame();
     const hp = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'health',
       label: 'HP',
       field_type: 'count',
       sort_order: 10,
@@ -131,6 +135,7 @@ describe('character.service', () => {
     const game = await createGame();
     const hp = await templateDAO.create({
       game_id: game.id,
+      stat_key: 'vitality',
       label: 'HP',
       field_type: 'count',
       default_value: '10',

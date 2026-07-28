@@ -1,70 +1,11 @@
-import { GameDAO } from '../dao/game.dao';
 import { StatTemplateDAO } from '../dao/stat_template.dao';
 import type {
   CreateCustomStatDefinitionParams,
   CustomStatDefinition,
-  CustomStatFieldType,
 } from '../types/stat_template';
 import { isValidCustomStatKey } from '../utils/custom_stat_key';
 
-const gameDAO = new GameDAO();
 const statTemplateDAO = new StatTemplateDAO();
-
-export interface CustomStatPresetDefinition {
-  stat_key: string;
-  label: string;
-  field_type: CustomStatFieldType;
-  default_value: string | null;
-  is_required: boolean;
-  sort_order: number;
-  meta?: Record<string, unknown>;
-}
-
-export interface CustomStatPreset {
-  key: string;
-  version: number;
-  label: string;
-  stats: readonly CustomStatPresetDefinition[];
-}
-
-export class CustomStatPresetConflictError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'CustomStatPresetConflictError';
-  }
-}
-
-export const FFRP_V1_PRESET: CustomStatPreset = {
-  key: 'ffrp',
-  version: 1,
-  label: 'FFRP',
-  stats: [
-    {
-      stat_key: 'hp',
-      label: 'HP',
-      field_type: 'count',
-      default_value: '0',
-      is_required: true,
-      sort_order: 0,
-      meta: { default_current: 0 },
-    },
-    {
-      stat_key: 'fp',
-      label: 'FP',
-      field_type: 'count',
-      default_value: '0',
-      is_required: true,
-      sort_order: 1,
-      meta: { default_current: 0 },
-    },
-  ],
-};
-
-const PRESETS = new Map([[FFRP_V1_PRESET.key, FFRP_V1_PRESET]]);
-
-export function getCustomStatPreset(presetKey: string): CustomStatPreset | null {
-  return PRESETS.get(presetKey) ?? null;
-}
 
 export async function createCustomStatDefinition(
   input: CreateCustomStatDefinitionParams,
@@ -75,79 +16,4 @@ export async function createCustomStatDefinition(
     );
   }
   return statTemplateDAO.create(input);
-}
-
-export async function applyCustomStatPreset(
-  gameId: string,
-  presetKey: string,
-): Promise<{
-  preset: CustomStatPreset;
-  created: CustomStatDefinition[];
-  existing: CustomStatDefinition[];
-}> {
-  const preset = getCustomStatPreset(presetKey);
-  if (!preset) throw new Error(`Unknown custom-stat preset: ${presetKey}`);
-
-  const game = await gameDAO.findById(gameId);
-  if (!game) throw new Error(`Cannot apply a preset to inactive game ${gameId}`);
-  if (game.preset_key && game.preset_key !== preset.key) {
-    throw new CustomStatPresetConflictError(
-      `This game already records the "${game.preset_key}" preset. Remove or explicitly replace that preset before applying "${preset.key}".`,
-    );
-  }
-
-  const preflight = await Promise.all(
-    preset.stats.map(async (stat) => ({
-      stat,
-      current: await statTemplateDAO.findByGameAndKey(gameId, stat.stat_key),
-    })),
-  );
-  const conflicts = preflight.filter(
-    ({ stat, current }) => current && current.field_type !== stat.field_type,
-  );
-  if (conflicts.length) {
-    const details = conflicts
-      .map(
-        ({ stat, current }) =>
-          `\`${stat.stat_key}\` is ${current!.field_type}, but ${preset.label} requires ${stat.field_type}`,
-      )
-      .join('; ');
-    throw new CustomStatPresetConflictError(
-      `Cannot apply ${preset.label} v${preset.version}: ${details}. No preset stats were created or changed.`,
-    );
-  }
-
-  const created: CustomStatDefinition[] = [];
-  const existing: CustomStatDefinition[] = [];
-  for (const { stat, current } of preflight) {
-    if (current) {
-      existing.push(current);
-      continue;
-    }
-    try {
-      created.push(await statTemplateDAO.create({ ...stat, game_id: gameId }));
-    } catch (error) {
-      if (!isUniqueViolation(error)) throw error;
-      const concurrent = await statTemplateDAO.findByGameAndKey(gameId, stat.stat_key);
-      if (!concurrent) throw error;
-      if (concurrent.field_type !== stat.field_type) {
-        throw new CustomStatPresetConflictError(
-          `Cannot apply ${preset.label} v${preset.version}: \`${stat.stat_key}\` became ${concurrent.field_type}, but the preset requires ${stat.field_type}.`,
-        );
-      }
-      existing.push(concurrent);
-    }
-  }
-
-  await gameDAO.setPreset(gameId, preset.key, preset.version);
-  return { preset, created, existing };
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  return (
-    !!error &&
-    typeof error === 'object' &&
-    'code' in error &&
-    (error as { code?: unknown }).code === '23505'
-  );
 }

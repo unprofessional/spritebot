@@ -1,7 +1,3 @@
-ALTER TABLE game
-  ADD COLUMN IF NOT EXISTS preset_key TEXT,
-  ADD COLUMN IF NOT EXISTS preset_version INTEGER;
-
 ALTER TABLE stat_template
   ADD COLUMN IF NOT EXISTS stat_key TEXT;
 
@@ -60,36 +56,14 @@ BEGIN
       CHECK (stat_key ~ '^[a-z][a-z0-9_]{0,63}$');
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'game_preset_selection_check'
-  ) THEN
-    ALTER TABLE game
-      ADD CONSTRAINT game_preset_selection_check
-      CHECK (
-        (preset_key IS NULL AND preset_version IS NULL)
-        OR (
-          preset_key ~ '^[a-z][a-z0-9_]{0,63}$'
-          AND preset_version IS NOT NULL
-          AND preset_version > 0
-        )
-      );
-  END IF;
-
-  IF NOT EXISTS (
-    SELECT 1
-    FROM pg_constraint
-    WHERE conname = 'stat_template_game_stat_key_unique'
-  ) THEN
-    ALTER TABLE stat_template
-      ADD CONSTRAINT stat_template_game_stat_key_unique
-      UNIQUE (game_id, stat_key);
-  END IF;
 END
 $$;
 
-DROP INDEX IF EXISTS stat_template_game_stat_key_uidx;
+ALTER TABLE stat_template
+  DROP CONSTRAINT IF EXISTS stat_template_game_stat_key_unique;
+
+CREATE UNIQUE INDEX IF NOT EXISTS stat_template_game_stat_key_uidx
+  ON stat_template (game_id, lower(stat_key));
 
 CREATE OR REPLACE FUNCTION prevent_stat_template_key_change()
 RETURNS TRIGGER AS $$

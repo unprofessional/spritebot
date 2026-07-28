@@ -9,7 +9,6 @@ import {
 } from '../../discord/prepared_modal';
 
 import { handle as handleCalculateStatsButton } from '../../components/calculate_character_stats_button';
-import { handle as handleApplyStatPreset } from '../../components/apply_stat_preset_button';
 import { handle as handleCharPageButton } from '../../components/character_page_buttons';
 import { handle as handleConfirmDeleteCharacterButton } from '../../components/confirm_delete_character_button';
 import { handle as handleConfirmIcDeleteButton } from '../../components/confirm_ic_delete_button';
@@ -30,7 +29,6 @@ import { handle as handleTogglePublishButton } from '../../components/toggle_pub
 import { handle as handleViewParagraphFieldsButton } from '../../components/view_paragraph_fields_button';
 import { interactionPolicy as charPagePolicy } from '../../components/character_page_buttons';
 import { interactionPolicy as calculateStatsPolicy } from '../../components/calculate_character_stats_button';
-import { interactionPolicy as applyStatPresetPolicy } from '../../components/apply_stat_preset_button';
 import { interactionPolicy as confirmDeleteCharacterPolicy } from '../../components/confirm_delete_character_button';
 import { interactionPolicy as confirmIcDeletePolicy } from '../../components/confirm_ic_delete_button';
 import { interactionPolicy as confirmDeleteStatPolicy } from '../../components/confirm_delete_stat_button';
@@ -66,7 +64,6 @@ const directRoutes: ButtonRoute[] = [
   [/^help:(?:role:(?:player|gm)|back)$/, helpRoleButtons.handle, helpRoleButtons.interactionPolicy],
   [/^preparedModal:/, (i, r) => activatePreparedModal(i, r!), preparedModalInteractionPolicy],
   [/^defineStats:/, (i, r) => handleDefineStats(i, r!), defineStatsPolicy],
-  [/^applyStatPreset:/, (i, r) => handleApplyStatPreset(i, r!), applyStatPresetPolicy],
   [/^editGameStats:/, (i, r) => handleEditGameStats(i, r!), editGameStatsPolicy],
   [/^deleteStats:/, (i, r) => handleDeleteStats(i, r!), deleteStatsPolicy],
   [/^finishStatSetup:/, (i, r) => handleFinishStatSetup(i, r!), finishStatSetupPolicy],

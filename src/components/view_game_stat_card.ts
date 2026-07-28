@@ -52,9 +52,6 @@ function buildEmbed(
     .setDescription(
       [
         fieldLines.length ? fieldLines.join('\n') : '*No stats defined yet.*',
-        game.preset_key
-          ? `\n**Preset:** \`${game.preset_key}\` v${game.preset_version ?? '?'}`
-          : '',
         '',
         '**Game Visibility**',
         game.is_public

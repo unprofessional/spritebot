@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { executeSqlScript, query } from '../../../src/db/client';
 
 const migration = readFileSync(
-  join(process.cwd(), 'src/db/tables/012_custom_stat_identity_presets.sql'),
+  join(process.cwd(), 'src/db/tables/012_custom_stat_identity.sql'),
   'utf8',
 );
 
@@ -22,7 +22,13 @@ describe('custom-stat identity migration', () => {
        VALUES
          ($1, 'HP', 'count', '12', 0),
          ($1, 'hp', 'count', '8', 1),
-         ($1, '123 Stress!', 'number', '0', 2)`,
+         ($1, '123 Stress!', 'number', '0', 2),
+         ($1, '!!!', 'short', NULL, 3),
+         ($1, '???', 'short', NULL, 4),
+         ($1, 'Élan', 'short', NULL, 5),
+         ($1, '心', 'short', NULL, 6),
+         ($1, repeat('a', 80), 'short', NULL, 7),
+         ($1, repeat('a', 79) || '!', 'short', NULL, 8)`,
       [gameId],
     );
     const hpTemplate = await query<{ id: string }>(
@@ -70,6 +76,20 @@ describe('custom-stat identity migration', () => {
       { label: 'HP', stat_key: 'hp', default_value: '12' },
       { label: 'hp', stat_key: 'hp_2', default_value: '8' },
       { label: '123 Stress!', stat_key: 'stat_123_stress', default_value: '0' },
+      { label: '!!!', stat_key: 'stat', default_value: null },
+      { label: '???', stat_key: 'stat_2', default_value: null },
+      { label: 'Élan', stat_key: 'lan', default_value: null },
+      { label: '心', stat_key: 'stat_3', default_value: null },
+      {
+        label: 'a'.repeat(80),
+        stat_key: `${'a'.repeat(62)}_2`,
+        default_value: null,
+      },
+      {
+        label: `${'a'.repeat(79)}!`,
+        stat_key: 'a'.repeat(64),
+        default_value: null,
+      },
     ]);
     await expect(
       query<{ value: string; meta: { current: number; max: number } }>(
