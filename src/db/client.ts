@@ -207,6 +207,7 @@ export async function resetDb(): Promise<void> {
     'character_inventory',
     'character_custom_field',
     'character_stat_field',
+    'custom_stat_value_provenance',
     'custom_stat_registration_audit',
     'runtime_instance_lease',
     'lifecycle_notification_channel',
