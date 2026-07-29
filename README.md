@@ -166,6 +166,21 @@ Automated cleanup runs on startup and then on a configurable interval. It reuses
 purge logic as `/admin orphans-purge` and does not touch games, private non-deleted characters,
 player links, thread bump rows, or SPRITE-Integrations-owned tables.
 
+### Integration Custom-Stat Write Contract
+
+Migration `014_custom_stat_write_provenance.sql` adds the Prime-owned boundary for integration
+writes. `apply_custom_stat_value(...)` validates an active character or game entity, its game and
+custom-stat definition, and the supplied value shape before atomically committing the canonical
+value and append-only provenance. It returns structured `written`, `unchanged`, `stale`,
+`conflict`, `invalid`, or `target_missing` outcomes. `get_custom_stat_value_state(...)` exposes the
+current canonical value and latest provenance for diagnostics and manual confirmation.
+
+The provenance contract records stable integration/campaign/source and mapping identities, the
+adapter observation timestamp or revision, writer/actor attribution, and prior/new canonical
+values. Exact replays are idempotent, older observations are rejected, and mapping-version changes
+are reevaluated. Deploy migration 014 before enabling an Integrations release that calls these
+functions; do not treat the two repositories' databases as one transaction.
+
 ### Entitlements and Feature Gates
 
 The codebase supports guild-scoped premium access. Features are granted by Discord entitlements and cached in Postgres for quicker checks. If no premium entitlements are active, the bot still grants the baseline `core` feature set. `/subscribe` exposes Discord Premium App subscription status and upgrade UI in Discord.
