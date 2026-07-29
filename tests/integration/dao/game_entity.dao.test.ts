@@ -118,6 +118,7 @@ describe('game entity DAOs', () => {
     });
     const template = await new StatTemplateDAO().create({
       game_id: game.id,
+      stat_key: 'health',
       label: 'HP',
       field_type: 'number',
       default_value: '10',
@@ -161,6 +162,7 @@ describe('game entity DAOs', () => {
     });
     const template = await new StatTemplateDAO().create({
       game_id: game.id,
+      stat_key: 'lore',
       label: 'Lore',
       field_type: 'short',
       default_value: '',

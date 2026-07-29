@@ -20,13 +20,17 @@ export type GameMutationResult =
       reason: 'not_found' | 'not_owner' | 'not_deleted' | 'already_deleted' | 'expired';
     };
 
-interface StatTemplateInput {
+interface StatTemplateUpdateInput {
   label: string;
-  field_type?: 'short' | 'paragraph' | 'number' | 'count';
   default_value?: string | null;
   is_required?: boolean;
   sort_order?: number;
   meta?: Record<string, unknown>;
+}
+
+interface StatTemplateCreateInput extends StatTemplateUpdateInput {
+  stat_key: string;
+  field_type?: 'short' | 'paragraph' | 'number' | 'count';
 }
 
 export async function createGame({
@@ -141,7 +145,7 @@ export async function getStatTemplateById(statId: string) {
 
 export async function updateStatTemplate(
   statId: string,
-  updatePayload: Partial<StatTemplateInput>,
+  updatePayload: Partial<StatTemplateUpdateInput>,
 ) {
   return statTemplateDAO.updateById(statId, updatePayload);
 }
@@ -150,7 +154,7 @@ export async function deleteStatTemplate(statId: string) {
   return statTemplateDAO.deleteById(statId);
 }
 
-export async function addStatTemplates(gameId: string, templateList: StatTemplateInput[]) {
+export async function addStatTemplates(gameId: string, templateList: StatTemplateCreateInput[]) {
   return statTemplateDAO.bulkCreate(gameId, templateList);
 }
 

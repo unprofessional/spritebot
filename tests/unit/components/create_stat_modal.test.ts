@@ -8,6 +8,11 @@ describe('create stat modal', () => {
     expect(inputs).toEqual([
       expect.objectContaining({ custom_id: 'label' }),
       expect.objectContaining({
+        custom_id: 'stat_key',
+        label: 'Stable Key (e.g. hp, stress, ammo)',
+        required: true,
+      }),
+      expect.objectContaining({
         custom_id: 'default_value',
         label: 'Default MAX Value (optional)',
       }),
@@ -23,7 +28,7 @@ describe('create stat modal', () => {
     const modal = build('game-1', 'number').toJSON();
     const inputs = modal.components.map((row) => row.components[0]);
 
-    expect(inputs).toHaveLength(3);
+    expect(inputs).toHaveLength(4);
     expect(inputs).toContainEqual(
       expect.objectContaining({
         custom_id: 'default_value',

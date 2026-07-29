@@ -36,18 +36,16 @@ function buildGameSetupMessage(
 
   if (statTemplates.length === 0) {
     lines.push('');
-    lines.push(`🟨 **Game Fields** (you define these)`);
+    lines.push(`🟨 **Custom Stats** (you define these)`);
     lines.push(`- Ex: HP, Strength, Skills, etc.`);
   }
 
   lines.push('');
   if (context === 'create') {
-    lines.push(
-      `Use the buttons below to define your required game-specific stat fields or to publish the game.`,
-    );
+    lines.push(`Use the buttons below to define custom stats or publish the game.`);
     lines.push(`_You do **not** need to redefine system fields._`);
   } else {
-    lines.push(`Use the buttons below to manage stat fields or update game info.`);
+    lines.push(`Use the buttons below to manage custom stats or update game info.`);
   }
 
   return lines.join('\n');

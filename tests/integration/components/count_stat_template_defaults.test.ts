@@ -40,6 +40,7 @@ const game = {
 const countTemplate: StatTemplate = {
   id: 'stat-1',
   game_id: 'game-1',
+  stat_key: 'hp',
   label: 'HP',
   field_type: 'count',
   default_value: '10',
@@ -48,10 +49,10 @@ const countTemplate: StatTemplate = {
   meta: { default_current: 4, note: 'preserve' },
 };
 
-function modalInteraction(customId: string, values: Record<string, string>) {
+function modalInteraction(customId: string, values: Record<string, string>, userId = 'user-1') {
   return {
     customId,
-    user: { id: 'user-1' },
+    user: { id: userId },
     guildId: 'guild-1',
     fields: {
       getTextInputValue: jest.fn((id: string) => values[id] ?? ''),
@@ -75,6 +76,7 @@ describe('count stat template defaults', () => {
   test('persists max and current defaults when creating a count template', async () => {
     const interaction = modalInteraction('createStatModal:game-1:count', {
       label: 'hp',
+      stat_key: 'hp',
       default_value: '10',
       default_current: '4',
       sort_index: '1',
@@ -84,6 +86,7 @@ describe('count stat template defaults', () => {
 
     expect(addStatTemplatesMock).toHaveBeenCalledWith('game-1', [
       {
+        stat_key: 'hp',
         label: 'HP',
         field_type: 'count',
         default_value: '10',
@@ -115,6 +118,7 @@ describe('count stat template defaults', () => {
   test('rejects a current default without a max default', async () => {
     const interaction = modalInteraction('createStatModal:game-1:count', {
       label: 'hp',
+      stat_key: 'hp',
       default_current: '4',
       sort_index: '1',
     });
@@ -125,6 +129,26 @@ describe('count stat template defaults', () => {
     expect(addStatTemplatesMock).not.toHaveBeenCalled();
     expect(response.respond).toHaveBeenCalledWith({
       content: '⚠️ Set a default MAX value before setting a default CURRENT value.',
+      ephemeral: true,
+    });
+  });
+
+  test('revalidates game ownership before creating a custom stat', async () => {
+    const interaction = modalInteraction(
+      'createStatModal:game-1:number',
+      {
+        label: 'Stress',
+        stat_key: 'stress',
+      },
+      'other-user',
+    );
+    const response = responder();
+
+    await handleCreateStat(interaction, response);
+
+    expect(addStatTemplatesMock).not.toHaveBeenCalled();
+    expect(response.respond).toHaveBeenCalledWith({
+      content: '⚠️ Only the GM can create custom-stat definitions for this game.',
       ephemeral: true,
     });
   });

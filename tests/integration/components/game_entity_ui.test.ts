@@ -463,6 +463,7 @@ describe('game entity Discord UI', () => {
     });
     const template = await statTemplateDAO.create({
       game_id: game.id,
+      stat_key: 'vitality',
       label: 'Hit Points',
       field_type: 'count',
       default_value: '12',

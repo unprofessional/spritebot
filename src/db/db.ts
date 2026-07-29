@@ -30,6 +30,8 @@ export async function initializeDB(): Promise<void> {
     const trackedTables = [
       'game',
       'stat_template',
+      'custom_stat_registration_audit',
+      'custom_stat_value_provenance',
       'character',
       'player',
       'player_server_link',
