@@ -227,7 +227,12 @@ describe('game.service deletion lifecycle', () => {
       characterDAO.create({ user_id: 'player-1', game_id: game.id, name: 'Too Late' }),
     ).rejects.toThrow('inactive game');
     await expect(
-      statTemplateDAO.create({ game_id: game.id, label: 'HP', field_type: 'number' }),
+      statTemplateDAO.create({
+        game_id: game.id,
+        stat_key: 'health',
+        label: 'HP',
+        field_type: 'number',
+      }),
     ).rejects.toThrow('inactive game');
     await expect(gameDAO.togglePublish(game.id)).resolves.toBeNull();
   });

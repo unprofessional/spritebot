@@ -1,11 +1,11 @@
 # Plan: Game-Owned NPCs and Creatures
 
-> **Status:** Implemented and validated through merge `882e93a`
+> **Status:** Implemented, validated, and deployed; name-based entity selection follow-up deployed 2026-07-27
 > **Owner:** mads
 > **Engineering:** Codex
 > **Review:** Moldy
 > **Related plan:** [TaleSpire product and delivery gaps](../tale-spire-gaps.md)
-> **Integration follow-up:** [TaleSpire game-entity bridge](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/talespire-game-entity-bridge.md)
+> **Integration follow-up:** [TaleSpire game-entity bridge](https://github.com/unprofessional/spritebot-integrations/blob/develop/plans/done/talespire-game-entity-bridge.md)
 > **Validation record:** All automated gates passed and the complete entity lifecycle passed a real Discord smoke test on 2026-07-25.
 
 ## Goal
@@ -31,6 +31,11 @@ The first release copies the useful character capabilities:
 - inventory and inventory custom fields
 - existing `private`, `public`, and `link-only` visibility values
 - 30-day soft delete and restore behavior
+
+The user-facing visibility controls match characters and expose only
+Publish/Unpublish. `link-only` remains a supported stored visibility for
+compatibility and direct-link access, but it is not presented as a separate
+entity-card action.
 
 The first release does **not** include:
 
@@ -227,10 +232,22 @@ Proposed command surface:
 
 - `/create-entity kind:<npc|creature>`
 - `/list-entities [kind:<npc|creature>]`
-- `/view-entity`
+- `/view-entity [entity:<name autocomplete>]`
 - `/restore-entity`
 
 The view card supplies edit, visibility, inventory, and delete controls for authorized game managers.
+
+`/view-entity` selection is name-driven: autocomplete performs normalized,
+case-insensitive fuzzy matching and returns at most 25 deterministic choices.
+Choice labels use kind and visibility to distinguish entities, with numeric
+qualifiers for otherwise identical duplicate names. UUIDs remain invisible
+option values for stable execution and are never the intended user input.
+
+Managers and the configured bot owner can discover all visibility states.
+Normal users discover only public entities. Execution reloads the selected
+entity and revalidates the current game and access; a valid direct internal
+value may still view a `link-only` entity, while private entities remain denied
+to normal users.
 
 - [x] Register the commands and feature-policy mappings.
 - [x] Add autocomplete/select menus scoped to the current game and optional entity kind.
@@ -251,18 +268,23 @@ The view card supplies edit, visibility, inventory, and delete controls for auth
 
 ## Follow-Up: TaleSpire Linking
 
-Do not include this in the base feature branch.
+This remained outside the base feature branch and has since shipped in
+SPRITE-Integrations. Its `spritebot_entity_id` is a logical UUID reference
+rather than a cross-database foreign key because SPRITE and
+SPRITE-Integrations retain separate database boundaries.
 
-After game entities ship, SPRITE-Integrations may add a nullable `spritebot_entity_id` to its own creature mapping/cache records. Because SPRITE and SPRITE-Integrations use separate database boundaries, this is a logical UUID reference rather than a cross-database foreign key.
-
-A GM explicitly promotes or links a cached TaleSpire creature to a SPRITE `game_entity`. Unlinked cache rows remain integration-local and do not create base-app records automatically.
+A GM explicitly promotes or links a cached TaleSpire creature to a SPRITE
+`game_entity`. Unlinked cache rows remain integration-local and do not create
+base-app records automatically. Autocomplete and persistence remain ID-backed,
+but normal user workflows show names, kind, visibility, and link state instead
+of UUIDs.
 
 ## Acceptance Criteria
 
 - A game manager can create either an NPC or creature in an active game.
 - Both kinds share one schema, DAO/service path, and Discord interaction flow.
 - Entities support game stat templates, custom fields, inventory, visibility, soft deletion, and restoration.
-- Normal players cannot create, edit, delete, restore, or discover private game entities through restricted surfaces.
+- Normal players cannot create, edit, delete, restore, or discover private game entities through restricted surfaces. Link-only entities are also excluded from discovery, while valid direct internal references preserve link-style viewing.
 - Deleting a game handles its entities consistently with player characters.
 - Existing player-character tables, rows, foreign keys, commands, and behavior remain unchanged.
 - No TaleSpire-specific fields or abstractions are added to SPRITEbot in this plan.

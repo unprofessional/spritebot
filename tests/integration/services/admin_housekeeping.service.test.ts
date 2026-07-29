@@ -296,6 +296,7 @@ describe('admin_housekeeping.service', () => {
     const game = await createGame('Expired Deleted Game');
     const template = await statTemplateDAO.create({
       game_id: game.id,
+      stat_key: 'health',
       label: 'HP',
       field_type: 'number',
     });
@@ -336,6 +337,7 @@ describe('admin_housekeeping.service', () => {
     const game = await createGame('Busy Table', { isPublic: true });
     await statTemplateDAO.create({
       game_id: game.id,
+      stat_key: 'vitality',
       label: 'HP',
       field_type: 'number',
     });
@@ -462,6 +464,7 @@ describe('admin_housekeeping.service', () => {
     const game = await createGame('Private Table');
     const template = await statTemplateDAO.create({
       game_id: game.id,
+      stat_key: 'health',
       label: 'HP',
       field_type: 'number',
     });
