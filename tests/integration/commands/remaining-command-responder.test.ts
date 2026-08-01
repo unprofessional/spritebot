@@ -1,4 +1,4 @@
-import { ChannelType } from 'discord.js';
+import { ApplicationCommandOptionType, ChannelType } from 'discord.js';
 import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
@@ -6,6 +6,8 @@ import type {
 import { DiscordInteractionResponder } from '../../../src/discord/interaction_responder';
 
 type RemainingCommand = {
+  data?: { toJSON(): unknown };
+  autocomplete?(interaction: unknown): Promise<Array<{ name: string; value: string }>>;
   interactionPolicy: InteractionDispatchPolicy;
   execute(interaction: unknown, context: InteractionCommandContext): Promise<unknown>;
 };
@@ -42,14 +44,106 @@ describe('remaining command responder migration', () => {
   test('/transcribe start uses the existing dispatcher deferral', async () => {
     const interaction = commandInteraction({ userId: '818606180095885332' });
     interaction.options.getSubcommand.mockReturnValue('start');
-    interaction.options.getChannel.mockReturnValue({ type: ChannelType.GuildText });
+    interaction.options.getString.mockReturnValue('not-a-channel');
 
     await executePreDeferred(transcribeCommand, interaction);
 
     expect(interaction.deferReply).toHaveBeenCalledTimes(1);
     expect(interaction.editReply).toHaveBeenCalledWith({
+      content: '⚠️ Choose the voice and text channels from the suggestions.',
+    });
+  });
+
+  test('/transcribe reloads selected ids and rejects stale channels at execution time', async () => {
+    const interaction = commandInteraction({ userId: '818606180095885332' });
+    const fetchChannel = jest.fn().mockResolvedValue(null);
+    interaction.guild = {
+      id: 'guild-1',
+      channels: { fetch: fetchChannel },
+      members: { fetch: jest.fn().mockResolvedValue({ id: '818606180095885332' }) },
+    };
+    interaction.options.getSubcommand.mockReturnValue('start');
+    interaction.options.getString.mockImplementation((name: string) =>
+      name === 'voice-channel' ? '11111111111111111' : '22222222222222222',
+    );
+
+    await executePreDeferred(transcribeCommand, interaction);
+
+    expect(fetchChannel).toHaveBeenCalledWith('11111111111111111');
+    expect(fetchChannel).toHaveBeenCalledWith('22222222222222222');
+    expect(interaction.editReply).toHaveBeenCalledWith({
       content: '⚠️ Choose a voice channel I can join.',
     });
+  });
+
+  test('/transcribe registers bot-owned channel autocomplete options', () => {
+    const command = transcribeCommand.data?.toJSON() as {
+      options: Array<{
+        name: string;
+        options: Array<{ name: string; type: number; autocomplete?: boolean }>;
+      }>;
+    };
+    const start = command.options.find((option) => option.name === 'start');
+
+    expect(start?.options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          name: 'voice-channel',
+          type: ApplicationCommandOptionType.String,
+          autocomplete: true,
+        }),
+        expect.objectContaining({
+          name: 'text-channel',
+          type: ApplicationCommandOptionType.String,
+          autocomplete: true,
+        }),
+      ]),
+    );
+  });
+
+  test('/transcribe autocomplete returns only visible channels of the focused kind', async () => {
+    const visible = { has: jest.fn().mockReturnValue(true) };
+    const hidden = { has: jest.fn().mockReturnValue(false) };
+    const member = { id: 'user-1' };
+    const channel = (id: string, name: string, type: ChannelType, permissions = visible) => ({
+      id,
+      name,
+      type,
+      parent: null,
+      permissionsFor: jest.fn().mockReturnValue(permissions),
+    });
+    const interaction = {
+      guild: {
+        members: {
+          cache: new Map([['user-1', member]]),
+          fetch: jest.fn(),
+        },
+        channels: {
+          cache: new Map([
+            [
+              '11111111111111111',
+              channel('11111111111111111', 'crisis_response', ChannelType.GuildVoice),
+            ],
+            [
+              '22222222222222222',
+              channel('22222222222222222', 'crisis_chat', ChannelType.GuildText),
+            ],
+            [
+              '33333333333333333',
+              channel('33333333333333333', 'hidden_voice', ChannelType.GuildVoice, hidden),
+            ],
+          ]),
+        },
+      },
+      user: { id: 'user-1' },
+      options: {
+        getFocused: jest.fn().mockReturnValue({ name: 'voice-channel', value: 'crisis' }),
+      },
+    };
+
+    await expect(transcribeCommand.autocomplete?.(interaction)).resolves.toEqual([
+      { name: 'crisis_response — Voice', value: '11111111111111111' },
+    ]);
   });
 
   test('/bump-thread preserves its permission rejection after deferral', async () => {
