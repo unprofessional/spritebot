@@ -49,4 +49,19 @@ describe('channel autocomplete', () => {
       { name: 'table — Voice • Games • 2', value: 'duplicate-b' },
     ]);
   });
+
+  test('reserves label space for duplicate qualifiers after truncating long parents', () => {
+    const choices = buildChannelAutocompleteChoices(
+      [
+        { id: 'a', name: 'table', kind: 'Voice', parentName: 'x'.repeat(120) },
+        { id: 'b', name: 'table', kind: 'Voice', parentName: 'x'.repeat(120) },
+      ],
+      'table',
+    );
+
+    expect(choices[0]?.name.endsWith(' • 1')).toBe(true);
+    expect(choices[1]?.name.endsWith(' • 2')).toBe(true);
+    expect(choices[0]?.name).not.toBe(choices[1]?.name);
+    expect(choices.every((choice) => choice.name.length <= 100)).toBe(true);
+  });
 });

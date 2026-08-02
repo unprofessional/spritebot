@@ -8,6 +8,7 @@ import {
   GuildTextBasedChannel,
   PermissionFlagsBits,
   SlashCommandBuilder,
+  ThreadMember,
   VoiceBasedChannel,
 } from 'discord.js';
 
@@ -30,13 +31,6 @@ import {
 
 const playerDAO = new PlayerDAO();
 const TRANSCRIBE_ADMIN_USER_IDS = new Set<string>(['818606180095885332']);
-const autocompleteMemberReadPolicy = defineDiscordOperationPolicy({
-  operation: 'transcribe.autocomplete.fetch-member',
-  timeoutMs: 750,
-  totalBudgetMs: 1_000,
-  retry: 'never',
-  maxAttempts: 1,
-});
 const channelReadPolicy = defineDiscordOperationPolicy({
   operation: 'transcribe.fetch-channel',
   timeoutMs: 1_500,
@@ -46,6 +40,13 @@ const channelReadPolicy = defineDiscordOperationPolicy({
 });
 const memberReadPolicy = defineDiscordOperationPolicy({
   operation: 'transcribe.fetch-member',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const threadMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'transcribe.fetch-thread-member',
   timeoutMs: 1_500,
   totalBudgetMs: 4_000,
   retry: 'safe-read',
@@ -92,20 +93,13 @@ module.exports = {
     const focused = interaction.options.getFocused(true);
     if (focused.name !== 'voice-channel' && focused.name !== 'text-channel') return [];
 
-    const member =
-      interaction.guild.members.cache.get(interaction.user.id) ??
-      (await executeDiscordSdkMethodAs<GuildMember>(
-        autocompleteMemberReadPolicy,
-        interaction.guild.members,
-        'fetch',
-        interaction.user.id,
-      ).catch(() => null));
+    const member = interaction.guild.members.cache.get(interaction.user.id);
     if (!member) return [];
 
     const candidates: ChannelAutocompleteCandidate[] = [];
     for (const channel of interaction.guild.channels.cache.values()) {
       const kind = channelKindForOption(channel.type, focused.name);
-      if (!kind || !channel.permissionsFor(member).has(PermissionFlagsBits.ViewChannel)) continue;
+      if (!kind || !hasCachedChannelAccess(channel, member)) continue;
       candidates.push({
         id: channel.id,
         name: channel.name,
@@ -171,7 +165,7 @@ module.exports = {
           voiceChannel.type !== ChannelType.GuildStageVoice) ||
         !('joinable' in voiceChannel) ||
         !invokingMember ||
-        !voiceChannel.permissionsFor(invokingMember).has(PermissionFlagsBits.ViewChannel)
+        !hasCachedChannelAccess(voiceChannel, invokingMember)
       ) {
         return responder.respond({ content: '⚠️ Choose a voice channel I can join.' });
       }
@@ -184,7 +178,7 @@ module.exports = {
           textChannel.type !== ChannelType.PrivateThread &&
           textChannel.type !== ChannelType.AnnouncementThread) ||
         !invokingMember ||
-        !textChannel.permissionsFor(invokingMember).has(PermissionFlagsBits.ViewChannel)
+        !(await canMemberAccessChannel(textChannel, invokingMember))
       ) {
         return responder.respond({
           content: '⚠️ Choose a text channel for transcript output.',
@@ -254,6 +248,33 @@ module.exports = {
     });
   },
 };
+
+function hasCachedChannelAccess(channel: GuildBasedChannel, member: GuildMember): boolean {
+  const permissions = channel.permissionsFor(member);
+  if (!permissions.has(PermissionFlagsBits.ViewChannel)) return false;
+  if (channel.type !== ChannelType.PrivateThread) return true;
+  return permissions.has(PermissionFlagsBits.ManageThreads) || channel.members.cache.has(member.id);
+}
+
+async function canMemberAccessChannel(
+  channel: GuildBasedChannel,
+  member: GuildMember,
+): Promise<boolean> {
+  const permissions = channel.permissionsFor(member);
+  if (!permissions.has(PermissionFlagsBits.ViewChannel)) return false;
+  if (channel.type !== ChannelType.PrivateThread) return true;
+  if (permissions.has(PermissionFlagsBits.ManageThreads) || channel.members.cache.has(member.id)) {
+    return true;
+  }
+  return Boolean(
+    await executeDiscordSdkMethodAs<ThreadMember>(
+      threadMemberReadPolicy,
+      channel.members,
+      'fetch',
+      member.id,
+    ).catch(() => null),
+  );
+}
 
 function channelKindForOption(
   type: ChannelType,

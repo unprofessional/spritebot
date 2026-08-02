@@ -63,11 +63,21 @@ function rankChannel(name: string, query: string): [number, number] | null {
 }
 
 function formatChannelChoiceName(channel: ChannelAutocompleteCandidate, qualifier = ''): string {
-  const context = ` — ${channel.kind}${channel.parentName ? ` • ${channel.parentName}` : ''}${qualifier}`;
+  const fixedContext = ` — ${channel.kind}${qualifier}`;
+  const parentPrefix = ' • ';
+  const maxParentLength = Math.max(
+    0,
+    MAX_CHOICE_NAME_LENGTH - 1 - fixedContext.length - parentPrefix.length,
+  );
+  const parentName = channel.parentName ? truncate(channel.parentName, maxParentLength) : '';
+  const context = ` — ${channel.kind}${parentName ? `${parentPrefix}${parentName}` : ''}${qualifier}`;
   const availableNameLength = Math.max(1, MAX_CHOICE_NAME_LENGTH - context.length);
-  const name =
-    channel.name.length > availableNameLength
-      ? `${channel.name.slice(0, Math.max(1, availableNameLength - 1))}…`
-      : channel.name;
+  const name = truncate(channel.name, availableNameLength);
   return `${name}${context}`.slice(0, MAX_CHOICE_NAME_LENGTH);
+}
+
+function truncate(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value;
+  if (maxLength <= 1) return value.slice(0, maxLength);
+  return `${value.slice(0, maxLength - 1)}…`;
 }
