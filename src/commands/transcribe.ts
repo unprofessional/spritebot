@@ -263,15 +263,13 @@ async function canMemberAccessChannel(
   const permissions = channel.permissionsFor(member);
   if (!permissions.has(PermissionFlagsBits.ViewChannel)) return false;
   if (channel.type !== ChannelType.PrivateThread) return true;
-  if (permissions.has(PermissionFlagsBits.ManageThreads) || channel.members.cache.has(member.id)) {
-    return true;
-  }
+  if (permissions.has(PermissionFlagsBits.ManageThreads)) return true;
   return Boolean(
     await executeDiscordSdkMethodAs<ThreadMember>(
       threadMemberReadPolicy,
       channel.members,
       'fetch',
-      member.id,
+      { member: member.id, force: true },
     ).catch(() => null),
   );
 }
