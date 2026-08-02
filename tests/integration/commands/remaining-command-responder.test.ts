@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType, ChannelType } from 'discord.js';
+import { ApplicationCommandOptionType, ChannelType, PermissionFlagsBits } from 'discord.js';
 import type {
   InteractionCommandContext,
   InteractionDispatchPolicy,
@@ -76,6 +76,46 @@ describe('remaining command responder migration', () => {
     });
   });
 
+  test('/transcribe rejects a private output thread when the GM is not a member', async () => {
+    const interaction = commandInteraction({ userId: '818606180095885332' });
+    const member = { id: '818606180095885332' };
+    const voiceChannel = {
+      id: '11111111111111111',
+      type: ChannelType.GuildVoice,
+      joinable: true,
+      permissionsFor: jest.fn().mockReturnValue({ has: jest.fn().mockReturnValue(true) }),
+    };
+    const fetchThreadMember = jest.fn().mockRejectedValue(new Error('Unknown Member'));
+    const privateThread = {
+      id: '22222222222222222',
+      type: ChannelType.PrivateThread,
+      members: { cache: new Map(), fetch: fetchThreadMember },
+      permissionsFor: jest.fn().mockReturnValue({
+        has: jest.fn((permission: bigint) => permission === PermissionFlagsBits.ViewChannel),
+      }),
+    };
+    interaction.guild = {
+      id: 'guild-1',
+      channels: {
+        fetch: jest.fn((id: string) =>
+          Promise.resolve(id === voiceChannel.id ? voiceChannel : privateThread),
+        ),
+      },
+      members: { fetch: jest.fn().mockResolvedValue(member) },
+    };
+    interaction.options.getSubcommand.mockReturnValue('start');
+    interaction.options.getString.mockImplementation((name: string) =>
+      name === 'voice-channel' ? voiceChannel.id : privateThread.id,
+    );
+
+    await executePreDeferred(transcribeCommand, interaction);
+
+    expect(fetchThreadMember).toHaveBeenCalledWith(member.id);
+    expect(interaction.editReply).toHaveBeenCalledWith({
+      content: '⚠️ Choose a text channel for transcript output.',
+    });
+  });
+
   test('/transcribe registers bot-owned channel autocomplete options', () => {
     const command = transcribeCommand.data?.toJSON() as {
       options: Array<{
@@ -144,6 +184,45 @@ describe('remaining command responder migration', () => {
     await expect(transcribeCommand.autocomplete?.(interaction)).resolves.toEqual([
       { name: 'crisis_response — Voice', value: '11111111111111111' },
     ]);
+  });
+
+  test('/transcribe autocomplete hides private threads from non-members without fetching', async () => {
+    const member = { id: 'user-1' };
+    const permissions = {
+      has: jest.fn((permission: bigint) => permission === PermissionFlagsBits.ViewChannel),
+    };
+    const thread = (id: string, memberIds: string[]) => ({
+      id,
+      name: 'gm-notes',
+      type: ChannelType.PrivateThread,
+      parent: { name: 'Operations' },
+      members: { cache: new Map(memberIds.map((memberId) => [memberId, {}])) },
+      permissionsFor: jest.fn().mockReturnValue(permissions),
+    });
+    const fetchMember = jest.fn();
+    const interaction = {
+      guild: {
+        members: {
+          cache: new Map([['user-1', member]]),
+          fetch: fetchMember,
+        },
+        channels: {
+          cache: new Map([
+            ['44444444444444444', thread('44444444444444444', [])],
+            ['55555555555555555', thread('55555555555555555', ['user-1'])],
+          ]),
+        },
+      },
+      user: { id: 'user-1' },
+      options: {
+        getFocused: jest.fn().mockReturnValue({ name: 'text-channel', value: 'notes' }),
+      },
+    };
+
+    await expect(transcribeCommand.autocomplete?.(interaction)).resolves.toEqual([
+      { name: 'gm-notes — Text • Operations', value: '55555555555555555' },
+    ]);
+    expect(fetchMember).not.toHaveBeenCalled();
   });
 
   test('/bump-thread preserves its permission rejection after deferral', async () => {
