@@ -1,9 +1,14 @@
 import {
+  AutocompleteInteraction,
   CacheType,
   ChannelType,
   ChatInputCommandInteraction,
+  GuildBasedChannel,
+  GuildMember,
   GuildTextBasedChannel,
+  PermissionFlagsBits,
   SlashCommandBuilder,
+  ThreadMember,
   VoiceBasedChannel,
 } from 'discord.js';
 
@@ -17,9 +22,36 @@ import {
   getMissingTranscriptionPermissions,
 } from '../voice/transcription_permissions';
 import { voiceManager } from '../voice/voice_manager';
+import { defineDiscordOperationPolicy } from '../discord/operation_policy';
+import { executeDiscordSdkMethodAs } from '../discord/sdk_operations';
+import {
+  buildChannelAutocompleteChoices,
+  type ChannelAutocompleteCandidate,
+} from '../utils/channel_autocomplete';
 
 const playerDAO = new PlayerDAO();
 const TRANSCRIBE_ADMIN_USER_IDS = new Set<string>(['818606180095885332']);
+const channelReadPolicy = defineDiscordOperationPolicy({
+  operation: 'transcribe.fetch-channel',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const memberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'transcribe.fetch-member',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
+const threadMemberReadPolicy = defineDiscordOperationPolicy({
+  operation: 'transcribe.fetch-thread-member',
+  timeoutMs: 1_500,
+  totalBudgetMs: 4_000,
+  retry: 'safe-read',
+  maxAttempts: 2,
+});
 
 module.exports = {
   data: new SlashCommandBuilder()
@@ -29,24 +61,18 @@ module.exports = {
       sub
         .setName('start')
         .setDescription('Join a voice channel and record a transcript for dump-on-stop.')
-        .addChannelOption((option) =>
+        .addStringOption((option) =>
           option
             .setName('voice-channel')
             .setDescription('Voice channel to transcribe.')
-            .addChannelTypes(ChannelType.GuildVoice, ChannelType.GuildStageVoice)
+            .setAutocomplete(true)
             .setRequired(true),
         )
-        .addChannelOption((option) =>
+        .addStringOption((option) =>
           option
             .setName('text-channel')
             .setDescription('Text channel for rough transcript output.')
-            .addChannelTypes(
-              ChannelType.GuildText,
-              ChannelType.GuildAnnouncement,
-              ChannelType.PublicThread,
-              ChannelType.PrivateThread,
-              ChannelType.AnnouncementThread,
-            )
+            .setAutocomplete(true)
             .setRequired(true),
         ),
     )
@@ -61,6 +87,28 @@ module.exports = {
     mode: { kind: 'reply', visibility: 'ephemeral' },
     acknowledgement: 'auto-defer',
   } satisfies InteractionDispatchPolicy,
+
+  async autocomplete(interaction: AutocompleteInteraction) {
+    if (!interaction.guild) return [];
+    const focused = interaction.options.getFocused(true);
+    if (focused.name !== 'voice-channel' && focused.name !== 'text-channel') return [];
+
+    const member = interaction.guild.members.cache.get(interaction.user.id);
+    if (!member) return [];
+
+    const candidates: ChannelAutocompleteCandidate[] = [];
+    for (const channel of interaction.guild.channels.cache.values()) {
+      const kind = channelKindForOption(channel.type, focused.name);
+      if (!kind || !hasCachedChannelAccess(channel, member)) continue;
+      candidates.push({
+        id: channel.id,
+        name: channel.name,
+        kind,
+        parentName: 'parent' in channel ? channel.parent?.name : null,
+      });
+    }
+    return buildChannelAutocompleteChoices(candidates, String(focused.value));
+  },
 
   async execute(
     interaction: ChatInputCommandInteraction<CacheType>,
@@ -83,23 +131,54 @@ module.exports = {
     const subcommand = interaction.options.getSubcommand();
 
     if (subcommand === 'start') {
-      const voiceChannel = interaction.options.getChannel('voice-channel', true);
-      const textChannel = interaction.options.getChannel('text-channel', true);
+      const voiceChannelId = parseChannelId(interaction.options.getString('voice-channel', true));
+      const textChannelId = parseChannelId(interaction.options.getString('text-channel', true));
+      if (!voiceChannelId || !textChannelId) {
+        return responder.respond({
+          content: '⚠️ Choose the voice and text channels from the suggestions.',
+        });
+      }
+      const [voiceChannel, textChannel, invokingMember] = await Promise.all([
+        executeDiscordSdkMethodAs<GuildBasedChannel>(
+          channelReadPolicy,
+          interaction.guild.channels,
+          'fetch',
+          voiceChannelId,
+        ).catch(() => null),
+        executeDiscordSdkMethodAs<GuildBasedChannel>(
+          channelReadPolicy,
+          interaction.guild.channels,
+          'fetch',
+          textChannelId,
+        ).catch(() => null),
+        executeDiscordSdkMethodAs<GuildMember>(
+          memberReadPolicy,
+          interaction.guild.members,
+          'fetch',
+          interaction.user.id,
+        ).catch(() => null),
+      ]);
 
       if (
+        !voiceChannel ||
         (voiceChannel.type !== ChannelType.GuildVoice &&
           voiceChannel.type !== ChannelType.GuildStageVoice) ||
-        !('joinable' in voiceChannel)
+        !('joinable' in voiceChannel) ||
+        !invokingMember ||
+        !hasCachedChannelAccess(voiceChannel, invokingMember)
       ) {
         return responder.respond({ content: '⚠️ Choose a voice channel I can join.' });
       }
 
       if (
-        textChannel.type !== ChannelType.GuildText &&
-        textChannel.type !== ChannelType.GuildAnnouncement &&
-        textChannel.type !== ChannelType.PublicThread &&
-        textChannel.type !== ChannelType.PrivateThread &&
-        textChannel.type !== ChannelType.AnnouncementThread
+        !textChannel ||
+        (textChannel.type !== ChannelType.GuildText &&
+          textChannel.type !== ChannelType.GuildAnnouncement &&
+          textChannel.type !== ChannelType.PublicThread &&
+          textChannel.type !== ChannelType.PrivateThread &&
+          textChannel.type !== ChannelType.AnnouncementThread) ||
+        !invokingMember ||
+        !(await canMemberAccessChannel(textChannel, invokingMember))
       ) {
         return responder.respond({
           content: '⚠️ Choose a text channel for transcript output.',
@@ -169,6 +248,59 @@ module.exports = {
     });
   },
 };
+
+function hasCachedChannelAccess(channel: GuildBasedChannel, member: GuildMember): boolean {
+  const permissions = channel.permissionsFor(member);
+  if (!permissions.has(PermissionFlagsBits.ViewChannel)) return false;
+  if (channel.type !== ChannelType.PrivateThread) return true;
+  return permissions.has(PermissionFlagsBits.ManageThreads) || channel.members.cache.has(member.id);
+}
+
+async function canMemberAccessChannel(
+  channel: GuildBasedChannel,
+  member: GuildMember,
+): Promise<boolean> {
+  const permissions = channel.permissionsFor(member);
+  if (!permissions.has(PermissionFlagsBits.ViewChannel)) return false;
+  if (channel.type !== ChannelType.PrivateThread) return true;
+  if (permissions.has(PermissionFlagsBits.ManageThreads)) return true;
+  return Boolean(
+    await executeDiscordSdkMethodAs<ThreadMember>(
+      threadMemberReadPolicy,
+      channel.members,
+      'fetch',
+      { member: member.id, force: true },
+    ).catch(() => null),
+  );
+}
+
+function channelKindForOption(
+  type: ChannelType,
+  optionName: 'voice-channel' | 'text-channel',
+): 'Voice' | 'Text' | null {
+  if (
+    optionName === 'voice-channel' &&
+    (type === ChannelType.GuildVoice || type === ChannelType.GuildStageVoice)
+  ) {
+    return 'Voice';
+  }
+  if (
+    optionName === 'text-channel' &&
+    (type === ChannelType.GuildText ||
+      type === ChannelType.GuildAnnouncement ||
+      type === ChannelType.PublicThread ||
+      type === ChannelType.PrivateThread ||
+      type === ChannelType.AnnouncementThread)
+  ) {
+    return 'Text';
+  }
+  return null;
+}
+
+function parseChannelId(value: string): string | null {
+  const match = value.trim().match(/^(?:<#(\d{17,20})>|(\d{17,20}))$/);
+  return match?.[1] ?? match?.[2] ?? null;
+}
 
 async function isServerGm(userId: string, guildId: string): Promise<boolean> {
   if (TRANSCRIBE_ADMIN_USER_IDS.has(userId)) return true;
