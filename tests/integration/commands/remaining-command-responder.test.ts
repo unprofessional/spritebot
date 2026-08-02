@@ -76,7 +76,7 @@ describe('remaining command responder migration', () => {
     });
   });
 
-  test('/transcribe rejects a private output thread when the GM is not a member', async () => {
+  test('/transcribe rejects stale cached private-thread membership at execution time', async () => {
     const interaction = commandInteraction({ userId: '818606180095885332' });
     const member = { id: '818606180095885332' };
     const voiceChannel = {
@@ -89,7 +89,7 @@ describe('remaining command responder migration', () => {
     const privateThread = {
       id: '22222222222222222',
       type: ChannelType.PrivateThread,
-      members: { cache: new Map(), fetch: fetchThreadMember },
+      members: { cache: new Map([[member.id, {}]]), fetch: fetchThreadMember },
       permissionsFor: jest.fn().mockReturnValue({
         has: jest.fn((permission: bigint) => permission === PermissionFlagsBits.ViewChannel),
       }),
@@ -110,7 +110,7 @@ describe('remaining command responder migration', () => {
 
     await executePreDeferred(transcribeCommand, interaction);
 
-    expect(fetchThreadMember).toHaveBeenCalledWith(member.id);
+    expect(fetchThreadMember).toHaveBeenCalledWith({ member: member.id, force: true });
     expect(interaction.editReply).toHaveBeenCalledWith({
       content: '⚠️ Choose a text channel for transcript output.',
     });
