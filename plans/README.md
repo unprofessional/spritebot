@@ -7,6 +7,7 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | Plan                                                               | Status                                             |
 | ------------------------------------------------------------------ | -------------------------------------------------- |
 | [custom-stat-integration-sync.md](custom-stat-integration-sync.md) | Active — Phases 1–2 merged; Phase 3 contract ready |
+| [live-transcription-summary.md](live-transcription-summary.md)     | Planning — safe mid-session summary snapshots      |
 | [ux-bdd-stories.md](ux-bdd-stories.md)                             | TODO — UX behavior specs                           |
 | [discord-ui-testing.md](discord-ui-testing.md)                     | TODO — browser-driven UI tests                     |
 
