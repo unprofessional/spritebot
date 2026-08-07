@@ -10,6 +10,7 @@ Active and future plans live here. Completed plans are archived in `done/`.
 | [live-transcription-summary.md](live-transcription-summary.md)     | Planning — safe mid-session summary snapshots      |
 | [ux-bdd-stories.md](ux-bdd-stories.md)                             | TODO — UX behavior specs                           |
 | [discord-ui-testing.md](discord-ui-testing.md)                     | TODO — browser-driven UI tests                     |
+| [modal-dropdown-ux.md](modal-dropdown-ux.md)                       | Planned — audit and modernize modal choice inputs  |
 
 ## Future
 
