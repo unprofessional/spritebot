@@ -1,5 +1,4 @@
 import {
-  ActionRowBuilder,
   ModalBuilder,
   ModalSubmitInteraction,
   TextInputBuilder,
@@ -27,6 +26,7 @@ import {
   parseCountDefault,
   withDefaultCurrent,
 } from '../../utils/count_stat_defaults';
+import { modalTextInputBuilder } from '../../utils/modal_components';
 
 const handle = async (
   interaction: ModalSubmitInteraction,
@@ -153,7 +153,7 @@ function buildStatTemplateModal({
   const countDefaults = isCount ? getCountStatDefaults(field) : null;
 
   const components = [
-    new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modalTextInputBuilder(
       new TextInputBuilder()
         .setCustomId(discordCustomId('label'))
         .setLabel('Field Label (e.g. HP, CLASS, STRENGTH)')
@@ -161,7 +161,7 @@ function buildStatTemplateModal({
         .setValue(field?.label ?? '')
         .setRequired(true),
     ),
-    new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modalTextInputBuilder(
       new TextInputBuilder()
         .setCustomId(discordCustomId('default_value'))
         .setLabel(isCount ? 'Default MAX Value (optional)' : 'Default Value (optional)')
@@ -171,7 +171,7 @@ function buildStatTemplateModal({
     ),
     ...(isCount
       ? [
-          new ActionRowBuilder<TextInputBuilder>().addComponents(
+          modalTextInputBuilder(
             new TextInputBuilder()
               .setCustomId(discordCustomId('default_current'))
               .setLabel('Default CURRENT Value (optional)')
@@ -181,7 +181,7 @@ function buildStatTemplateModal({
           ),
         ]
       : []),
-    new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modalTextInputBuilder(
       new TextInputBuilder()
         .setCustomId(discordCustomId('sort_order'))
         .setLabel('Sort Order (lower = higher up)')
@@ -194,7 +194,7 @@ function buildStatTemplateModal({
   return new ModalBuilder()
     .setCustomId(discordCustomId(id))
     .setTitle(title)
-    .addComponents(...components);
+    .addLabelComponents(...components);
 }
 
 export { buildStatTemplateModal, handle };

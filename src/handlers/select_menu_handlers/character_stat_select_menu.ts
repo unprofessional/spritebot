@@ -2,7 +2,6 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
   StringSelectMenuInteraction,
 } from 'discord.js';
 import { discordCustomId } from '../../utils/discord_custom_id';
@@ -13,6 +12,7 @@ import type { DiscordInteractionResponder } from '../../discord/interaction_resp
 import { presentPreparedModal } from '../../discord/prepared_modal';
 import { getCharacterWithStats } from '../../services/character.service';
 import type { CharacterWithStats, CharacterStatWithLabel } from '../../types/character';
+import { modalTextInputBuilder } from '../../utils/modal_components';
 
 export const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
 
@@ -64,8 +64,8 @@ export async function handle(
     const modal = new ModalBuilder()
       .setCustomId(discordCustomId(`editCharacterField:${characterId}:${selectedKey}`))
       .setTitle(truncate(`Edit ${label}`))
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+      .addLabelComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId(selectedKey))
             .setLabel(truncate(`Value for ${label}`))
@@ -107,8 +107,8 @@ export async function handle(
     const max = stat.meta?.max ?? '';
     const current = stat.meta?.current ?? max;
 
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modal.addLabelComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId(`${fieldKey}:max`))
           .setLabel(truncate(`Max value for ${label}`))
@@ -116,7 +116,7 @@ export async function handle(
           .setValue(String(max))
           .setRequired(true),
       ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId(`${fieldKey}:current`))
           .setLabel(truncate(`Current value for ${label}`))
@@ -128,8 +128,8 @@ export async function handle(
   } else {
     const inputStyle = fieldType === 'paragraph' ? TextInputStyle.Paragraph : TextInputStyle.Short;
 
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modal.addLabelComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId(fieldKey))
           .setLabel(truncate(`New value for ${label}`))

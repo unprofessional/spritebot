@@ -11,6 +11,7 @@ import { discordCustomId } from '../utils/discord_custom_id';
 
 import { gatedImmediateModalInteractionPolicy } from '../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../discord/interaction_responder';
+import { modalTextInputBuilder } from '../utils/modal_components';
 
 export const id = 'editCharacterFieldDropdown';
 export const interactionPolicy = gatedImmediateModalInteractionPolicy;
@@ -104,15 +105,15 @@ export async function handle(
     .setTitle(truncate(`Enter value for ${label}`));
 
   if (fieldType === 'count') {
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modal.addLabelComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId(`${fieldKey}:max`))
           .setLabel(truncate(`MAX value for ${label}`))
           .setStyle(TextInputStyle.Short)
           .setRequired(true),
       ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId(`${fieldKey}:current`))
           .setLabel(truncate(`CURRENT (optional)`))
@@ -123,8 +124,8 @@ export async function handle(
   } else {
     const inputStyle = fieldKey === 'core:bio' ? TextInputStyle.Paragraph : TextInputStyle.Short;
 
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+    modal.addLabelComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId(fieldKey))
           .setLabel(truncate(`Value for ${label}`))
