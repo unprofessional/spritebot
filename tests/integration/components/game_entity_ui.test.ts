@@ -501,7 +501,7 @@ describe('game entity Discord UI', () => {
         title: 'Edit Stat: Hit Points',
       }),
     );
-    expect(modal.components.map((row: { components: unknown[] }) => row.components[0])).toEqual([
+    expect(modal.components.map((label: { component: unknown }) => label.component)).toEqual([
       expect.objectContaining({ custom_id: `${template.id}:max`, value: '12' }),
       expect.objectContaining({ custom_id: `${template.id}:current`, value: '8' }),
     ]);

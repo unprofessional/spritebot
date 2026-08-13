@@ -2,8 +2,8 @@
 
 ## Status
 
-Planned. This work requires a discord.js upgrade before production modal builders can use
-Discord's current Label-wrapped select components.
+Implemented in `feature/modal-dropdown-ux`; automated validation complete. Real Discord client
+smoke testing remains required after deployment before this plan is archived.
 
 ## Problem
 
@@ -173,6 +173,18 @@ smoke tests.
 - No UUIDs, internal IDs, or backend-only visibility states are exposed in labels.
 - Modal custom IDs and option labels are bounded by shared Discord-limit utilities.
 - The discord.js upgrade passes the full suite, build, and real Discord modal smoke tests.
+
+## Implementation Record
+
+- Upgraded discord.js from 14.21 to 14.27 for current modal components.
+- Audited every production `ModalBuilder`, `TextInputBuilder`, `showModal`, and prepared-modal path.
+- Migrated every modal text input from deprecated Action Row wrapping to Label wrapping.
+- Added shared, bounded Label-wrapped text-input and string-select builders.
+- Replaced free-form stat-adjustment operator entry with an explicit required four-option select.
+- Kept count values, quantities, defaults, labels, keys, inventory categories, and prose as text
+  inputs because their domains are open-ended.
+- Added focused coverage for component shape and limits, prepared-modal preservation, all four
+  operators, crafted operator values, and divide-by-zero compatibility.
 
 ## Risks and Mitigations
 
