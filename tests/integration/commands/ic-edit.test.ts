@@ -269,13 +269,17 @@ function expectOnlyModalCallback(
   const modal = interaction.showModal.mock.calls[0][0].toJSON();
   expect(modal.custom_id).toBe(`ic-edit-modal:${messageId}`);
   expect(modal.title).toBe('Edit IC Message');
-  expect(modal.components[0].components[0]).toEqual(
+  expect(modal.components[0]).toEqual(
     expect.objectContaining({
-      custom_id: 'content',
-      max_length: 2000,
-      required: true,
-      style: TextInputStyle.Paragraph,
-      value: content,
+      type: 18,
+      label: 'Message Content',
+      component: expect.objectContaining({
+        custom_id: 'content',
+        max_length: 2000,
+        required: true,
+        style: TextInputStyle.Paragraph,
+        value: content,
+      }),
     }),
   );
 }

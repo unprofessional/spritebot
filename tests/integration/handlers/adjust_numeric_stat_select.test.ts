@@ -235,9 +235,24 @@ function expectAdjustmentModal(showModal: jest.Mock): void {
   );
   expect(
     modal.components.map(
-      (row: { components: Array<{ custom_id: string }> }) => row.components[0].custom_id,
+      (label: { component: { custom_id: string } }) => label.component.custom_id,
     ),
   ).toEqual(['deltaOperator', 'deltaValue']);
+  expect(modal.components[0]).toEqual(
+    expect.objectContaining({
+      type: 18,
+      label: 'Operation',
+      component: expect.objectContaining({
+        type: 3,
+        options: [
+          expect.objectContaining({ label: 'Add (+)', value: '+' }),
+          expect.objectContaining({ label: 'Subtract (-)', value: '-' }),
+          expect.objectContaining({ label: 'Multiply (x)', value: '*' }),
+          expect.objectContaining({ label: 'Divide (/)', value: '/' }),
+        ],
+      }),
+    }),
+  );
 }
 
 function expectSingleModal(showModal: jest.Mock) {
