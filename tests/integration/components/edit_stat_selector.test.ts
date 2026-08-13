@@ -168,7 +168,7 @@ function expectEditModal(showModal: jest.Mock): void {
   );
   expect(
     modal.components.map(
-      (row: { components: Array<{ custom_id: string; value: string }> }) => row.components[0],
+      (label: { component: { custom_id: string; value: string } }) => label.component,
     ),
   ).toEqual([
     expect.objectContaining({ custom_id: 'label', value: 'Hit Points' }),

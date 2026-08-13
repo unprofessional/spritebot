@@ -1,5 +1,4 @@
 import {
-  ActionRowBuilder,
   CacheType,
   ChatInputCommandInteraction,
   ModalBuilder,
@@ -22,6 +21,7 @@ import {
   type InteractionDispatchPolicySource,
 } from '../discord/interaction_dispatch';
 import { presentPreparedModal } from '../discord/prepared_modal';
+import { modalTextInputBuilder } from '../utils/modal_components';
 
 export function resultMessage(status: string, reason?: string): string {
   if (status === 'updated') return '✅ Updated your proxied RP message.';
@@ -60,7 +60,7 @@ export function buildIcEditModal(messageId: string, content?: string): ModalBuil
   return new ModalBuilder()
     .setCustomId(discordCustomId(`ic-edit-modal:${messageId}`))
     .setTitle('Edit IC Message')
-    .addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+    .addLabelComponents(modalTextInputBuilder(input));
 }
 
 export function resultReason(

@@ -2,7 +2,6 @@ import {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  ActionRowBuilder,
   type ModalSubmitInteraction,
   type ActionRowData,
   type MessageActionRowComponentData,
@@ -17,6 +16,7 @@ import { appendNudge, buildNudge } from '../utils/onboarding_nudge';
 import { parseCountDefault, withDefaultCurrent } from '../utils/count_stat_defaults';
 import { rebuildCreateGameResponse } from '../utils/rebuild_create_game_response';
 import { isValidCustomStatKey } from '../utils/custom_stat_key';
+import { modalTextInputBuilder } from '../utils/modal_components';
 
 import type { Game } from '../types/game';
 import type { StatTemplate } from '../types/stat_template';
@@ -52,7 +52,7 @@ function build(gameId: string, statType: string): ModalBuilder {
 
   const defaultCurrentInput =
     statType === 'count'
-      ? new ActionRowBuilder<TextInputBuilder>().addComponents(
+      ? modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('default_current'))
             .setLabel('Default CURRENT Value (optional)')
@@ -70,12 +70,12 @@ function build(gameId: string, statType: string): ModalBuilder {
   return new ModalBuilder()
     .setCustomId(discordCustomId(`${id}:${gameId}:${statType}`))
     .setTitle(`Add ${statType.replace('-', ' ')} stat`)
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(labelInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(keyInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(defaultInput),
+    .addLabelComponents(
+      modalTextInputBuilder(labelInput),
+      modalTextInputBuilder(keyInput),
+      modalTextInputBuilder(defaultInput),
       ...(defaultCurrentInput ? [defaultCurrentInput] : []),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(sortInput),
+      modalTextInputBuilder(sortInput),
     );
 }
 

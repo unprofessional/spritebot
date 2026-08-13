@@ -17,6 +17,7 @@ import {
 } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import { presentPreparedModal } from '../../discord/prepared_modal';
+import { modalTextInputBuilder } from '../../utils/modal_components';
 import { belongsToUser } from '../../services/character.service';
 import {
   deleteItemForCharacter,
@@ -59,22 +60,22 @@ export async function handle(
     const modal = new ModalBuilder()
       .setCustomId(discordCustomId(`addInventoryModal:${characterId}:${page}`))
       .setTitle('Add Inventory Item')
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+      .addLabelComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('name'))
             .setLabel('Item Name')
             .setStyle(TextInputStyle.Short)
             .setRequired(true),
         ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('type'))
             .setLabel('Item Type / Category (optional)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false),
         ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('quantity'))
             .setLabel('Quantity')
@@ -82,7 +83,7 @@ export async function handle(
             .setRequired(false)
             .setPlaceholder('1'),
         ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('description'))
             .setLabel('Description (optional)')

@@ -8,6 +8,7 @@ import {
 
 import { isActiveCharacter } from '../../utils/is_active_character';
 import { build as buildCharacterCard } from '../../components/view_character_card';
+import { getModalStringSelectValue } from '../../utils/modal_components';
 
 /**
  * Handles modal for adjusting stats (add/subtract/multiply/divide flow).
@@ -20,11 +21,11 @@ export async function handle(
   if (!customId.startsWith('adjustStatModal:')) return;
 
   const [, characterId, statId] = customId.split(':');
-  const operator = interaction.fields.getTextInputValue('deltaOperator')?.trim();
+  const operator = getModalStringSelectValue(interaction.fields, 'deltaOperator')?.trim();
   const valueRaw = interaction.fields.getTextInputValue('deltaValue')?.trim();
   const value = parseInt(valueRaw ?? '', 10);
 
-  if (!['+', '-', '*', '/'].includes(operator)) {
+  if (!operator || !['+', '-', '*', '/'].includes(operator)) {
     await responder.respond({
       content: '⚠️ Invalid operator. Use one of: +, -, *, /',
       ephemeral: true,
