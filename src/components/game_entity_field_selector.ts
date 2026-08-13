@@ -12,6 +12,7 @@ import type { DiscordInteractionResponder } from '../discord/interaction_respond
 import { canManageGameEntity, getGameEntity } from '../services/game_entity.service';
 import type { HydratedGameEntity } from '../types/game_entity';
 import { formatCharacterStatValue } from '../utils/character_stat_display';
+import { modalTextInputBuilder } from '../utils/modal_components';
 
 export const id = 'editGameEntityField';
 export const interactionPolicy = gatedImmediateModalInteractionPolicy;
@@ -80,15 +81,15 @@ export async function handle(
     const modal = new ModalBuilder()
       .setCustomId(discordCustomId(`editGameEntityCustomModal:${entityId}`))
       .setTitle('Add Custom Entity Field')
-      .addComponents(
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+      .addLabelComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('name'))
             .setLabel('Field Name')
             .setStyle(TextInputStyle.Short)
             .setRequired(true),
         ),
-        new ActionRowBuilder<TextInputBuilder>().addComponents(
+        modalTextInputBuilder(
           new TextInputBuilder()
             .setCustomId(discordCustomId('value'))
             .setLabel('Field Value')
@@ -131,7 +132,7 @@ export async function handle(
   if (scope === 'stat' && (fieldType === 'count' || stat?.meta.max !== undefined)) {
     const max = stat?.meta.max ?? '';
     const current = stat?.meta.current ?? max;
-    modal.addComponents(
+    modal.addLabelComponents(
       inputRow(`${field}:max`, `Max value for ${label}`, true, String(max)),
       inputRow(`${field}:current`, `Current value for ${label}`, false, String(current)),
     );
@@ -151,7 +152,7 @@ export async function handle(
         ? customField?.value
         : entity[field as keyof HydratedGameEntity];
   if (typeof existingValue === 'string' && existingValue) input.setValue(existingValue);
-  modal.addComponents(new ActionRowBuilder<TextInputBuilder>().addComponents(input));
+  modal.addLabelComponents(modalTextInputBuilder(input));
   await responder.showModal(modal);
 }
 
@@ -167,7 +168,7 @@ function inputRow(id: string, label: string, required: boolean, value: string) {
     .setStyle(TextInputStyle.Short)
     .setRequired(required);
   if (value) input.setValue(value);
-  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+  return modalTextInputBuilder(input);
 }
 
 function truncate(value: string, max: number): string {

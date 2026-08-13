@@ -89,12 +89,14 @@ describe('character stat select prepared-modal boundary', () => {
         title: 'Edit Bio',
       }),
     );
-    expect(modal.components[0].components[0]).toEqual(
+    expect(modal.components[0]).toEqual(
       expect.objectContaining({
-        custom_id: 'core:bio',
         label: 'Value for Bio',
-        style: 2,
-        value: 'Original biography',
+        component: expect.objectContaining({
+          custom_id: 'core:bio',
+          style: 2,
+          value: 'Original biography',
+        }),
       }),
     );
     expect(interaction.deferReply).not.toHaveBeenCalled();
@@ -119,7 +121,7 @@ describe('character stat select prepared-modal boundary', () => {
     );
     expect(
       modal.components.map(
-        (row: { components: Array<{ custom_id: string; value: string }> }) => row.components[0],
+        (label: { component: { custom_id: string; value: string } }) => label.component,
       ),
     ).toEqual([
       expect.objectContaining({ custom_id: 'stat-hp:max', value: '12' }),
@@ -170,7 +172,7 @@ describe('character stat select prepared-modal boundary', () => {
 
       const modal = expectSingleModal(activation.showModal as jest.Mock);
       expect(modal.custom_id).toMatch(/^preparedSubmit:/);
-      expect(modal.components[0].components[0]).toEqual(
+      expect(modal.components[0].component).toEqual(
         expect.objectContaining({ custom_id: 'stat-hp:max', value: '12' }),
       );
     } finally {

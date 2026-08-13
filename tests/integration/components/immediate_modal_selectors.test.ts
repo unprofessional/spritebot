@@ -66,8 +66,11 @@ describe('immediate modal selectors', () => {
         title: 'Enter value for Biography',
       }),
     );
-    expect(modal.components[0].components[0]).toEqual(
-      expect.objectContaining({ custom_id: 'core:bio', label: 'Value for Biography', style: 2 }),
+    expect(modal.components[0]).toEqual(
+      expect.objectContaining({
+        label: 'Value for Biography',
+        component: expect.objectContaining({ custom_id: 'core:bio', style: 2 }),
+      }),
     );
     expect(interaction.reply).not.toHaveBeenCalled();
     expect(interaction.deferReply).not.toHaveBeenCalled();
@@ -88,7 +91,7 @@ describe('immediate modal selectors', () => {
     );
     expect(
       modal.components.map(
-        (row: { components: Array<{ custom_id: string }> }) => row.components[0].custom_id,
+        (label: { component: { custom_id: string } }) => label.component.custom_id,
       ),
     ).toEqual(['game:hp:max', 'game:hp:current']);
     expect(interaction.reply).not.toHaveBeenCalled();

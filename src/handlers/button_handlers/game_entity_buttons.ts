@@ -28,6 +28,7 @@ import {
   buildInventoryItemActions,
 } from '../../components/view_game_entity_card';
 import { build as buildEntityFieldSelector } from '../../components/game_entity_field_selector';
+import { modalTextInputBuilder } from '../../utils/modal_components';
 
 export const componentUpdatePolicy = {
   mode: { kind: 'component-update' },
@@ -97,7 +98,7 @@ export async function handle(
       const modal = new ModalBuilder()
         .setCustomId(discordCustomId(`addGameEntityInventoryModal:${entityId}`))
         .setTitle('Add Entity Inventory Item')
-        .addComponents(
+        .addLabelComponents(
           textRow('name', 'Item Name', true),
           textRow('type', 'Type / Category', false),
           textRow('quantity', 'Quantity', false, TextInputStyle.Short, '1'),
@@ -242,7 +243,7 @@ function textRow(
     .setRequired(required)
     .setStyle(style);
   if (placeholder) input.setPlaceholder(placeholder);
-  return new ActionRowBuilder<TextInputBuilder>().addComponents(input);
+  return modalTextInputBuilder(input);
 }
 
 function parseVisibility(value: string | undefined): 'private' | 'public' | 'link-only' {

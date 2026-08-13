@@ -186,7 +186,7 @@ function expectAddModal(showModal: jest.Mock): void {
   );
   expect(
     modal.components.map(
-      (row: { components: Array<{ custom_id: string }> }) => row.components[0].custom_id,
+      (label: { component: { custom_id: string } }) => label.component.custom_id,
     ),
   ).toEqual(['name', 'type', 'quantity', 'description']);
 }
@@ -212,7 +212,7 @@ function expectEditModal(showModal: jest.Mock): void {
   );
   expect(
     modal.components.map(
-      (row: { components: Array<{ custom_id: string; value: string }> }) => row.components[0],
+      (label: { component: { custom_id: string; value: string } }) => label.component,
     ),
   ).toEqual([
     expect.objectContaining({ custom_id: 'name', value: 'Healing Potion' }),

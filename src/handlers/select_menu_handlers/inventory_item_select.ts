@@ -14,6 +14,7 @@ import { getItemForCharacter } from '../../services/inventory.service';
 import type { InteractionDispatchPolicy } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import { presentPreparedModal } from '../../discord/prepared_modal';
+import { modalTextInputBuilder } from '../../utils/modal_components';
 
 export const interactionPolicy = {
   mode: { kind: 'component-update' },
@@ -100,8 +101,8 @@ export async function buildEditModal(
   const modal = new ModalBuilder()
     .setCustomId(discordCustomId(`editInventoryModal:${characterId}:${itemId}:${page}`))
     .setTitle(truncate(`Edit ${item.name}`))
-    .addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+    .addLabelComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId('name'))
           .setLabel('Item Name')
@@ -109,7 +110,7 @@ export async function buildEditModal(
           .setValue(item.name)
           .setRequired(true),
       ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId('type'))
           .setLabel('Item Type / Category (optional)')
@@ -117,7 +118,7 @@ export async function buildEditModal(
           .setValue(item.type ?? '')
           .setRequired(false),
       ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId('quantity'))
           .setLabel('Quantity')
@@ -125,7 +126,7 @@ export async function buildEditModal(
           .setValue(String(item.quantity))
           .setRequired(false),
       ),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(
+      modalTextInputBuilder(
         new TextInputBuilder()
           .setCustomId(discordCustomId('description'))
           .setLabel('Description (optional)')

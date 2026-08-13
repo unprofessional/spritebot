@@ -1,10 +1,4 @@
-import {
-  ActionRowBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
-  StringSelectMenuInteraction,
-} from 'discord.js';
+import { ModalBuilder, StringSelectMenuInteraction } from 'discord.js';
 import { discordCustomId } from '../../utils/discord_custom_id';
 
 import { getCharacterWithStats } from '../../services/character.service';
@@ -12,6 +6,7 @@ import type { CharacterWithStats, CharacterStatWithLabel } from '../../types/cha
 import { gatedPreparedComponentModalInteractionPolicy } from '../../discord/interaction_dispatch';
 import type { DiscordInteractionResponder } from '../../discord/interaction_responder';
 import { presentPreparedModal } from '../../discord/prepared_modal';
+import { modalStringSelect, modalTextInput } from '../../utils/modal_components';
 
 export const interactionPolicy = gatedPreparedComponentModalInteractionPolicy;
 
@@ -53,23 +48,23 @@ export async function handle(
       .setCustomId(discordCustomId(`adjustStatModal:${characterId}:${statId}`))
       .setTitle('Adjust Stat Value');
 
-    const operatorInput = new TextInputBuilder()
-      .setCustomId(discordCustomId('deltaOperator'))
-      .setLabel('Math operator (+, -, *, /)')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setPlaceholder('+');
-
-    const valueInput = new TextInputBuilder()
-      .setCustomId(discordCustomId('deltaValue'))
-      .setLabel('Value to apply with operator')
-      .setStyle(TextInputStyle.Short)
-      .setRequired(true)
-      .setPlaceholder('Enter a number');
-
-    modal.addComponents(
-      new ActionRowBuilder<TextInputBuilder>().addComponents(operatorInput),
-      new ActionRowBuilder<TextInputBuilder>().addComponents(valueInput),
+    modal.addLabelComponents(
+      modalStringSelect({
+        customId: 'deltaOperator',
+        label: 'Operation',
+        placeholder: 'Choose how to adjust the stat',
+        options: [
+          { label: 'Add (+)', value: '+' },
+          { label: 'Subtract (-)', value: '-' },
+          { label: 'Multiply (x)', value: '*' },
+          { label: 'Divide (/)', value: '/' },
+        ],
+      }),
+      modalTextInput({
+        customId: 'deltaValue',
+        label: 'Value to apply',
+        placeholder: 'Enter a whole number',
+      }),
     );
 
     await presentPreparedModal({ modal, responder, userId: interaction.user.id });
