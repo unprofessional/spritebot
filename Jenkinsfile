@@ -97,7 +97,7 @@ pipeline {
   agent any
 
   tools {
-    nodejs 'NodeJS 22.22'
+    nodejs 'NodeJS 22.23.4'
   }
 
   options {
