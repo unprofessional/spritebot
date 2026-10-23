@@ -251,7 +251,7 @@ The app can initialize its schema automatically on startup in non-production env
 
 ### Requirements
 
-- Node.js 22.22.0
+- Node.js 22.23.4
 - npm
 - PostgreSQL 18 recommended
 - A Discord application and bot token
@@ -447,7 +447,7 @@ The pipeline:
 
 Jenkins assumptions:
 
-- Node tool name: `NodeJS 22.22`
+- Node tool name: `NodeJS 22.23.4` (register this tool in Jenkins with Node 22.23.4 before running the pipeline)
 - GitHub status credential id: `github_username_plus_personal_token`
 - SSH Publisher host config name: `shinralabs`
 - Remote deploy directory: `~/dev/spritebot`
